@@ -1186,6 +1186,7 @@ TRIGGER_FUNC(cgi_trigger) {
 #ifndef __WIN32
 	plugin_data *p = p_d;
 	size_t ndx;
+	
 	/* the trigger handle only cares about lonely PID which we have to wait for */
 	
 
@@ -1204,13 +1205,16 @@ TRIGGER_FUNC(cgi_trigger) {
 			
 			return HANDLER_ERROR;
 		default:
-
 			if (WIFEXITED(status)) {
-#if 0
-				log_error_write(srv, __FILE__, __LINE__, "sd", "(debug) cgi exited fine, pid:", p->cgi_pid.ptr[ndx]);
-#endif
+				/* normal shutdown, everything is fine */
+			} else if (WIFSIGNALED(status)) {
+				log_error_write(srv, __FILE__, __LINE__, "sd", 
+						"child signaled:", 
+						WTERMSIG(status));
 			} else {
-				log_error_write(srv, __FILE__, __LINE__, "s", "cgi died ?");
+				log_error_write(srv, __FILE__, __LINE__, "sd", 
+						"child died somehow:", 
+						status);
 			}
 			
 			cgi_pid_del(srv, p, p->cgi_pid.ptr[ndx]);

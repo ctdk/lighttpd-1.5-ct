@@ -383,12 +383,13 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	buffer *mtime;
 	file_cache_entry *fce = NULL;
 	
-	UNUSED(srv);
-	
 	/* someone else has done a decision for us */
 	if (con->http_status != 0) return HANDLER_GO_ON;
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	if (con->physical.path->used == 0) return HANDLER_GO_ON;
+	
+	/* someone else has handled this request */
+	if (con->mode != DIRECT) return HANDLER_GO_ON;
 
 	/* we only handle GET, POST and HEAD */
 	switch(con->request.http_method_id) {
@@ -534,10 +535,12 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 		}
 	} else if (con->request.http_range) {
 		/* content prepared, I'm done */
+		con->file_finished = 1;
+		
 		if (0 == http_response_parse_range(srv, con)) {
 			con->http_status = 206;
-			return HANDLER_FINISHED;
 		}
+		return HANDLER_FINISHED;
 	}
 	
 	/* if we are still here, prepare body */
@@ -545,9 +548,9 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	switch(con->request.http_method_id) {
 	case HTTP_METHOD_GET:
 	case HTTP_METHOD_POST:
-		http_chunk_append_file(srv, con, fce, 0, fce->st.st_size);
-		break;
 	case HTTP_METHOD_HEAD:
+		/* we add it here for the HEAD request which will drop it afterwards again */
+		http_chunk_append_file(srv, con, fce, 0, fce->st.st_size);
 		break;
 	default:
 		break;

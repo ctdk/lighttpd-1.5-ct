@@ -745,7 +745,10 @@ int mod_compress_plugin_init(plugin *p) {
 	
 	p->init        = mod_compress_init;
 	p->set_defaults = mod_compress_setdefaults;
+#if 0
+	/* will be replaced by the filter interface */
 	p->handle_physical_path  = mod_compress_physical;
+#endif
 	p->cleanup     = mod_compress_free;
 	
 	p->data        = NULL;

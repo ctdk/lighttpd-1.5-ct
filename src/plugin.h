@@ -41,7 +41,6 @@ typedef struct {
 	handler_t (* handle_uri_raw)         (server *srv, connection *con, void *p_d);    /* after uri_raw is set */
 	handler_t (* handle_uri_clean)       (server *srv, connection *con, void *p_d);    /* after uri is set */
 	handler_t (* handle_docroot)         (server *srv, connection *con, void *p_d);    /* getting the document-root */
-	handler_t (* handle_physical_path)   (server *srv, connection *con, void *p_d);    /* after the physical path is set */
 	handler_t (* handle_request_done)    (server *srv, connection *con, void *p_d);    /* at the end of a request */
 	handler_t (* handle_connection_close)(server *srv, connection *con, void *p_d);    /* at the end of a connection */
 	handler_t (* handle_joblist)         (server *srv, connection *con, void *p_d);    /* after all events are handled */

@@ -9,6 +9,7 @@
 #include "plugin.h"
 
 #include "response.h"
+#include "file_cache_funcs.h"
 
 /**
  * this is a uploadprogress for a lighttpd plugin

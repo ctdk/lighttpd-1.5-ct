@@ -395,7 +395,7 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 		if (okey.dptr) free(okey.dptr);
 		
 		/* reorg once a day */
-		if ((srv->cur_ts % (60 * 60 * 24) != 0) gdbm_reorganize(s->db);
+		if ((srv->cur_ts % (60 * 60 * 24) != 0)) gdbm_reorganize(s->db);
 	}
 #endif
 	return HANDLER_GO_ON;

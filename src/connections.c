@@ -181,11 +181,8 @@ static network_t connection_handle_read(server *srv, connection *con) {
 }
 
 static int connection_handle_write_prepare(server *srv, connection *con) {
-	fprintf(stderr, "%s.%d: %d\n", __FILE__, __LINE__, con->mode);
-	
 	if (con->mode == DIRECT) {
 		/* static files */
-		fprintf(stderr, "%s.%d\n", __FILE__, __LINE__);
 		switch(con->request.http_method_id) {
 		case HTTP_METHOD_GET:
 		case HTTP_METHOD_POST:
@@ -208,7 +205,6 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 		con->http_status = 403;
 	}
 	
-	fprintf(stderr, "%s.%d\n", __FILE__, __LINE__);
 	switch(con->http_status) {
 	case 400: /* class: header + custom body */
 	case 401:
@@ -302,7 +298,6 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 		break;
 	}
 	
-	fprintf(stderr, "%s.%d\n", __FILE__, __LINE__);
 	if (con->file_finished) {
 		/* content-len */
 		
@@ -342,7 +337,6 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 	}
 	
 	http_response_write_header(srv, con);
-	fprintf(stderr, "%s.%d: header added\n", __FILE__, __LINE__);
 	
 	return 0;
 }

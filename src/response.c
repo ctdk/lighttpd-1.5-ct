@@ -98,8 +98,6 @@ int http_response_write_header(server *srv, connection *con) {
 	
 	con->bytes_header = b->used - 1;
 	
-	fprintf(stderr, "%s.%d: hlen: %d\n", __FILE__, __LINE__, con->bytes_header);
-	
 	if (con->conf.log_response_header) {
 		log_error_write(srv, __FILE__, __LINE__, "sSb", "Response-Header:", "\n", b);
 	}
@@ -517,9 +515,12 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		
 		/* if we are still here, no one wanted the file, status 403 is ok I think */
 		
-		con->http_status = 403;
-		
-		return HANDLER_FINISHED;
+		if (con->mode == DIRECT) {
+			fprintf(stderr, "%s.%d: setting default status = 403\n", __FILE__, __LINE__);
+			con->http_status = 403;
+			
+			return HANDLER_FINISHED;
+		}
 		
 	}
 	

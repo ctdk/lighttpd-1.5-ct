@@ -276,8 +276,6 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		buffer_copy_string_buffer(con->physical.doc_root, con->conf.document_root);
 		buffer_copy_string_buffer(con->physical.rel_path, con->uri.path);
 		
-		buffer_reset(con->physical.path);
-		
 		/* the docroot plugin should set the doc_root and might also set the physical.path
 		 * for us (all vhost-plugins are supposed to set the doc_root, the alias plugin
 		 * sets the path too)
@@ -295,21 +293,28 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			break;
 		}
 		
-		if (buffer_is_empty(con->physical.path)) {
-			/** 
-			 * create physical filename 
-			 * -> physical.path = docroot + rel_path
-			 * 
-			 */
-			
-			buffer_copy_string_buffer(con->physical.path, con->physical.doc_root);
-			BUFFER_APPEND_SLASH(con->physical.path);
-			if (con->physical.rel_path->ptr[0] == '/') {
-				buffer_append_string_len(con->physical.path, con->physical.rel_path->ptr + 1, con->physical.rel_path->used - 2);
-			} else {
-				buffer_append_string_buffer(con->physical.path, con->physical.rel_path);
-			}
+		/* MacOS X and Windows can't distiguish between upper and lower-case 
+		 * 
+		 * convert to lower-case
+		 */
+		if (con->conf.force_lower_case) {
+			buffer_to_lower(con->physical.rel_path);
 		}
+		
+		/** 
+		 * create physical filename 
+		 * -> physical.path = docroot + rel_path
+		 * 
+		 */
+		
+		buffer_copy_string_buffer(con->physical.path, con->physical.doc_root);
+		BUFFER_APPEND_SLASH(con->physical.path);
+		if (con->physical.rel_path->ptr[0] == '/') {
+			buffer_append_string_len(con->physical.path, con->physical.rel_path->ptr + 1, con->physical.rel_path->used - 2);
+		} else {
+			buffer_append_string_buffer(con->physical.path, con->physical.rel_path);
+		}
+		
 		if (con->conf.log_request_handling) {
 			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- logical -> physical");
 			log_error_write(srv, __FILE__, __LINE__,  "sb", "Doc-Root     :", con->physical.doc_root);
@@ -520,7 +525,6 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		/* if we are still here, no one wanted the file, status 403 is ok I think */
 		
 		if (con->mode == DIRECT) {
-			fprintf(stderr, "%s.%d: setting default status = 403\n", __FILE__, __LINE__);
 			con->http_status = 403;
 			
 			return HANDLER_FINISHED;

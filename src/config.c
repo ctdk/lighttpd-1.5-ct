@@ -68,9 +68,8 @@ static int config_insert(server *srv) {
 		
 		{ "server.protocol-http11",      NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 35 */
 		{ "debug.log-request-header-on-error", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER }, /* 36 */
-		{ "server.close-stderr",         NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },      /* 37 */
-		
-		
+		{ "server.close-stderr",         NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 37 */
+		{ "server.force-lower-case-files", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },   /* 38 */
 		
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -137,6 +136,7 @@ static int config_insert(server *srv) {
 		s->global_kbytes_per_second = 0;
 		s->global_bytes_per_second_cnt = 0;
 		s->global_bytes_per_second_cnt_ptr = &s->global_bytes_per_second_cnt;
+		s->force_lower_case = 0;
 		
 		cv[7].destination = s->server_tag;
 		cv[8].destination = &(s->use_ipv6);
@@ -165,9 +165,9 @@ static int config_insert(server *srv) {
 		cv[32].destination = &(s->log_request_handling);
 		cv[33].destination = &(s->log_response_header);
 		cv[34].destination = &(s->log_request_header);
-		
 		cv[35].destination = &(s->allow_http11);
 		
+		cv[38].destination = &(s->force_lower_case);
 		
 		srv->config_storage[i] = s;
 	
@@ -266,6 +266,8 @@ int config_patch_connection(server *srv, connection *con, const char *stage, siz
 				PATCH(log_response_header);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("debug.log-file-not-found"))) {
 				PATCH(log_file_not_found);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.force-lower-case-files"))) {
+				PATCH(force_lower_case);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.protocol-http11"))) {
 				PATCH(allow_http11);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.kbytes-per-second"))) {
@@ -715,6 +717,7 @@ int config_read(server *srv, const char *fn) {
 int config_set_defaults(server *srv) {
 	size_t i;
 	specific_config *s = srv->config_storage[0];
+	struct stat st1, st2;
 	
 	struct ev_map { fdevent_handler_t et; const char *name; } event_handlers[] = 
 	{ 
@@ -743,32 +746,6 @@ int config_set_defaults(server *srv) {
 		{ FDEVENT_HANDLER_UNSET,          NULL }
 	};
 	
-#ifdef USE_LICENSE
-	license_t *l;
-	
-	if (srv->srvconf.license->used == 0) {
-		/* license is missing */
-		return -1;
-	}
-
-	l = license_init();
-	
-	if (0 != license_parse(l, srv->srvconf.license)) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", 
-				"parsing license information failed", srv->srvconf.license);
-		
-		license_free(l);
-		return -1;
-	}
-	if (!license_is_valid(l)) {
-		log_error_write(srv, __FILE__, __LINE__, "s", 
-				"license is not valid");
-		
-		license_free(l);
-		return -1;
-	}
-	license_free(l);
-#endif	
 	if (srv->srvconf.port == 0) {
 		srv->srvconf.port = s->is_ssl ? 443 : 80;
 	}
@@ -823,6 +800,40 @@ int config_set_defaults(server *srv) {
 		
 		return -1;
 #endif
+	}
+	
+	if (buffer_is_empty(s->document_root)) {
+		log_error_write(srv, __FILE__, __LINE__, "s", 
+				"a default document-root has to be set");
+		
+		return -1;
+	} 
+	
+	if (-1 == stat(s->document_root->ptr, &st1)) {
+		log_error_write(srv, __FILE__, __LINE__, "s", 
+				"based docroot doesn't exist");
+		
+		return -1;
+	}
+	
+	buffer_copy_string_buffer(srv->tmp_buf, s->document_root);
+	buffer_to_lower(srv->tmp_buf);
+	
+	if (0 == stat(srv->tmp_buf->ptr, &st1)) {
+		/* lower-case existed, check upper-case */
+		
+		buffer_copy_string_buffer(srv->tmp_buf, s->document_root);
+		buffer_to_upper(srv->tmp_buf);
+		
+		if (0 == stat(srv->tmp_buf->ptr, &st2)) {
+			/* upper case exists too, doesn't the FS handle this ? */
+			
+			if (st1.st_ino == st2.st_ino) {
+				/* upper and lower have the same inode -> case-insensitve GS*/
+				
+				s->force_lower_case = 1;
+			}
+		}
 	}
 	
 	return 0;

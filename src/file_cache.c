@@ -172,9 +172,9 @@ file_cache_entry * file_cache_get_entry(server *srv, buffer *name) {
 	
 	for (i = 0; i < fc->used; i++) {
 		file_cache_entry *f = fc->ptr[i];
-
-		if (f->fd != -1 && 
-		    buffer_is_equal(f->name, name)) {
+		
+		if (buffer_is_equal(f->name, name) && 
+		    (S_ISDIR(f->st.st_mode) || (f->fd != -1))) {
 			return f;
 		}
 	}

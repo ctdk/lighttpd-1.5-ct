@@ -151,6 +151,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 	
 		buffer_copy_string(con->uri.scheme, con->conf.is_ssl ? "https" : "http");
 		buffer_copy_string_buffer(con->uri.authority, con->request.http_host);
+		buffer_to_lower(con->uri.authority);
 		
 		config_patch_connection(srv, con, CONST_STR_LEN("HTTPhost"));      /* Host:        */
 		config_patch_connection(srv, con, CONST_STR_LEN("HTTPreferer"));   /* Referer:     */

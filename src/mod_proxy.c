@@ -83,8 +83,6 @@ typedef struct {
 	buffer *response;
 	buffer *response_header;
 	
-	ssize_t post_data_fetched;
-	
 	chunkqueue *write_queue;
 	
 	file_descr *fd; /* fd to the proxy process */
@@ -1100,14 +1098,14 @@ SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
 	if (NULL == hctx) return HANDLER_GO_ON;
 
 #if 0
-	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, hctx->post_data_fetched, con->request.content_length);
+	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, con->post_data_fetched, con->request.content_length);
 #endif
 	cq = con->read_queue;
 
-	for (c = cq->first; c && (hctx->post_data_fetched != con->request.content_length); c = cq->first) {
+	for (c = cq->first; c && (con->post_data_fetched != con->request.content_length); c = cq->first) {
 		off_t weWant, weHave, toRead;
 			
-		weWant = con->request.content_length - hctx->post_data_fetched;
+		weWant = con->request.content_length - con->post_data_fetched;
 		/* without the terminating \0 */
 			
 		weHave = c->data.mem->used - c->offset - 1;
@@ -1117,13 +1115,13 @@ SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
 		chunkqueue_append_mem(hctx->write_queue, c->data.mem->ptr + c->offset, toRead + 1);
 			
 		c->offset += toRead;
-		hctx->post_data_fetched += toRead;
+		con->post_data_fetched += toRead;
 		
 		chunkqueue_remove_empty_chunks(srv, cq);
 	}
 		
 	/* Content is ready */
-	if (hctx->post_data_fetched == con->request.content_length) {
+	if (con->post_data_fetched == con->request.content_length) {
 		con->request.content_finished = 1;
 	}
 

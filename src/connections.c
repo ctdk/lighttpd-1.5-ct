@@ -550,6 +550,10 @@ int connection_reset(server *srv, connection *con) {
 	
 	con->mode = DIRECT;
 	
+	if (!buffer_is_empty(con->physical.path)) {
+		file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
+	}
+	
 #define CLEAN(x) \
 	if (con->x) buffer_reset(con->x);
 	
@@ -1040,6 +1044,7 @@ int connection_state_machine(server *srv, connection *con) {
 			con->read_idle_ts = srv->cur_ts;
 			
 			con->request_count++;
+			con->post_data_fetched = 0;
 			
 			connection_set_state(srv, con, CON_STATE_READ);
 			

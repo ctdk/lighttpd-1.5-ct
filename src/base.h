@@ -307,6 +307,8 @@ typedef struct {
 	off_t bytes_read;             /* used by mod_accesslog, mod_rrd */
 	off_t bytes_header;
 	
+	ssize_t post_data_fetched;
+	
 	int http_status;
 	
 	sock_addr dst_addr;

@@ -28,6 +28,7 @@
 #include "joblist.h"
 #include "http_chunk.h"
 #include "file_descr_funcs.h"
+#include "file_cache_funcs.h"
 #include "network.h"
 #include "chunk.h"
 #include "chunk_funcs.h"
@@ -69,7 +70,6 @@ typedef struct {
 	pid_t pid;
 	file_descr *read_fd, *write_fd;
 
-	ssize_t post_data_fetched;
 	chunkqueue *write_queue;
 	
 	int read_fde_ndx, write_fde_ndx; /* index into the fd-event buffer */
@@ -85,8 +85,6 @@ static handler_ctx * cgi_handler_ctx_init() {
 	handler_ctx *hctx = calloc(1, sizeof(*hctx));
 
 	assert(hctx);
-
-	hctx->post_data_fetched = 0;
 
 	hctx->read_fd = file_descr_init();
 	hctx->write_fd = file_descr_init();
@@ -652,8 +650,9 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 		/* check the length of the read_queue, 
 		 * how much we have already forwarded to cgi and 
 		 * how much still have to send */
-
 		
+		hctx->write_fd->is_writable = 1;
+
 		switch(ret = network_write_chunkqueue(srv, hctx->write_fd, hctx->write_queue)) {
 		case NETWORK_QUEUE_EMPTY:
 			if (con->request.content_finished) {
@@ -664,10 +663,21 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 				
 				fdevent_event_add(srv->ev, hctx->read_fd, FDEVENT_IN);
 				/* wait for input */
+			} else {
+				if (hctx->write_fd->is_writable) {
+					/* we are still writable, wait for new content and 
+					 * let the fetch_data send the content directly 
+					 */
+					fdevent_event_del(srv->ev, hctx->write_fd);
+				}
 			}
 			break;
 		case NETWORK_OK:
 			/* not finished yet, queue not empty yet, wait for event */
+			if (!hctx->write_fd->is_writable) {
+				fdevent_event_add(srv->ev, hctx->write_fd, FDEVENT_OUT);
+			}
+			
 			break;
 		case NETWORK_ERROR: /* error on our side */
 			log_error_write(srv, __FILE__, __LINE__, "sd",
@@ -1014,10 +1024,6 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		handler_ctx *hctx;
 		/* father */
 	
-		
-
-
-
 		if (con->request.content->used) {
 			write(to_cgi_fds[1], con->request.content->ptr, con->request.content_length);
 		}
@@ -1028,6 +1034,8 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		
 		/* register PID and wait for them asyncronously */
 		con->mode = p->id;
+		
+		file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
 		buffer_reset(con->physical.path);
 		
 		hctx = cgi_handler_ctx_init();
@@ -1060,7 +1068,6 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 			hctx->write_fd->fd = to_cgi_fds[1];
 
 			fdevent_register(srv->ev, hctx->write_fd, cgi_handle_fdevent, hctx);
-			fdevent_event_add(srv->ev, hctx->write_fd, FDEVENT_OUT);
 		
 			if (-1 == fdevent_fcntl_set(srv->ev, hctx->write_fd)) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "fcntl failed: ", strerror(errno));
@@ -1161,6 +1168,7 @@ URIHANDLER_FUNC(cgi_is_handled) {
 				con->http_status = 500;
 				con->mode = DIRECT;
 				
+				file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
 				buffer_reset(con->physical.path);
 				return HANDLER_FINISHED;
 			}
@@ -1227,14 +1235,14 @@ SUBREQUEST_FUNC(mod_cgi_fetch_post_data) {
 	if (NULL == hctx) return HANDLER_GO_ON;
 
 #if 0
-	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, hctx->post_data_fetched, con->request.content_length);
+	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, con->post_data_fetched, con->request.content_length);
 #endif
 	cq = con->read_queue;
 
-	for (c = cq->first; c && (hctx->post_data_fetched != con->request.content_length); c = cq->first) {
+	for (c = cq->first; c && (con->post_data_fetched != con->request.content_length); c = cq->first) {
 		off_t weWant, weHave, toRead;
 			
-		weWant = con->request.content_length - hctx->post_data_fetched;
+		weWant = con->request.content_length - con->post_data_fetched;
 		/* without the terminating \0 */
 			
 		assert(c->data.mem->used);
@@ -1246,15 +1254,18 @@ SUBREQUEST_FUNC(mod_cgi_fetch_post_data) {
 		chunkqueue_append_mem(hctx->write_queue, c->data.mem->ptr + c->offset, toRead + 1);
 			
 		c->offset += toRead;
-		hctx->post_data_fetched += toRead;
+		con->post_data_fetched += toRead;
 		
 		chunkqueue_remove_empty_chunks(srv, cq);
 	}
 		
 	/* Content is ready */
-	if (hctx->post_data_fetched == con->request.content_length) {
+	if (con->post_data_fetched == con->request.content_length) {
 		con->request.content_finished = 1;
 	}
+	
+	/* check if remote side is writable */
+	fdevent_event_add(srv->ev, hctx->write_fd, FDEVENT_OUT);
 
 	return HANDLER_FINISHED;
 }

@@ -16,17 +16,18 @@
 #include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
 #include "file_cache_funcs.h"
-
+#include "chunk_funcs.h"
 
 network_t network_write_chunkqueue_linuxsendfile(server *srv, file_descr *write_fd, chunkqueue *cq) {
 	chunk *c;
 	
-	for(c = cq->first; c; c = c->next) {
+	for (c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
 		
 		switch(c->type) {
@@ -144,6 +145,8 @@ network_t network_write_chunkqueue_linuxsendfile(server *srv, file_descr *write_
 				
 				return NETWORK_ERROR;
 			}
+			
+			assert(fce->fd != -1);
 			
 			/* Linux sendfile() */
 			if (-1 == (r = sendfile(write_fd->fd, fce->fd, &offset, toSend))) {

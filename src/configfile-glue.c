@@ -174,26 +174,30 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 	
 	if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPhost"))) {
 		char *ck_colon = NULL, *val_colon = NULL;
-		/* 
-		 * append server-port to the HTTP_POST if necessary
-		 */
 		
-		buffer_copy_string_buffer(srv->cond_check_buf, con->uri.authority);
+		if (!buffer_is_empty(con->uri.authority)) {
 		
-		switch(dc->cond) {
-		case CONFIG_COND_NE:
-		case CONFIG_COND_EQ:
-			ck_colon = strchr(dc->match.string->ptr, ':');
-			val_colon = strchr(con->uri.authority->ptr, ':');
-		
-			if (ck_colon && !val_colon) {
-				/* colon found */
-				BUFFER_APPEND_STRING_CONST(srv->cond_check_buf, ":");
-				buffer_append_long(srv->cond_check_buf, sock_addr_get_port(&(srv_sock->addr)));
+			/* 
+			 * append server-port to the HTTP_POST if necessary
+			 */
+			
+			buffer_copy_string_buffer(srv->cond_check_buf, con->uri.authority);
+			
+			switch(dc->cond) {
+			case CONFIG_COND_NE:
+			case CONFIG_COND_EQ:
+				ck_colon = strchr(dc->match.string->ptr, ':');
+				val_colon = strchr(con->uri.authority->ptr, ':');
+				
+				if (ck_colon && !val_colon) {
+					/* colon found */
+					BUFFER_APPEND_STRING_CONST(srv->cond_check_buf, ":");
+					buffer_append_long(srv->cond_check_buf, sock_addr_get_port(&(srv_sock->addr)));
+				}
+				break;
+			default:
+				break;
 			}
-			break;
-		default:
-			break;
 		}
 	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPremoteip"))) {
 		char *nm_slash;

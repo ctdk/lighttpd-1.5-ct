@@ -24,6 +24,7 @@ typedef struct {
 	
 	time_t stat_ts;
 	buffer *content_type;
+	buffer *mtime_ts;
 
 	int    follow_symlink;
 } file_cache_entry;

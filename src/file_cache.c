@@ -75,6 +75,7 @@ static void file_cache_entry_free(server *srv, file_cache_entry *fce) {
 	buffer_free(fce->etag);
 	buffer_free(fce->name);
 	buffer_free(fce->content_type);
+	if (fce->mtime_ts) buffer_free(fce->mtime_ts);
 	
 	if (fce->mmap_p) munmap(fce->mmap_p, fce->mmap_length);
 	
@@ -324,8 +325,11 @@ handler_t file_cache_add_entry(server *srv, connection *con, buffer *name, file_
 }
 
 int file_cache_release_entry(server *srv, file_cache_entry *fce) {
-	if (fce->in_use > 0) fce->in_use--;
-	file_cache_entry_reset(srv, fce);
+	if (!fce) return 0;
+	
+	if (--fce->in_use == 0) {
+		file_cache_entry_reset(srv, fce);
+	}
 	
 	return 0;
 }

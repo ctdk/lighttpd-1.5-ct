@@ -112,6 +112,8 @@ static handler_ctx * handler_ctx_init() {
 	hctx->write_queue = chunkqueue_init();
 
 	hctx->fd = file_descr_init();
+	hctx->fd->read_func  = network_read_chunkqueue_write;
+	hctx->fd->write_func = network_write_chunkqueue_writev;
 	
 	return hctx;
 }
@@ -693,6 +695,7 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 		proxy_create_env(srv, hctx);
 		
 		proxy_set_state(srv, hctx, PROXY_STATE_WRITE);
+		fdevent_event_add(srv->ev, hctx->fd, FDEVENT_OUT);
 		
 		/* fall through */
 	case PROXY_STATE_WRITE:
@@ -871,6 +874,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 				if (con->request.content_finished) {
 					/* wait for input */
 					proxy_set_state(srv, hctx, PROXY_STATE_READ);
+					fdevent_event_add(srv->ev, hctx->fd, FDEVENT_IN);
 				} else if (hctx->fd->is_writable) {
 					fdevent_event_del(srv->ev, hctx->fd);
 				}

@@ -150,8 +150,16 @@ network_t network_write_chunkqueue_linuxsendfile(server *srv, file_descr *write_
 			
 			/* Linux sendfile() */
 			if (-1 == (r = sendfile(write_fd->fd, fce->fd, &offset, toSend))) {
-				if (errno != EAGAIN && 
-				    errno != EINTR) {
+				switch(errno) {
+				case EAGAIN:
+					/* wait for event */
+					write_fd->is_writable = 0;
+					break;
+				case EINTR:
+					/* try again directly */
+					break;
+					
+				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile:", strerror(errno), errno);
 					
 					return NETWORK_ERROR;
@@ -159,10 +167,14 @@ network_t network_write_chunkqueue_linuxsendfile(server *srv, file_descr *write_
 				
 				r = 0;
 			}
-				
 			
 			c->offset += r;
 			write_fd->bytes_written += r;
+			
+			if (r != toSend) {
+				write_fd->is_writable = 0;
+				return NETWORK_OK;
+			}
 			
 			if (c->offset == c->data.file.length) {
 				chunk_finished = 1;

@@ -86,6 +86,11 @@ mod_staticfile_la_SOURCES = mod_staticfile.c
 mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_staticfile_la_LIBADD = $(common_libadd)
 
+lib_LTLIBRARIES += mod_uploadprogress.la
+mod_uploadprogress_la_SOURCES = mod_uploadprogress.c 
+mod_uploadprogress_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_uploadprogress_la_LIBADD = $(common_libadd)
+
 lib_LTLIBRARIES += mod_dirlisting.la
 mod_dirlisting_la_SOURCES = mod_dirlisting.c 
 mod_dirlisting_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined

@@ -81,7 +81,7 @@ SETDEFAULTS_FUNC(mod_staticfile_set_defaults) {
 	size_t i = 0;
 	
 	config_values_t cv[] = { 
-		{ "static-file.exclude-extension", NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ "static-file.exclude-extensions", NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
@@ -127,7 +127,7 @@ static int mod_staticfile_patch_connection(server *srv, connection *con, plugin_
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 			
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("static-file.exclude-extension"))) {
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN("static-file.exclude-extensions"))) {
 				PATCH(exclude_ext);
 			}
 		}

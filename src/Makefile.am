@@ -24,7 +24,7 @@ mod_ssi_exprparser.c mod_ssi_exprparser.h: mod_ssi_exprparser.y
 	$(LEMON) -q $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
 endif
 
-config.c: configparser.h
+configfile.c: configparser.h
 mod_ssi_expr.c: mod_ssi_exprparser.h
 
 common_src=buffer.c errorlog-glue.c \
@@ -44,7 +44,7 @@ common_src=buffer.c errorlog-glue.c \
       network_solaris_sendfilev.c network_openssl.c \
       network_send.c network-glue.c fdevent-glue.c
 
-src = server.c response.c connections.c config.c \
+src = server.c response.c connections.c configfile.c \
       request.c network.c log.c fdevent.c \
       fdevent_select.c fdevent_linux_rtsig.c \
       fdevent_poll.c fdevent_linux_sysepoll.c \

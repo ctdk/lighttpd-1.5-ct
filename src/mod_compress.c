@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <time.h>
+#include <stdio.h>
 
 #include "base.h"
 #include "log.h"

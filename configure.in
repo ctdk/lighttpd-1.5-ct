@@ -356,7 +356,9 @@ fi
 
 AC_SYS_LARGEFILE
 
-CPPFLAGS="$CPPFLAGS -D_FILE_OFFSET_BITS=$ac_cv_sys_file_offset_bits"
+if test x$ac_cv_sys_file_offset_bits \!= x; then
+  CPPFLAGS="$CPPFLAGS -D_FILE_OFFSET_BITS=$ac_cv_sys_file_offset_bits"
+fi
 
 AC_CHECK_SIZEOF(long)
 AC_CHECK_SIZEOF(off_t)
@@ -374,7 +376,7 @@ AC_CHECK_LIB(fcgi, FCGI_Accept, [
 AM_CONDITIONAL(CHECK_WITH_FASTCGI, test "x$fastcgi_found" = xyes)
 
 if test "${GCC}" = "yes"; then
-       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic -Wno-unused-parameter -Wcast-align"
+       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic -Wcast-align"
 fi
 
 dnl build version-id

@@ -331,8 +331,6 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		
 		connection_map_insert(p->con_map, con, b);
 		
-		log_error_write(srv, __FILE__, __LINE__, "sb", "added:", b);
-		
 		return HANDLER_GO_ON;
 	case HTTP_METHOD_GET:
 		if (!buffer_is_equal(con->uri.path, p->conf.progress_url)) {
@@ -370,12 +368,8 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		if (NULL == (post_con = connection_map_get_connection(p->con_map, b))) {
 			con->http_status = 404;
 			
-			log_error_write(srv, __FILE__, __LINE__, "sb", "not found:", b);
-			
 			return HANDLER_FINISHED;
 		}
-		
-		log_error_write(srv, __FILE__, __LINE__, "sb", "found:", b);
 		
 		file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
 		buffer_reset(con->physical.path);
@@ -403,8 +397,6 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		BUFFER_APPEND_STRING_CONST(b, "</received>");
 		BUFFER_APPEND_STRING_CONST(b, "</upload>");
 		
-		log_error_write(srv, __FILE__, __LINE__, "sb", "sent:", b);
-		
 		return HANDLER_FINISHED;
 	default:
 		break;
@@ -421,7 +413,7 @@ REQUESTDONE_FUNC(mod_uploadprogress_request_done) {
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	
 	if (connection_map_remove_connection(p->con_map, con)) {
-		log_error_write(srv, __FILE__, __LINE__, "s", "removed");
+		/* removed */
 	}
 	
 	return HANDLER_GO_ON;

@@ -8,6 +8,8 @@
 # include <openssl/ssl.h> 
 #endif
 
+#include "chunk.h"
+
 typedef enum {
 	NETWORK_UNSET,
 	NETWORK_OK,
@@ -16,7 +18,7 @@ typedef enum {
 	NETWORK_QUEUE_EMPTY
 } network_t;
 
-typedef struct {
+typedef struct file_descr {
 	int fd;
 	int fde_ndx;
 
@@ -28,8 +30,8 @@ typedef struct {
 	
 	int is_socket;
 
-	network_t (*write_func)(void *srv, void *fd, void *cq);
-	network_t (*read_func)(void *srv, void *fd, void *cq);
+	network_t (*write_func)(void *srv, struct file_descr *fd, chunkqueue *cq);
+	network_t (*read_func)(void *srv, struct file_descr *fd, chunkqueue *cq);
 
 #ifdef USE_OPENSSL
 	SSL *ssl;

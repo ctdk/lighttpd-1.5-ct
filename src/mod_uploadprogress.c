@@ -60,6 +60,18 @@ connection_map *connection_map_init() {
 }
 
 void connection_map_free(connection_map *cm) {
+	size_t i;
+	for (i = 0; i < cm->size; i++) {
+		connection_map_entry *cme = cm->ptr[i];
+		
+		if (!cme) break;
+		
+		if (cme->con_id) {
+			buffer_free(cme->con_id);
+		}
+		free(cme);
+	}
+	
 	free(cm);
 }
 

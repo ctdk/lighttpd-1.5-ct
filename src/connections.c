@@ -491,6 +491,7 @@ void connections_free(server *srv) {
 		CLEAN(request.request);
 		CLEAN(request.pathinfo);
 		CLEAN(request.content);
+		CLEAN(request.http_method_name);
 		
 		CLEAN(request.orig_uri);
 		

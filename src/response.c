@@ -335,8 +335,12 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
 		}
 		
-		if (NULL != (fce = file_cache_get_entry(srv, con->physical.path)) ||
-		    HANDLER_GO_ON == (ret = file_cache_add_entry(srv, con, con->physical.path, &fce))) {
+		if (NULL != (fce = file_cache_get_entry(srv, con->physical.path))) {
+			log_error_write(srv, __FILE__, __LINE__,  "sd",  "-- got fce:", fce->in_use);
+			file_cache_check_entry(srv, fce);
+		}
+		
+		if (HANDLER_GO_ON == (ret = file_cache_add_entry(srv, con, con->physical.path, &fce))) {
 			/* file exists */
 			
 			if (con->conf.log_request_handling) {

@@ -18,6 +18,7 @@
 #include "keyvalue.h"
 #include "log.h"
 #include "file_cache_funcs.h"
+#include "chunk_funcs.h"
 #include "etag.h"
 
 #include "connections.h"
@@ -841,7 +842,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 	    (con->http_status != 0 && con->http_status != 200)) {
 		/* remove a packets in the queue */
 		if (con->file_finished == 0) {
-			chunkqueue_reset(con->write_queue);
+			chunkqueue_reset(srv, con->write_queue);
 		}
 		
 		return HANDLER_FINISHED;

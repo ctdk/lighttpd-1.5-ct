@@ -1797,6 +1797,12 @@ static int fcgi_create_env(server *srv, handler_ctx *hctx, size_t request_id) {
 	fcgi_header(&(header), FCGI_PARAMS, request_id, 0, 0);
 	buffer_append_memory(write_buffer, (const char *)&header, sizeof(header));
 	
+	/* add the expected \0 for the buffer
+	 * the \0 will not hit the network
+	 */
+	buffer_prepare_append(write_buffer, 1);
+	write_buffer->ptr[write_buffer->used++] = '\0';
+	
 	/* there is no content for use, close stdin */
 	if (con->request.content_finished) {
 		fcgi_header(&(header), FCGI_STDIN, hctx->request_id, 0, 0);

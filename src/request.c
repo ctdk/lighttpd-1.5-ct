@@ -323,14 +323,14 @@ int http_request_parse(server *srv, connection *con) {
 	data_string *ds = NULL;
 	
 	/* 
-	 * Request: "^(GET|POST|HEAD) ([^ ]+(\\?[^ ]+|)) (HTTP/1\\.[01])$" 
+	 * Request: "^([A-Z]+) ([^ ]+(\\?[^ ]+|)) (HTTP/1\\.[01])$" 
 	 * Option : "^([-a-zA-Z]+): (.+)$"                    
 	 * End    : "^$"
 	 */
 
 	if (con->conf.log_request_header) {
 		log_error_write(srv, __FILE__, __LINE__, "sdsdSb", 
-				"fd:", con->fd, 
+				"fd:", con->fd->fd, 
 				"request-len:", con->request.request->used, 
 				"\n", con->request.request);
 	}
@@ -348,6 +348,7 @@ int http_request_parse(server *srv, connection *con) {
 	
 	keep_alive_set = 0;
 	con_length_set = 0;
+	con->request.content_finished = 1;
 
 	/* parse the first line of the request
 	 *
@@ -361,9 +362,9 @@ int http_request_parse(server *srv, connection *con) {
 		switch(*cur) {
 		case '\r': 
 			if (con->parse_request->ptr[i+1] == '\n') {
-				http_method_t r;
 				char *nuri = NULL;
 				size_t j;
+				char *c;
 				
 				/* \r\n -> \0\0 */
 				con->parse_request->ptr[i] = '\0';
@@ -390,23 +391,26 @@ int http_request_parse(server *srv, connection *con) {
 				*(uri - 1) = '\0';
 				*(proto - 1) = '\0';
 				
-				/* we got the first one :) */
-				if (-1 == (r = get_http_method_key(method))) {
-					con->http_status = 501;
-					con->response.keep_alive = 0;
-					con->keep_alive = 0;
-					
-					log_error_write(srv, __FILE__, __LINE__, "s", "unknown http-method -> 501");
-					if (srv->srvconf.log_request_header_on_error) {
+				/* might be -1 if method is unknown */
+				con->request.http_method_id = get_http_method_key(method);
+				buffer_copy_string(con->request.http_method_name, method);
+				
+				/* method name is only [A-Z]+ */
+				for (c = con->request.http_method_name->ptr; *c; c++) {
+					if (*c < 'A' || *c > 'Z') {
+						con->http_status = 400;
+						con->response.keep_alive = 0;
+						con->keep_alive = 0;
+						
+						log_error_write(srv, __FILE__, __LINE__, "s", "illegal method-name -> 400");
+						if (srv->srvconf.log_request_header_on_error) {
 							log_error_write(srv, __FILE__, __LINE__, "Sb",
 									"request-header:\n",
 									con->request.request);
 						}
-					
-					return 0;
+						return 0;
+					}
 				}
-				
-				con->request.http_method = r;
 				
 				if (0 == strncmp(proto, "HTTP/1.", sizeof("HTTP/1.") - 1)) {
 					if (proto[7] == '1') {
@@ -975,56 +979,52 @@ int http_request_parse(server *srv, connection *con) {
 		return 0;
 	}
 	
-	/* check if we have read post data */
-	if (con->request.http_method == HTTP_METHOD_POST
-         || (con->request.http_method != HTTP_METHOD_GET
-            && con->request.http_method != HTTP_METHOD_HEAD
-            && con->request.http_method != HTTP_METHOD_OPTIONS
-            && con_length_set))
-   {
-
+	/* GET and HEAD don't have a content-length */
+	if (con_length_set) {
 		server_socket *srv_socket = con->srv_socket;
-		if (con->request.http_content_type == NULL) {
-			log_error_write(srv, __FILE__, __LINE__, "s", 
-					"POST request, but content-type not set");
-		}
 		
-		if (con_length_set == 0) {
+		switch(con->request.http_method_id) {
+		case HTTP_METHOD_GET:
+		case HTTP_METHOD_HEAD:
+			break;
+		default:
+			/* don't handle more the SSIZE_MAX bytes in content-length */
+			if (con->request.content_length > SSIZE_MAX) {
+				con->http_status = 413; 
+				
+				log_error_write(srv, __FILE__, __LINE__, "sds", 
+						"request-size too long:", con->request.content_length, "-> 413");
+				return 0;
+			}
+			
+			/* divide by 1024 as srvconf.max_request_size is in kBytes */
+			if (srv_socket->max_request_size != 0 &&
+			    (con->request.content_length >> 10) > srv_socket->max_request_size) {
+				/* the request body itself is larger then 
+				 * our our max_request_size
+				 */
+				
+				con->http_status = 413;
+				
+				log_error_write(srv, __FILE__, __LINE__, "sds", 
+						"request-size too long:", con->request.content_length, "-> 413");
+				return 0;
+			}
+			
+			if (con->request.content_length != 0) {
+				/* we have to fetch the request-body */
+				con->request.content_finished = 0;
+			}
+			break;
+		}
+	} else {
+		if (con->request.http_method_id == HTTP_METHOD_POST) {
 			/* content-length is missing */
 			log_error_write(srv, __FILE__, __LINE__, "s", 
 					"POST-request, but content-length missing -> 411");
 			
 			con->http_status = 411;
 			return 0;
-		}
-		
-		/* don't handle more the SSIZE_MAX bytes in content-length */
-		if (con->request.content_length > SSIZE_MAX) {
-			con->http_status = 413; 
-
-			log_error_write(srv, __FILE__, __LINE__, "sds", 
-					"request-size too long:", con->request.content_length, "-> 413");
-			return 0;
-		}
-		
-		/* divide by 1024 as srvconf.max_request_size is in kBytes */
-		if (srv_socket->max_request_size != 0 &&
-		    (con->request.content_length >> 10) > srv_socket->max_request_size) {
-			/* the request body itself is larger then 
-			 * our our max_request_size
-			 */
-		
-			con->http_status = 413;
-		
-			log_error_write(srv, __FILE__, __LINE__, "sds", 
-					"request-size too long:", con->request.content_length, "-> 413");
-			return 0;
-		}
-		
-		
-		/* we have content */
-		if (con->request.content_length != 0) {
-			return 1;
 		}
 	}
 	

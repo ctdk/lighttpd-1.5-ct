@@ -16,6 +16,7 @@
 
 #include <fcntl.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <errno.h>
@@ -673,12 +674,7 @@ int http_auth_digest_check(server *srv, connection *con, mod_auth_plugin_data *p
 	char *nc;
 	char *respons;
 	
-	const char *method_get = "GET";
-	const char *method_post = "POST";
-	const char *method_head = "HEAD";
-	
 	char *e, *c;
-	const char *m = NULL;
 	int i;
 	buffer *password, *b, *username_buf, *realm_buf;
 	
@@ -787,13 +783,6 @@ int http_auth_digest_check(server *srv, connection *con, mod_auth_plugin_data *p
 		return -1;
 	}
 	
-	switch(con->request.http_method) {
-	case HTTP_METHOD_GET: m = method_get; break;
-	case HTTP_METHOD_POST: m = method_post; break;
-	case HTTP_METHOD_HEAD: m = method_head; break;
-	case HTTP_METHOD_UNSET: break;
-	}
-
 	/* password-string == HA1 */
 	password = buffer_init();
 	username_buf = buffer_init_string(username);
@@ -847,7 +836,7 @@ int http_auth_digest_check(server *srv, connection *con, mod_auth_plugin_data *p
 	
 	/* calculate H(A2) */
 	MD5_Init(&Md5Ctx);
-	MD5_Update(&Md5Ctx, (unsigned char *)m, strlen(m));
+	MD5_Update(&Md5Ctx, (unsigned char *)con->request.http_method_name->ptr, con->request.http_method_name->used - 1);
 	MD5_Update(&Md5Ctx, (unsigned char *)":", 1);
 	MD5_Update(&Md5Ctx, (unsigned char *)uri, strlen(uri));
 	if (strcasecmp(qop, "auth-int") == 0) {

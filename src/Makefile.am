@@ -1,4 +1,4 @@
-noinst_PROGRAMS=array chunk lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
+noinst_PROGRAMS=array lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
 sbin_PROGRAMS=lighttpd 
 bin_PROGRAMS=spawn-fcgi
 LEMON=$(top_builddir)/src/lemon
@@ -27,26 +27,29 @@ endif
 config.c: configparser.h
 mod_ssi_expr.c: mod_ssi_exprparser.h
 
-common_src=buffer.c log.c \
+common_src=buffer.c errorlog-glue.c \
       keyvalue.c chunk.c  \
-      http_chunk.c stream.c fdevent.c \
-      file_cache.c plugin.c joblist.c etag.c array.c \
+      http_chunk.c stream.c \
+      file_cache.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
       data_integer.c md5.c data_fastcgi.c \
-      fdevent_select.c fdevent_linux_rtsig.c \
-      fdevent_poll.c fdevent_linux_sysepoll.c \
-      fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c \
       data_config.c bitset.c  configparser.c \
       inet_ntop_cache.c \
       connections-glue.c \
       configfile-glue.c \
-      http-header-glue.c
-      
-src = server.c response.c connections.c network.c \
+      http-header-glue.c \
+      file_descr.c \
       network_write.c network_linux_sendfile.c \
       network_freebsd_sendfile.c network_writev.c \
       network_solaris_sendfilev.c network_openssl.c \
-      config.c request.c
+      network_send.c network-glue.c fdevent-glue.c
+
+src = server.c response.c connections.c config.c \
+      request.c network.c log.c fdevent.c \
+      fdevent_select.c fdevent_linux_rtsig.c \
+      fdevent_poll.c fdevent_linux_sysepoll.c \
+      fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c  \
+      plugin.c
 
 
 spawn_fcgi_SOURCES=spawn-fcgi.c
@@ -189,11 +192,9 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       network_backends.h configfile.h bitset.h \
       mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
       configparser.h mod_ssi_exprparser.h \
-      sys-mmap.h sys-socket.h
-      # license.h
+      sys-mmap.h sys-socket.h file_descr.h \
+      file_cache_funcs.h file_descr_funcs.h 
       
-#hdr += chat.h chat_misc.h chat_endec.h chat_user.h \
-#       chat_channel.h
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 
@@ -204,9 +205,6 @@ lighttpd_CCPFLAGS = $(MYSQL_INCLUDES)
 
 array_SOURCES = array.c buffer.c data_string.c data_count.c
 array_CPPFLAGS= -DDEBUG_ARRAY
-
-chunk_SOURCES = buffer.c chunk.c
-chunk_CPPFLAGS= -DDEBUG_CHUNK
 
 #gen_license_SOURCES = license.c md5.c buffer.c gen_license.c
 

@@ -19,7 +19,14 @@ static void fdevent_poll_free(fdevents *ev) {
 }
 
 static int fdevent_poll_event_del(fdevents *ev, int fde_ndx, int fd) {
-	if (fde_ndx < 0) return -1;
+	if (fde_ndx < 0) {
+#if 0
+		do { 
+			fprintf(stderr, "%s.%d: del fd %d, %d\n", __FILE__, __LINE__, fd, fde_ndx);
+		} while (0 == *((char *)(0)));
+#endif
+		return -1;
+	}
 	
 	if ((size_t)fde_ndx >= ev->used) {
 		fprintf(stderr, "%s.%d: del! out of range %d %u\n", __FILE__, __LINE__, fde_ndx, ev->used);
@@ -64,6 +71,11 @@ static int fdevent_poll_event_compress(fdevents *ev) {
 
 static int fdevent_poll_event_add(fdevents *ev, int fde_ndx, int fd, int events) {
 	/* known index */
+	if (fd < 0) {
+		do { 
+			fprintf(stderr, "%s.%d: add fd %d, event %d\n", __FILE__, __LINE__, fd, events);
+		} while (0 == *((char *)(0)));
+	}
 	
 	if (fde_ndx != -1) {
 		if (ev->pollfds[fde_ndx].fd == fd) {
@@ -108,7 +120,7 @@ static int fdevent_poll_poll(fdevents *ev, int timeout_ms) {
 static int fdevent_poll_event_get_revent(fdevents *ev, size_t ndx) {
 	int r, poll_r;
 	if (ndx >= ev->used) {
-		fprintf(stderr, "%s.%d: dying because: event: %u >= %u\n", __FILE__, __LINE__, ndx, ev->used);
+		fprintf(stderr, "%s.%d: dieing because: event: %u >= %u\n", __FILE__, __LINE__, ndx, ev->used);
 		
 		SEGFAULT();
 		
@@ -117,6 +129,9 @@ static int fdevent_poll_event_get_revent(fdevents *ev, size_t ndx) {
 	
 	if (ev->pollfds[ndx].revents & POLLNVAL) {
 		/* should never happen */
+
+		fprintf(stderr, "%s.%d: dieing because: POLLNVAL for fd %u %u\n", __FILE__, __LINE__, ev->pollfds[ndx].fd, ndx);
+
 		SEGFAULT();
 	}
 

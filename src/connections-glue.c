@@ -4,7 +4,6 @@ const char *connection_get_state(connection_state_t state) {
 	switch (state) {
 	case CON_STATE_CONNECT: return "connect";
 	case CON_STATE_READ: return "read";
-	case CON_STATE_READ_POST: return "readpost";
 	case CON_STATE_WRITE: return "write";
 	case CON_STATE_CLOSE: return "close";
 	case CON_STATE_ERROR: return "error";
@@ -21,7 +20,6 @@ const char *connection_get_short_state(connection_state_t state) {
 	switch (state) {
 	case CON_STATE_CONNECT: return ".";
 	case CON_STATE_READ: return "r";
-	case CON_STATE_READ_POST: return "R";
 	case CON_STATE_WRITE: return "W";
 	case CON_STATE_CLOSE: return "C";
 	case CON_STATE_ERROR: return "E";

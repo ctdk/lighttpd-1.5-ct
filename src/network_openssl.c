@@ -20,15 +20,66 @@
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
-#include "file_cache.h"
+#include "file_cache_funcs.h"
 
-# include <openssl/ssl.h> 
-# include <openssl/err.h> 
+#include <openssl/ssl.h> 
+#include <openssl/err.h> 
 
-int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *cq) {
+network_t network_read_chunkqueue_openssl(server *srv, file_descr *read_fd, chunkqueue *cq) {
+	buffer *b;
+	ssize_t len;
+
+	b = chunkqueue_get_append_buffer(cq);
+	buffer_prepare_copy(b, 4096);
+
+	if ((len = SSL_read(read_fd->ssl, b->ptr, b->size - 1)) < 0) {
+		int r;
+	
+		switch ((r = SSL_get_error(read_fd->ssl, len))) {
+		case SSL_ERROR_WANT_READ:
+			read_fd->is_readable = 0;
+			return NETWORK_OK;
+		case SSL_ERROR_SYSCALL:
+			switch(errno) {
+			default:
+				log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:", 
+						len, r, errno,
+						strerror(errno));
+				break;
+			}
+			return NETWORK_ERROR;	
+		case SSL_ERROR_ZERO_RETURN:
+			/* clean shutdown on the remote side */
+			
+			return NETWORK_REMOTE_CLOSE;
+		default:
+			log_error_write(srv, __FILE__, __LINE__, "sds", "SSL:", 
+					r, ERR_error_string(ERR_get_error(), NULL));
+			return NETWORK_ERROR;	
+		}
+	} else if (len == 0) {
+		read_fd->is_readable = 0;
+		/* the other end close the connection -> KEEP-ALIVE */
+
+		return NETWORK_REMOTE_CLOSE;
+	} else if ((size_t)len < b->size - 1) {
+		/* we got less then expected, wait for the next fd-event */
+		
+		read_fd->is_readable = 0;
+	}
+
+	b->used = len;
+	b->ptr[b->used++] = '\0';
+	
+	read_fd->bytes_read += len;
+
+	return NETWORK_OK;
+}
+
+
+network_t network_write_chunkqueue_openssl(server *srv, file_descr *write_fd, chunkqueue *cq) {
 	int ssl_r;
 	chunk *c;
-	size_t chunks_written = 0;
 	
 	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
@@ -57,26 +108,40 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 			 * 
 			 */
 			
-			if ((r = SSL_write(con->ssl, offset, toSend)) <= 0) {
-				switch ((ssl_r = SSL_get_error(con->ssl, r))) {
+			if ((r = SSL_write(write_fd->ssl, offset, toSend)) <= 0) {
+				int errcode;
+				switch ((ssl_r = SSL_get_error(write_fd->ssl, r))) {
 				case SSL_ERROR_WANT_WRITE:
 					break;
 				case SSL_ERROR_SYSCALL:
-					switch(errno) {
-					case EPIPE:
-						return -2;
-					default:
-						log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:", 
+					if (0 != (errcode = ERR_get_error())) {
+						log_error_write(srv, __FILE__, __LINE__, "sdddss", "SSL:", 
 								ssl_r, r, errno,
-								strerror(errno));
-						break;
+								strerror(errno), ERR_error_string(errcode, NULL));
+						return NETWORK_ERROR;
+					}
+
+					if (r == 0) {
+						/* unexpected EOF */
+
+						return NETWORK_REMOTE_CLOSE;
+					} else if (r == -1) {
+						switch(errno) {
+						case EPIPE:
+							return NETWORK_REMOTE_CLOSE;
+						default:
+							log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:", 
+									ssl_r, r, errno,
+									strerror(errno));
+							break;
+						}
 					}
 					
-					return  -1;
+					return NETWORK_ERROR;
 				case SSL_ERROR_ZERO_RETURN:
 					/* clean shutdown on the remote side */
 					
-					if (r == 0) return -2;
+					if (r == 0) return NETWORK_REMOTE_CLOSE;
 					
 					/* fall thourgh */
 				default:
@@ -84,11 +149,11 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 							ssl_r, r,
 							ERR_error_string(ERR_get_error(), NULL));
 					
-					return  -1;
+					return NETWORK_ERROR;
 				}
 			} else {
 				c->offset += r;
-				con->bytes_written += r;
+				write_fd->bytes_written += r;
 			}
 			
 			if (c->offset == (off_t)c->data.mem->used - 1) {
@@ -105,10 +170,11 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 # if defined USE_MMAP
 			char *p;
 # endif
+			file_cache_entry *fce = c->data.file.fce;
 			
-			if (HANDLER_GO_ON != file_cache_get_entry(srv, con, c->data.file.name, &(con->fce))) {
+			if (HANDLER_GO_ON != file_cache_check_entry(srv, fce)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->data.file.name);
+						strerror(errno), c->data.file.fce->name);
 				return -1;
 			}
 			
@@ -117,7 +183,7 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 			
 			
 #if defined USE_MMAP
-			if (MAP_FAILED == (p = mmap(0, con->fce->st.st_size, PROT_READ, MAP_SHARED, con->fce->fd, 0))) {
+			if (MAP_FAILED == (p = mmap(0, fce->st.st_size, PROT_READ, MAP_SHARED, fce->fd, 0))) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "mmap failed: ", strerror(errno));
 				
 				return -1;
@@ -128,7 +194,7 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 			buffer_prepare_copy(srv->tmp_buf, toSend);
 			
 			lseek(con->fce->fd, offset, SEEK_SET);
-			if (-1 == (toSend = read(con->fce->fd, srv->tmp_buf->ptr, toSend))) {
+			if (-1 == (toSend = read(fce->fd, srv->tmp_buf->ptr, toSend))) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "read failed: ", strerror(errno));
 				
 				return -1;
@@ -137,14 +203,14 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 			s = srv->tmp_buf->ptr;
 #endif
 			
-			if ((r = SSL_write(con->ssl, s, toSend)) <= 0) {
-				switch ((ssl_r = SSL_get_error(con->ssl, r))) {
+			if ((r = SSL_write(write_fd->ssl, s, toSend)) <= 0) {
+				switch ((ssl_r = SSL_get_error(write_fd->ssl, r))) {
 				case SSL_ERROR_WANT_WRITE:
 					break;
 				case SSL_ERROR_SYSCALL:
 					switch(errno) {
 					case EPIPE:
-						return -2;
+						return NETWORK_REMOTE_CLOSE;
 					default:
 						log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:", 
 								ssl_r, r, errno,
@@ -160,7 +226,7 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 #if defined USE_MMAP
 						munmap(p, c->data.file.length);
 #endif
-						return -2;
+						return NETWORK_REMOTE_CLOSE;
 					}
 					
 					/* fall thourgh */
@@ -172,11 +238,11 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 #if defined USE_MMAP
 					munmap(p, c->data.file.length);
 #endif
-					return -1;
+					return NETWORK_ERROR;
 				}
 			} else {
 				c->offset += r;
-				con->bytes_written += r;
+				write_fd->bytes_written += r;
 			}
 			
 #if defined USE_MMAP
@@ -200,12 +266,9 @@ int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *c
 			
 			break;
 		}
-			
-		chunks_written++;
-		
 	}
 	
-	return chunks_written;
+	return NETWORK_OK;
 }
 #endif
 

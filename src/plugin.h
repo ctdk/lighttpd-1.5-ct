@@ -45,6 +45,7 @@ typedef struct {
 	handler_t (* handle_request_done)    (server *srv, connection *con, void *p_d);    /* at the end of a request */
 	handler_t (* handle_connection_close)(server *srv, connection *con, void *p_d);    /* at the end of a connection */
 	handler_t (* handle_joblist)         (server *srv, connection *con, void *p_d);    /* after all events are handled */
+	handler_t (* handle_fetch_post_data) (server *srv, connection *con, void *p_d);    /* handle post data internally */
 	
 	
 	
@@ -73,6 +74,7 @@ handler_t plugins_call_handle_docroot(server *srv, connection *con);
 handler_t plugins_call_handle_connection_close(server *srv, connection *con);
 handler_t plugins_call_handle_joblist(server *srv, connection *con);
 handler_t plugins_call_handle_physical_path(server *srv, connection *con);
+handler_t plugins_call_handle_fetch_post_data(server *srv, connection *con);
 handler_t plugins_call_connection_reset(server *srv, connection *con);
 
 handler_t plugins_call_handle_trigger(server *srv);

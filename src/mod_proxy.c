@@ -18,6 +18,7 @@
 #include "connections.h"
 #include "response.h"
 #include "joblist.h"
+#include "file_descr_funcs.h"
 
 #include "plugin.h"
 
@@ -83,9 +84,7 @@ typedef struct {
 	buffer *write_buffer;
 	size_t  write_offset;
 	
-
-	int fd; /* fd to the proxy process */
-	int fde_ndx; /* index into the fd-event buffer */
+	file_descr *fd; /* fd to the proxy process */
 
 	size_t path_info_offset; /* start of path_info in uri.path */
 	
@@ -111,8 +110,7 @@ static handler_ctx * handler_ctx_init() {
 
 	hctx->write_buffer = buffer_init();
 
-	hctx->fd = -1;
-	hctx->fde_ndx = -1;
+	hctx->fd = file_descr_init();
 	
 	return hctx;
 }
@@ -121,6 +119,8 @@ static void handler_ctx_free(handler_ctx *hctx) {
 	buffer_free(hctx->response);
 	buffer_free(hctx->response_header);
 	buffer_free(hctx->write_buffer);
+
+	file_descr_free(hctx->fd);
 	
 	free(hctx);
 }
@@ -312,10 +312,10 @@ void proxy_connection_cleanup(server *srv, handler_ctx *hctx) {
 	
 	if (con->mode != p->id) return;
 	
-	if (hctx->fd != -1) {
-		fdevent_event_del(srv->ev, &(hctx->fde_ndx), hctx->fd);
+	if (hctx->fd->fd != -1) {
+		fdevent_event_del(srv->ev, hctx->fd);
 		fdevent_unregister(srv->ev, hctx->fd);
-		close(hctx->fd);
+		close(hctx->fd->fd);
 		srv->cur_fds--;
 	}
 	
@@ -338,7 +338,7 @@ static int proxy_establish_connection(server *srv, handler_ctx *hctx) {
 	
 	plugin_data *p    = hctx->plugin_data;
 	data_proxy *host= hctx->host;
-	int proxy_fd       = hctx->fd;
+	int proxy_fd       = hctx->fd->fd;
 	
 	memset(&proxy_addr, 0, sizeof(proxy_addr));
 	
@@ -385,7 +385,7 @@ static int proxy_create_env(server *srv, handler_ctx *hctx) {
 	buffer_reset(hctx->write_buffer);
 	
 	/* request line */
-	buffer_copy_string(hctx->write_buffer, get_http_method_name(con->request.http_method));
+	buffer_copy_string_buffer(hctx->write_buffer, con->request.http_method_name);
 	buffer_append_string_buffer(hctx->write_buffer, con->request.uri);
 	BUFFER_APPEND_STRING_CONST(hctx->write_buffer, " HTTP/1.0\r\n");
 	
@@ -413,7 +413,8 @@ static int proxy_create_env(server *srv, handler_ctx *hctx) {
 	
 	/* body */
 	
-	if (con->request.http_method == HTTP_METHOD_POST &&
+	/* FIXME: streaming interface */
+	if (con->request.http_method_id == HTTP_METHOD_POST &&
 	    con->request.content_length) {
 		/* the buffer-string functions add an extra \0 at the end the memory-function don't */
 		hctx->write_buffer->used--;
@@ -527,10 +528,10 @@ static int proxy_demux_response(server *srv, handler_ctx *hctx) {
 	
 	plugin_data *p    = hctx->plugin_data;
 	connection *con   = hctx->remote_conn;
-	int proxy_fd       = hctx->fd;
+	int proxy_fd       = hctx->fd->fd;
 	
 	/* check how much we have to read */
-	if (ioctl(hctx->fd, FIONREAD, &b)) {
+	if (ioctl(hctx->fd->fd, FIONREAD, &b)) {
 		log_error_write(srv, __FILE__, __LINE__, "sd", 
 				"ioctl failed: ",
 				proxy_fd);
@@ -546,7 +547,7 @@ static int proxy_demux_response(server *srv, handler_ctx *hctx) {
 			buffer_prepare_append(hctx->response, hctx->response->used + b);
 		}
 		
-		if (-1 == (r = read(hctx->fd, hctx->response->ptr + hctx->response->used - 1, b))) {
+		if (-1 == (r = read(hctx->fd->fd, hctx->response->ptr + hctx->response->used - 1, b))) {
 			log_error_write(srv, __FILE__, __LINE__, "sds", 
 					"unexpected end-of-file (perhaps the proxy process died):",
 					proxy_fd, strerror(errno));
@@ -630,11 +631,10 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 	case PROXY_STATE_INIT:
 		r = AF_INET;
 		
-		if (-1 == (hctx->fd = socket(r, SOCK_STREAM, 0))) {
+		if (-1 == (hctx->fd->fd = socket(r, SOCK_STREAM, 0))) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "socket failed: ", strerror(errno));
 			return -1;
 		}
-		hctx->fde_ndx = -1;
 		
 		srv->cur_fds++;
 		
@@ -660,12 +660,11 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 				
 				/* connection is in progress, wait for an event and call getsockopt() below */
 				
-				fdevent_event_add(srv->ev, &(hctx->fde_ndx), hctx->fd, FDEVENT_OUT);
+				fdevent_event_add(srv->ev, hctx->fd, FDEVENT_OUT);
 				
 				return HANDLER_WAIT_FOR_EVENT;
 			case -1:
 				/* if ECONNREFUSED choose another connection -> FIXME */
-				hctx->fde_ndx = -1;
 				
 				return HANDLER_ERROR;
 			default:
@@ -677,7 +676,7 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 			socklen_t socket_error_len = sizeof(socket_error);
 			
 			/* try to finish the connect() */
-			if (0 != getsockopt(hctx->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
+			if (0 != getsockopt(hctx->fd->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", 
 						"getsockopt failed:", strerror(errno));
 				
@@ -703,7 +702,7 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 		/* fall through */
 	case PROXY_STATE_WRITE:
 		/* continue with the code after the switch */
-		if (-1 == (r = write(hctx->fd, 
+		if (-1 == (r = write(hctx->fd->fd, 
 				     hctx->write_buffer->ptr + hctx->write_offset, 
 				     hctx->write_buffer->used - hctx->write_offset))) {
 			if (errno != EAGAIN) {
@@ -835,7 +834,7 @@ static handler_t proxy_connection_close(server *srv, handler_ctx *hctx) {
 	
 	log_error_write(srv, __FILE__, __LINE__, "ssdsd", 
 			"emergency exit: proxy:", 
-			"connection-fd:", con->fd,
+			"connection-fd:", con->fd->fd,
 			"proxy-fd:", hctx->fd);
 	
 	
@@ -914,7 +913,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 #ifndef USE_LINUX_SIGIO
 		proxy_connection_close(srv, hctx);
 # if 0
-		log_error_write(srv, __FILE__, __LINE__, "sd", "proxy-FDEVENT_HUP", con->fd);
+		log_error_write(srv, __FILE__, __LINE__, "sd", "proxy-FDEVENT_HUP", con->fd->fd);
 # endif			
 		return HANDLER_ERROR;
 #endif
@@ -1061,14 +1060,14 @@ JOBLIST_FUNC(mod_proxy_handle_joblist) {
 	
 	if (hctx == NULL) return HANDLER_GO_ON;
 
-	if (hctx->fd != -1) {
+	if (hctx->fd->fd != -1) {
 		switch (hctx->state) {
 		case PROXY_STATE_READ:
-			fdevent_event_add(srv->ev, &(hctx->fde_ndx), hctx->fd, FDEVENT_IN);
+			fdevent_event_add(srv->ev, hctx->fd, FDEVENT_IN);
 			
 			break;
 		case PROXY_STATE_CONNECT:
-			fdevent_event_add(srv->ev, &(hctx->fde_ndx), hctx->fd, FDEVENT_OUT);
+			fdevent_event_add(srv->ev, hctx->fd, FDEVENT_OUT);
 			
 			break;
 		default:

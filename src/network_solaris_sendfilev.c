@@ -22,7 +22,7 @@
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
-#include "file_cache.h"
+#include "file_cache_funcs.h"
 
 #ifndef UIO_MAXIOV
 #define UIO_MAXIOV IOV_MAX
@@ -38,12 +38,10 @@
  */
 
 
-int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chunkqueue *cq) {
-	const int fd = con->fd;
+network_t network_write_chunkqueue_solarissendfilev(server *srv, file_descr *write_fd, chunkqueue *cq) {
 	chunk *c;
-	size_t chunks_written = 0;
 	
-	for(c = cq->first; c; c = c->next, chunks_written++) {
+	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
 		
 		switch(c->type) {
@@ -92,7 +90,7 @@ int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chun
 				}
 			}
 			
-			if ((r = writev(fd, chunks, num_chunks)) < 0) {
+			if ((r = writev(write_fd->fd, chunks, num_chunks)) < 0) {
 				switch (errno) {
 				case EAGAIN:
 				case EINTR:
@@ -100,12 +98,12 @@ int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chun
 					break;
 				case EPIPE:
 				case ECONNRESET:
-					return -2;
+					return NETWORK_REMOTE_CLOSE;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd", 
-							"writev failed:", strerror(errno), fd);
+							"writev failed:", strerror(errno), write_fd->fd);
 				
-					return -1;
+					return NETWORK_ERROR;
 				}
 			}
 			
@@ -116,25 +114,23 @@ int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chun
 					/* written */
 					r -= chunks[i].iov_len;
 					tc->offset += chunks[i].iov_len;
-					con->bytes_written += chunks[i].iov_len;
+					write_fd->bytes_written += chunks[i].iov_len;
 					
 					if (chunk_finished) {
 						/* skip the chunks from further touches */
-						chunks_written++;
 						c = c->next;
 					} else {
-						/* chunks_written + c = c->next is done in the for()*/
 						chunk_finished++;
 					}
 				} else {
 					/* partially written */
 					
 					tc->offset += r;
-					con->bytes_written += r;
+					write_fd->bytes_written += r;
 					chunk_finished = 0;
 					
 					log_error_write(srv, __FILE__, __LINE__, "sdd", 
-						"partially write: ", r, fd);
+						"partially write: ", r, write_fd->fd);
 					
 					break;
 				}
@@ -147,40 +143,41 @@ int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chun
 			off_t offset;
 			size_t toSend, written;
 			sendfilevec_t fvec;
+			file_cache_entry *fce = c->data.file.fce;
 			
-			if (HANDLER_GO_ON != file_cache_get_entry(srv, con, c->data.file.name, &(con->fce))) {
+			if (file_cache_check_entry(srv, fce)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->data.file.name);
-				return -1;
+						strerror(errno), c->data.file.fce->name);
+				return NETWORK_ERROR;
 			}
 			
 			offset = c->data.file.offset + c->offset;
 			toSend = c->data.file.length - c->offset;
 			
-			if (offset > con->fce->st.st_size) {
-				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.name);
+			if (offset > fce->st.st_size) {
+				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.fce->name);
 				
-				return -1;
+				return NETWORK_ERROR;
 			}
 			
-			fvec.sfv_fd = con->fce->fd;
+			fvec.sfv_fd = fce->fd;
 			fvec.sfv_flag = 0;
 			fvec.sfv_off = offset;
 			fvec.sfv_len = toSend;
 			
 			/* Solaris sendfilev() */
-			if (-1 == (r = sendfilev(fd, &fvec, 1, &written))) {
+			if (-1 == (r = sendfilev(write_fd->fd, &fvec, 1, &written))) {
 				if (errno != EAGAIN) {
 					log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile: ", strerror(errno), errno);
 					
-					return -1;
+					return NETWORK_ERROR;
 				}
 				
 				r = 0;
 			}
 			
 			c->offset += written;
-			con->bytes_written += written;
+			write_fd->bytes_written += written;
 			
 			if (c->offset == c->data.file.length) {
 				chunk_finished = 1;
@@ -192,7 +189,7 @@ int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chun
 			
 			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
 			
-			return -1;
+			return NETWORK_ERROR;
 		}
 		
 		if (!chunk_finished) {
@@ -202,7 +199,7 @@ int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chun
 		}
 	}
 
-	return chunks_written;
+	return NETWORK_OK;
 }
 
 #endif

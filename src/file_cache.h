@@ -1,12 +1,40 @@
 #ifndef _FILE_CACHE_H_
 #define _FILE_CACHE_H_
 
-#include "base.h"
+#include <sys/stat.h>
+#include <time.h>
 
-file_cache *file_cache_init(void);
-void file_cache_free(server *srv, file_cache *fc);
+#include "buffer.h"
 
-handler_t file_cache_get_entry(server *srv, connection *con, buffer *name, file_cache_entry **o_fce);
-int file_cache_entry_release(server *srv, connection *con, file_cache_entry *fce);
+typedef struct {
+	buffer *name;
+	buffer *etag;
+	
+	struct stat st;
+	
+	int    fd;
+	int    fde_ndx;
+	
+	char   *mmap_p;
+	size_t mmap_length;
+	off_t  mmap_offset;
+	
+	size_t in_use;
+	size_t is_dirty;
+	
+	time_t stat_ts;
+	buffer *content_type;
+
+	int    follow_symlink;
+} file_cache_entry;
+
+typedef struct {
+	file_cache_entry **ptr;
+	
+	size_t size;
+	size_t used;
+	
+	buffer *dir_name;
+} file_cache;
 
 #endif

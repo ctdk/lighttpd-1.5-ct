@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
@@ -17,6 +18,7 @@
 #include "response.h"
 
 #include "mod_ssi.h"
+#include "file_cache_funcs.h"
 
 #include "inet_ntop_cache.h"
 
@@ -264,7 +266,7 @@ static int build_ssi_cgi_vars(server *srv, connection *con, plugin_data *p) {
 	
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REQUEST_URI"), con->request.uri->ptr);
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("QUERY_STRING"), con->uri.query->used ? con->uri.query->ptr : "");
-	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REQUEST_METHOD"), get_http_method_name(con->request.http_method));
+	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REQUEST_METHOD"), con->request.http_method_name->ptr);
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REDIRECT_STATUS"), "200");
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("SERVER_PROTOCOL"), get_http_version_name(con->request.http_version));
 	
@@ -380,21 +382,32 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 		switch(var) {
 		case SSI_ECHO_USER_NAME: {
 			struct passwd *pw;
+			file_cache_entry *fce = NULL;
 			
 			b = chunkqueue_get_append_buffer(con->write_queue);
+
+			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+				file_cache_add_entry(srv, con, con->physical.path, &fce);
+			}
 #ifdef HAVE_PWD_H
-			if (NULL == (pw = getpwuid(con->fce->st.st_uid))) {
-				buffer_copy_long(b, con->fce->st.st_uid);
+			if (NULL == (pw = getpwuid(fce->st.st_uid))) {
+				buffer_copy_long(b, fce->st.st_uid);
 			} else {
 				buffer_copy_string(b, pw->pw_name);
 			}
 #else
-			buffer_copy_long(b, con->fce->st.st_uid);
+			buffer_copy_long(b, fce->st.st_uid);
 #endif
 			break;
 		}
 		case SSI_ECHO_LAST_MODIFIED:	{
-			time_t t = con->fce->st.st_mtime;
+			time_t t;
+			file_cache_entry *fce = NULL;
+		       
+			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+				file_cache_add_entry(srv, con, con->physical.path, &fce);
+			}
+			t = fce->st.st_mtime;
 			
 			b = chunkqueue_get_append_buffer(con->write_queue);
 			if (0 == strftime(buf, sizeof(buf), p->timefmt->ptr, localtime(&t))) {
@@ -533,6 +546,7 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 		
 		if (0 == stat(p->stat_fn->ptr, &st)) {
 			time_t t = st.st_mtime;
+			file_cache_entry *fce = NULL;
 			
 			switch (ssicmd) {
 			case SSI_FSIZE:
@@ -559,8 +573,12 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 					buffer_copy_string(b, buf);
 				}
 				break;
-			case SSI_INCLUDE:
-				chunkqueue_append_file(con->write_queue, p->stat_fn, 0, st.st_size);
+			case SSI_INCLUDE: 
+				if (NULL == (fce = file_cache_get_entry(srv, p->stat_fn))) {
+					file_cache_add_entry(srv, con, p->stat_fn, &fce);
+				}
+
+				chunkqueue_append_file(con->write_queue, fce, 0, st.st_size);
 				break;
 			}
 		} else {
@@ -860,6 +878,7 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	stream s;
 #ifdef  HAVE_PCRE_H
 	int i, n;
+	file_cache_entry *fce = NULL;
 	
 #define N 10
 	int ovec[N * 3];
@@ -939,12 +958,18 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	 *   Contains the owner of the file which included it.
 	 * 
 	 */
-#ifdef HAVE_PCRE_H	
+#ifdef HAVE_PCRE_H
+	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+		file_cache_add_entry(srv, con, con->physical.path, &fce);
+	}
+		
 	for (i = 0; (n = pcre_exec(p->ssi_regex, NULL, s.start, s.size, i, 0, ovec, N * 3)) > 0; i = ovec[1]) {
 		const char **l;
 		/* take every think from last offset to current match pos */
 		
-		if (!p->if_is_false) chunkqueue_append_file(con->write_queue, con->physical.path, i, ovec[0] - i);
+		if (!p->if_is_false) {
+			chunkqueue_append_file(con->write_queue, fce, i, ovec[0] - i);
+		}
 		
 		pcre_get_substring_list(s.start, ovec, n, &l);
 		process_ssi_stmt(srv, con, p, l, n);
@@ -954,7 +979,7 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	switch(n) {
 	case PCRE_ERROR_NOMATCH:
 		/* copy everything/the rest */
-		chunkqueue_append_file(con->write_queue, con->physical.path, i, s.size - i);
+		chunkqueue_append_file(con->write_queue, fce, i, s.size - i);
 		
 		break;
 	default:
@@ -963,7 +988,6 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 		break;
 	}
 #endif	
-	
 	
 	stream_close(&s);
 	

@@ -13,6 +13,7 @@
 #include "log.h"
 #include "buffer.h"
 #include "response.h"
+#include "file_cache_funcs.h"
 
 #include "plugin.h"
 
@@ -324,7 +325,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 	void *start;
 	const char *filename = fn->ptr;
 	ssize_t r;
-	
+
 	/* overflow */
 	if ((off_t)(fce->st.st_size * 1.1) < fce->st.st_size) return -1;
 	
@@ -574,10 +575,11 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	data_string *content_ds;
 	size_t m, i;
 	off_t max_fsize;
+	file_cache_entry *fce = NULL;
 	
 	/* only GET and POST can get compressed */
-	if (con->request.http_method != HTTP_METHOD_GET && 
-	    con->request.http_method != HTTP_METHOD_POST) {
+	if (con->request.http_method_id != HTTP_METHOD_GET && 
+	    con->request.http_method_id != HTTP_METHOD_POST) {
 		return HANDLER_GO_ON;
 	}
 	
@@ -590,9 +592,14 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	
 	
 	max_fsize = p->conf.compress_max_filesize;
+
+	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+		file_cache_add_entry(srv, con, con->physical.path, &fce);
+	}
+
 	
 	/* don't compress files that are too large as we need to much time to handle them */
-	if (max_fsize && (con->fce->st.st_size >> 10) > max_fsize) return HANDLER_GO_ON;
+	if (max_fsize && (fce->st.st_size >> 10) > max_fsize) return HANDLER_GO_ON;
 	
 	if (NULL == (content_ds = (data_string *)array_get_element(con->response.headers, "Content-Type"))) {
 		log_error_write(srv, __FILE__, __LINE__, "sbb", "Content-Type is not set for", con->physical.path, con->uri.path);
@@ -665,14 +672,14 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 					/* deflate it */
 					if (p->conf.compress_cache_dir->used) {
 						if (0 == deflate_file_to_file(srv, con, p,
-									      con->physical.path, con->fce, compression_type)) {
+									      con->physical.path, fce, compression_type)) {
 							struct tm *tm;
 							time_t last_mod;
 							
 							response_header_insert(srv, con, CONST_STR_LEN("Content-Encoding"), compression_name, strlen(compression_name));
 							
 							/* Set Last-Modified of ORIGINAL file */
-							last_mod = con->fce->st.st_mtime;
+							last_mod = fce->st.st_mtime;
 							
 							for (i = 0; i < FILE_CACHE_MAX; i++) {
 								if (srv->mtime_cache[i].mtime == last_mod) break;
@@ -706,10 +713,15 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 							
 							response_header_insert(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(srv->mtime_cache[i].str));
 							
+							/* prepare fce */
+							if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+								file_cache_add_entry(srv, con, con->physical.path, &fce);
+							}
+							
 							return HANDLER_FINISHED;
 						}
 					} else if (0 == deflate_file_to_buffer(srv, con, p,
-									       con->physical.path, con->fce, compression_type)) {
+									       con->physical.path, fce, compression_type)) {
 							
 						response_header_insert(srv, con, CONST_STR_LEN("Content-Encoding"), compression_name, strlen(compression_name));
 						

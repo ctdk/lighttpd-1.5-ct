@@ -109,8 +109,7 @@ SERVER_FUNC(mod_mysql_vhost_cleanup) {
 }
 
 /* handle the plugin per connection data */
-static void* mod_mysql_vhost_connection_data(server *srv, connection *con, void *p_d)
-{
+static void* mod_mysql_vhost_connection_data(server *srv, connection *con, void *p_d) {
 	plugin_data *p = p_d;
 	plugin_connection_data *c = con->plugin_ctx[p->id];
 
@@ -316,6 +315,7 @@ CONNECTION_FUNC(mod_mysql_vhost_handle_docroot) {
 	MYSQL_ROW row;
 	MYSQL_RES *result = NULL;
 	size_t i;
+	struct stat st;
 
 	/* no host specified? */
 	if (!con->uri.authority->used) return HANDLER_GO_ON;
@@ -357,15 +357,15 @@ CONNECTION_FUNC(mod_mysql_vhost_handle_docroot) {
 	/* sanity check that really is a directory */
 	buffer_copy_string(p->tmp_buf, row[0]);
 	BUFFER_APPEND_SLASH(p->tmp_buf);
-	if (file_cache_get_entry(srv, con, p->tmp_buf, &(con->fce)) != HANDLER_GO_ON) {
+	
+	if (-1 == stat(p->tmp_buf->ptr, &(st))) {
 		log_error_write(srv, __FILE__, __LINE__, "sb", strerror(errno), p->tmp_buf);
 		goto ERR500;
-	}
-        if (!S_ISDIR(con->fce->st.st_mode)) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", "Not a directory", p->tmp_buf);
+	} else if(!S_ISDIR(st.st_mode)) {
+		log_error_write(srv, __FILE__, __LINE__, "sb", "not a directory:", p->tmp_buf);
 		goto ERR500;
 	}
-
+	
 	/* cache the data */
 	buffer_copy_string_buffer(c->server_name, con->uri.authority);
 	buffer_copy_string_buffer(c->document_root, p->tmp_buf);

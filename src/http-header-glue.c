@@ -122,7 +122,7 @@ int http_response_redirect_to_directory(server *srv, connection *con) {
 		
 		our_addr_len = sizeof(our_addr);
 		
-		if (-1 == getsockname(con->fd, &(our_addr.plain), &our_addr_len)) {
+		if (-1 == getsockname(con->fd->fd, &(our_addr.plain), &our_addr_len)) {
 			con->http_status = 500;
 			
 			log_error_write(srv, __FILE__, __LINE__, "ss",

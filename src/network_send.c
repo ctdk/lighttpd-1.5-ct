@@ -20,7 +20,7 @@
 
 #include "network_backends.h"
 
-network_t network_read_chunkqueue_write(server *srv, file_descr *read_fd, chunkqueue *cq) {
+network_t network_read_chunkqueue_send(server *srv, file_descr *read_fd, chunkqueue *cq) {
 	int to_read;
 	buffer *b;
 	ssize_t len;
@@ -38,7 +38,7 @@ network_t network_read_chunkqueue_write(server *srv, file_descr *read_fd, chunkq
 	buffer_prepare_copy(b, to_read);
 
 
-	if (-1 == (len = read(read_fd->fd, b->ptr, b->size - 1))) {
+	if (-1 == (len = recv(read_fd->fd, b->ptr, b->size - 1, 0))) {
 		switch(errno) {
 		case EAGAIN:
 			/* wait for event */
@@ -73,7 +73,7 @@ network_t network_read_chunkqueue_write(server *srv, file_descr *read_fd, chunkq
 	return NETWORK_OK;
 }
 
-network_t network_write_chunkqueue_write(server *srv, file_descr *write_fd, chunkqueue *cq) {
+network_t network_write_chunkqueue_send(server *srv, file_descr *write_fd, chunkqueue *cq) {
 	chunk *c;
 	
 	for(c = cq->first; c; c = c->next) {
@@ -93,22 +93,10 @@ network_t network_write_chunkqueue_write(server *srv, file_descr *write_fd, chun
 			offset = c->data.mem->ptr + c->offset;
 			toSend = c->data.mem->used - 1 - c->offset;
 
-			if ((r = write(write_fd->fd, offset, toSend)) < 0) {
-				switch (errno) {
-				case EAGAIN:
-					write_fd->is_writable = 0;
-				case EINTR:
-					r = 0;
-					break;
-				case EPIPE:
-				case ECONNRESET:
-					return NETWORK_REMOTE_CLOSE;
-				default:
-					log_error_write(srv, __FILE__, __LINE__, "ssd", 
-							"write failed:", strerror(errno), write_fd->fd);
+			if ((r = send(write_fd->fd, offset, toSend, 0)) < 0) {
+				log_error_write(srv, __FILE__, __LINE__, "ssd", "write failed: ", strerror(errno), write_fd->fd);
 				
-					return NETWORK_ERROR;
-				}
+				return NETWORK_ERROR;
 			}
 			
 			c->offset += r;
@@ -176,7 +164,7 @@ network_t network_write_chunkqueue_write(server *srv, file_descr *write_fd, chun
 				p = fce->mmap_p;
 			}
 			
-			if ((r = write(write_fd->fd, p + offset, toSend)) <= 0) {
+			if ((r = send(write_fd->fd, p + offset, toSend, 0)) <= 0) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "write failed: ", strerror(errno));
 				
 				return NETWORK_ERROR;
@@ -199,7 +187,7 @@ network_t network_write_chunkqueue_write(server *srv, file_descr *write_fd, chun
 				return NETWORK_ERROR;
 			}
 
-			if (-1 == (r = write(write_fd->fd, srv->tmp_buf->ptr, toSend))) {
+			if (-1 == (r = send(write_fd->fd, srv->tmp_buf->ptr, toSend, 0))) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "write: ", strerror(errno));
 				
 				return NETWORK_ERROR;

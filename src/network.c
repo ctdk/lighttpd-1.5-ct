@@ -20,6 +20,7 @@
 #include "network_backends.h"
 #include "sys-mmap.h"
 #include "sys-socket.h"
+#include "file_descr_funcs.h"
 
 #ifdef USE_OPENSSL
 # include <openssl/ssl.h> 
@@ -37,7 +38,7 @@ handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 	if (revents != FDEVENT_IN) {
 		log_error_write(srv, __FILE__, __LINE__, "sdd", 
 				"strange event for server socket",
-				srv_socket->fd,
+				srv_socket->fd->fd,
 				revents);
 		return HANDLER_ERROR;
 	}
@@ -45,6 +46,27 @@ handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 	while (NULL != (con = connection_accept(srv, srv_socket))) {
 		handler_t r;
 		
+		if (srv_socket->is_ssl) {
+#ifdef USE_OPENSSL
+			con->fd->write_func = network_write_chunkqueue_openssl;
+			con->fd->read_func = network_read_chunkqueue_openssl;
+#endif
+		} else {
+		/* dispatch call */
+#if defined USE_LINUX_SENDFILE
+			con->fd->write_func = network_write_chunkqueue_linuxsendfile;
+#elif defined USE_FREEBSD_SENDFILE
+			con->fd->write_func = network_write_chunkqueue_freebsdsendfile;
+#elif defined USE_SOLARIS_SENDFILEV
+			con->fd->write_func = network_write_chunkqueue_solarissendfilev;
+#elif defined USE_WRITEV
+			con->fd->write_func = network_write_chunkqueue_writev;
+#else
+			con->fd->write_func = network_write_chunkqueue_write;
+#endif
+			con->fd->read_func = network_read_chunkqueue_write;
+		}
+
 		connection_state_machine(srv, con);
 		
 		switch(r = plugins_call_handle_joblist(srv, con)) {
@@ -88,7 +110,7 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 #endif
 	
 	srv_socket = calloc(1, sizeof(*srv_socket));
-	srv_socket->fd = -1;
+	srv_socket->fd = file_descr_init();
 	
 	srv_socket->srv_token = buffer_init();
 	buffer_copy_string_buffer(srv_socket->srv_token, host_token);
@@ -131,7 +153,7 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 	if (s->use_ipv6) {
 		srv_socket->addr.plain.sa_family = AF_INET6;
 		
-		if (-1 == (srv_socket->fd = socket(srv_socket->addr.plain.sa_family, SOCK_STREAM, IPPROTO_TCP))) {
+		if (-1 == (srv_socket->fd->fd = socket(srv_socket->addr.plain.sa_family, SOCK_STREAM, IPPROTO_TCP))) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "socket failed:", strerror(errno));
 			return -1;
 		}
@@ -139,19 +161,19 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 	}
 #endif
 				
-	if (srv_socket->fd == -1) {
+	if (srv_socket->fd->fd == -1) {
 		srv_socket->addr.plain.sa_family = AF_INET;
-		if (-1 == (srv_socket->fd = socket(srv_socket->addr.plain.sa_family, SOCK_STREAM, IPPROTO_TCP))) {
+		if (-1 == (srv_socket->fd->fd = socket(srv_socket->addr.plain.sa_family, SOCK_STREAM, IPPROTO_TCP))) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "socket failed:", strerror(errno));
 			return -1;
 		}
 	}
 	
 	/* */
-	srv->cur_fds = srv_socket->fd;
+	srv->cur_fds = srv_socket->fd->fd;
 	
 	val = 1;
-	if (setsockopt(srv_socket->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
+	if (setsockopt(srv_socket->fd->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
 		log_error_write(srv, __FILE__, __LINE__, "ss", "socketsockopt failed:", strerror(errno));
 		return -1;
 	}
@@ -231,12 +253,12 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 		return -1;
 	}
 	
-	if (0 != bind(srv_socket->fd, (struct sockaddr *) &(srv_socket->addr), addr_len)) {
+	if (0 != bind(srv_socket->fd->fd, (struct sockaddr *) &(srv_socket->addr), addr_len)) {
 		log_error_write(srv, __FILE__, __LINE__, "sds", "can't bind to port", port, strerror(errno));
 		return -1;
 	}
 	
-	if (-1 == listen(srv_socket->fd, 128 * 8)) {
+	if (-1 == listen(srv_socket->fd->fd, 128 * 8)) {
 		log_error_write(srv, __FILE__, __LINE__, "ss", "listen failed: ", strerror(errno));
 		return -1;
 	}
@@ -248,7 +270,7 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 	 */
 	memset(&afa, 0, sizeof(afa));
 	strcpy(afa.af_name, "httpready");
-	if (setsockopt(srv_socket->fd, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)) < 0) {
+	if (setsockopt(srv_socket->fd->fd, SOL_SOCKET, SO_ACCEPTFILTER, &afa, sizeof(afa)) < 0) {
 		if (errno != ENOENT) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "can't set accept-filter 'httpready': ", strerror(errno));
 		}
@@ -324,7 +346,6 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 	}
 	
 	srv_socket->is_ssl = s->is_ssl;
-	srv_socket->fde_ndx = -1;
 	
 	if (srv->srv_sockets.size == 0) {
 		srv->srv_sockets.size = 4;
@@ -336,7 +357,7 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 	}
 	
 	srv->srv_sockets.ptr[srv->srv_sockets.used++] = srv_socket;
-	
+
 	buffer_free(b);
 	
 	return 0;
@@ -347,16 +368,16 @@ int network_close(server *srv) {
 	for (i = 0; i < srv->srv_sockets.used; i++) {
 		server_socket *srv_socket = srv->srv_sockets.ptr[i];
 		
-		if (srv_socket->fd) {
+		if (srv_socket->fd->fd != -1) {
 			/* check if server fd are already registered */
-			if (srv_socket->fde_ndx != -1) {
-				fdevent_event_del(srv->ev, &(srv_socket->fde_ndx), srv_socket->fd);
+			if (srv_socket->fd->fde_ndx != -1) {
+				fdevent_event_del(srv->ev, srv_socket->fd);
 				fdevent_unregister(srv->ev, srv_socket->fd);
 			}
 		
-			close(srv_socket->fd);
+			close(srv_socket->fd->fd);
 		}
-		
+		file_descr_free(srv_socket->fd);
 		buffer_free(srv_socket->srv_token);
 		
 		free(srv_socket);
@@ -415,113 +436,8 @@ int network_register_fdevents(server *srv) {
 		server_socket *srv_socket = srv->srv_sockets.ptr[i];
 		
 		fdevent_register(srv->ev, srv_socket->fd, network_server_handle_fdevent, srv_socket);
-		fdevent_event_add(srv->ev, &(srv_socket->fde_ndx), srv_socket->fd, FDEVENT_IN);
+		fdevent_event_add(srv->ev, srv_socket->fd, FDEVENT_IN);
 	}
 	return 0;
 }
 
-int network_write_chunkqueue(server *srv, connection *con, chunkqueue *cq) {
-	int ret = -1, i;
-	off_t written = 0;
-	
-	server_socket *srv_socket = con->srv_socket;
-
-	if (con->conf.global_kbytes_per_second &&
-	    *(con->conf.global_bytes_per_second_cnt_ptr) > con->conf.global_kbytes_per_second * 1024) {
-		/* we reached the global traffic limit */
-
-		con->traffic_limit_reached = 1;
-		joblist_append(srv, con);
-
-		return 1;
-	}  
-
-	written = con->bytes_written;
-
-#ifdef TCP_CORK	
-	/* Linux: put a cork into the socket as we want to combine the write() calls */
-	i = 1;
-	setsockopt(con->fd, IPPROTO_TCP, TCP_CORK, &i, sizeof(i));
-#endif
-	
-	if (srv_socket->is_ssl) {
-#ifdef USE_OPENSSL
-		ret = network_write_chunkqueue_openssl(srv, con, cq);
-#endif
-	} else {
-		/* dispatch call */
-#if defined USE_LINUX_SENDFILE
-		ret = network_write_chunkqueue_linuxsendfile(srv, con, cq); 
-#elif defined USE_FREEBSD_SENDFILE
-		ret = network_write_chunkqueue_freebsdsendfile(srv, con, cq); 
-#elif defined USE_SOLARIS_SENDFILEV
-		ret = network_write_chunkqueue_solarissendfilev(srv, con, cq); 
-#elif defined USE_WRITEV
-		ret = network_write_chunkqueue_writev(srv, con, cq);
-#else
-		ret = network_write_chunkqueue_write(srv, con, cq);
-#endif
-	}
-	
-	if (ret >= 0) {
-		/*
-		 * map the return code
-		 * 
-		 * -1 -> -1
-		 * >0 -> (everything written) 0
-		 *       (not finished yet)   1
-		 * 
-		 * ret means:
-		 * - <ret> chunks are unused now
-		 * 
-		 */
-		
-		chunk *c, *pc = NULL;
-		
-		for (i = 0, c = cq->first; i < ret; i++, c = c->next) {
-			buffer_reset(c->data.mem);
-			
-			if (i == ret - 1) pc = c;
-		}
-		
-		if (c) {
-			/* there is still something to write */
-			
-			if (c != cq->first) {
-				/* move the first few buffers to unused */
-				
-				assert(pc);
-				
-				pc->next = cq->unused;
-				cq->unused = cq->first;
-				cq->first = c;
-			}
-			
-			ret = 1;
-		} else {
-			/* everything is written */
-			chunkqueue_reset(cq);
-			
-			ret = 0;
-		}
-	}
-	
-#ifdef TCP_CORK
-	i = 0;
-	setsockopt(con->fd, IPPROTO_TCP, TCP_CORK, &i, sizeof(i));
-#endif
-
-	written = con->bytes_written - written;
-	con->bytes_written_cur_second += written;
-
-	*(con->conf.global_bytes_per_second_cnt_ptr) += written;
-	
-	if (con->conf.kbytes_per_second &&
-	    (con->bytes_written_cur_second > con->conf.kbytes_per_second * 1024)) {
-		/* we reached the traffic limit */
-
-		con->traffic_limit_reached = 1;
-		joblist_append(srv, con);
-	}  
-	return ret;
-}

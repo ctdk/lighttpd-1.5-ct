@@ -23,7 +23,7 @@
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
-#include "file_cache.h"
+#include "file_cache_funcs.h"
 
 #ifndef UIO_MAXIOV
 # if defined(__FreeBSD__) || defined(__APPLE__) || defined(__NetBSD__)
@@ -46,10 +46,8 @@
 # endif
 #endif
 
-int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq) {
-	const int fd = con->fd;
+network_t network_write_chunkqueue_writev(server *srv, file_descr *write_fd, chunkqueue *cq) {
 	chunk *c;
-	size_t chunks_written = 0;
 	
 	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
@@ -99,7 +97,7 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 				}
 			}
 			
-			if ((r = writev(fd, chunks, num_chunks)) < 0) {
+			if ((r = writev(write_fd->fd, chunks, num_chunks)) < 0) {
 				switch (errno) {
 				case EAGAIN:
 				case EINTR:
@@ -107,13 +105,17 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 					break;
 				case EPIPE:
 				case ECONNRESET:
-					return -2;
+					return NETWORK_REMOTE_CLOSE;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd", 
-							"writev failed:", strerror(errno), fd);
+							"writev failed:", strerror(errno), write_fd->fd);
 				
-					return -1;
+					return NETWORK_ERROR;
 				}
+			}
+
+			if (r != num_bytes) {
+				write_fd->is_writable = 0;
 			}
 			
 			/* check which chunks have been written */
@@ -123,21 +125,19 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 					/* written */
 					r -= chunks[i].iov_len;
 					tc->offset += chunks[i].iov_len;
-					con->bytes_written += chunks[i].iov_len;
+					write_fd->bytes_written += chunks[i].iov_len;
 					
 					if (chunk_finished) {
 						/* skip the chunks from further touches */
-						chunks_written++;
 						c = c->next;
 					} else {
-						/* chunks_written + c = c->next is done in the for()*/
 						chunk_finished++;
 					}
 				} else {
 					/* partially written */
 					
 					tc->offset += r;
-					con->bytes_written += r;
+					write_fd->bytes_written += r;
 					chunk_finished = 0;
 #if 0					
 					log_error_write(srv, __FILE__, __LINE__, "sdd", 
@@ -156,51 +156,56 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
+			file_cache_entry *fce = c->data.file.fce;
 			
-			switch (file_cache_get_entry(srv, con, c->data.file.name, &(con->fce))) {
+			switch (file_cache_check_entry(srv, fce)) {
 			case HANDLER_GO_ON:
-				if (con->fce->st.st_size == 0 ||
-				    con->fce->fd == -1) {
+				if (fce->st.st_size == 0 ||
+				    fce->fd == -1) {
 
-					log_error_write(srv, __FILE__, __LINE__, "sbdd", "foo", c->data.file.name, 
-							con->fce->st.st_size, con->fce->fd);
+					log_error_write(srv, __FILE__, __LINE__, "sbdd", "foo", 
+							c->data.file.fce->name, 
+							fce->st.st_size, fce->fd);
 				}
 			
 				offset = c->data.file.offset + c->offset;
 				toSend = c->data.file.length - c->offset;
 			
-				if (offset > con->fce->st.st_size) {
-					log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.name);
+				if (offset > fce->st.st_size) {
+					log_error_write(srv, __FILE__, __LINE__, "sb", 
+							"file was shrinked:", 
+							c->data.file.fce->name);
 					
-					return -1;
+					return NETWORK_ERROR;
 				}
 			
 #if defined USE_MMAP
 				/* check if the mapping fits */
-				if (con->fce->mmap_p &&
-				    con->fce->mmap_length != con->fce->st.st_size &&
-				    con->fce->mmap_offset != 0) {
-					munmap(con->fce->mmap_p, con->fce->mmap_length);
+				if (fce->mmap_p &&
+				    fce->mmap_length != fce->st.st_size &&
+				    fce->mmap_offset != 0) {
+					munmap(fce->mmap_p, fce->mmap_length);
 					
-					con->fce->mmap_p = NULL;
+					fce->mmap_p = NULL;
 				}
 			
 				/* build mapping if neccesary */
-				if (con->fce->mmap_p == NULL) {
-					if (MAP_FAILED == (p = mmap(0, con->fce->st.st_size, PROT_READ, MAP_SHARED, con->fce->fd, 0))) {
-						log_error_write(srv, __FILE__, __LINE__, "ssbd", "mmap failed: ", 
-								strerror(errno), c->data.file.name, con->fce->fd);
+				if (fce->mmap_p == NULL) {
+					if (MAP_FAILED == (p = mmap(0, fce->st.st_size, PROT_READ, MAP_SHARED, fce->fd, 0))) {
+						log_error_write(srv, __FILE__, __LINE__, "ssbd", 
+								"mmap failed: ", 
+								strerror(errno), c->data.file.fce->name, fce->fd);
 						
-						return -1;
+						return NETWORK_ERROR;
 					}
-					con->fce->mmap_p = p;
-					con->fce->mmap_offset = 0;
-					con->fce->mmap_length = con->fce->st.st_size;
+					fce->mmap_p = p;
+					fce->mmap_offset = 0;
+					fce->mmap_length = fce->st.st_size;
 				} else {
-					p = con->fce->mmap_p;
+					p = fce->mmap_p;
 				}
 				
-				if ((r = write(fd, p + offset, toSend)) <= 0) {
+				if ((r = write(write_fd->fd, p + offset, toSend)) <= 0) {
 					switch (errno) {
 					case EAGAIN:
 					case EINTR:
@@ -208,57 +213,61 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 						break;
 					case EPIPE:
 					case ECONNRESET:
-						return -2;
+						return NETWORK_REMOTE_CLOSE;
 					default:
 						log_error_write(srv, __FILE__, __LINE__, "ssd", 
-								"write failed:", strerror(errno), fd);
+								"write failed:", strerror(errno), write_fd->fd);
 						
-						return -1;
+						return NETWORK_ERROR;
 					}
 				}
 				
 				/* don't cache mmap()ings for files large then 64k */
-				if (con->fce->mmap_length > 64 * 1024) {
-					munmap(con->fce->mmap_p, con->fce->mmap_length);
+				if (fce->mmap_length > 64 * 1024) {
+					munmap(fce->mmap_p, fce->mmap_length);
 					
-					con->fce->mmap_p = NULL;
+					fce->mmap_p = NULL;
 				}
 				
 #else
 				buffer_prepare_copy(srv->tmp_buf, toSend);
 				
-				lseek(con->fce->fd, offset, SEEK_SET);
-				if (-1 == (toSend = read(con->fce->fd, srv->tmp_buf->ptr, toSend))) {
+				lseek(fce->fd, offset, SEEK_SET);
+				if (-1 == (toSend = read(fce->fd, srv->tmp_buf->ptr, toSend))) {
 					log_error_write(srv, __FILE__, __LINE__, "ss", 
 							"read:", strerror(errno));
 					
-					return -1;
+					return NETWORK_ERROR;
 				}
 				
-				if (-1 == (r = write(fd, srv->tmp_buf->ptr, toSend))) {
+				if (-1 == (r = write(write_fd->fd, srv->tmp_buf->ptr, toSend))) {
 					log_error_write(srv, __FILE__, __LINE__, "ss", "write: ", strerror(errno));
 					
-					return -1;
+					return NETWORK_ERROR;
 				}
 #endif
-				
+			
+				if (r != toSend) {
+					write_fd->is_readable = 0;
+				}	
 				
 				break;
 			case HANDLER_WAIT_FOR_FD:
 				
-				log_error_write(srv, __FILE__, __LINE__, "ssd", "writev (handled):", strerror(errno), errno);
+				log_error_write(srv, __FILE__, __LINE__, "ssd", 
+						"writev (handled):", strerror(errno), errno);
 				
 				r = 0;
 				
 				break;
 			default:
 				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->data.file.name);
-				return -1;
+						strerror(errno), c->data.file.fce->name);
+				return NETWORK_ERROR;
 			}
 
 			c->offset += r;
-			con->bytes_written += r;
+			write_fd->bytes_written += r;
 			
 			if (c->offset == c->data.file.length) {
 				chunk_finished = 1;
@@ -270,7 +279,7 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 			
 			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
 			
-			return -1;
+			return NETWORK_ERROR;
 		}
 		
 		if (!chunk_finished) {
@@ -278,11 +287,9 @@ int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq
 			
 			break;
 		}
-		
-		chunks_written++;
 	}
 
-	return chunks_written;
+	return NETWORK_OK;
 }
 
 #endif

@@ -17,7 +17,7 @@
 #include "response.h"
 #include "keyvalue.h"
 #include "log.h"
-#include "file_cache.h"
+#include "file_cache_funcs.h"
 #include "etag.h"
 
 #include "connections.h"
@@ -112,7 +112,7 @@ int http_response_write_basic_header(server *srv, connection *con) {
 
 	if (con->conf.log_response_header) {
 		log_error_write(srv, __FILE__, __LINE__, "sdsdSb", 
-				"fd:", con->fd, 
+				"fd:", con->fd->fd, 
 				"response-header-len:", b->used - 1, 
 				"\n", b);
 	}
@@ -254,7 +254,6 @@ int http_response_write_header(server *srv, connection *con,
 }
 
 static int http_response_parse_range(server *srv, connection *con) {
-	struct stat st;
 	int multipart = 0;
 	int error;
 	off_t start, end;
@@ -262,14 +261,15 @@ static int http_response_parse_range(server *srv, connection *con) {
 	char *boundary = "fkj49sn38dcn3";
 	const char *content_type = NULL;
 	data_string *ds;
+	file_cache_entry *fce = NULL;
+
 	
-	if (-1 == stat(con->physical.path->ptr, &st)) {
-		log_error_write(srv, __FILE__, __LINE__, "ss", "stat failed: ", strerror(errno));
-		return -1;
+	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+		file_cache_add_entry(srv, con, con->physical.path, &fce);
 	}
 	
 	start = 0;
-	end = st.st_size - 1;
+	end = fce->st.st_size - 1;
 	
 	con->response.content_length = 0;
 	
@@ -296,14 +296,14 @@ static int http_response_parse_range(server *srv, connection *con) {
 				/* end */
 				s = err;
 				
-				end = st.st_size - 1;
-				start = st.st_size + le;
+				end = fce->st.st_size - 1;
+				start = fce->st.st_size + le;
 			} else if (*err == ',') {
 				multipart = 1;
 				s = err + 1;
 				
-				end = st.st_size - 1;
-				start = st.st_size + le;
+				end = fce->st.st_size - 1;
+				start = fce->st.st_size + le;
 			} else {
 				error = 1;
 			}
@@ -319,14 +319,14 @@ static int http_response_parse_range(server *srv, connection *con) {
 				if (*(err + 1) == '\0') {
 					s = err + 1;
 					
-					end = st.st_size - 1;
+					end = fce->st.st_size - 1;
 					start = la;
 					
 				} else if (*(err + 1) == ',') {
 					multipart = 1;
 					s = err + 2;
 					
-					end = st.st_size - 1;
+					end = fce->st.st_size - 1;
 					start = la;
 				} else {
 					error = 1;
@@ -376,9 +376,9 @@ static int http_response_parse_range(server *srv, connection *con) {
 			if (start < 0) start = 0;
 			
 			/* RFC 2616 - 14.35.1 */
-			if (end > st.st_size - 1) end = st.st_size - 1;
+			if (end > fce->st.st_size - 1) end = fce->st.st_size - 1;
 			
-			if (start > st.st_size - 1) {
+			if (start > fce->st.st_size - 1) {
 				error = 1;
 				
 				con->http_status = 416;
@@ -401,7 +401,7 @@ static int http_response_parse_range(server *srv, connection *con) {
 				buffer_append_string(b, "-");
 				buffer_append_off_t(b, end);
 				buffer_append_string(b, "/");
-				buffer_append_off_t(b, st.st_size);
+				buffer_append_off_t(b, fce->st.st_size);
 				
 				buffer_append_string(b, "\r\nContent-Type: ");
 				buffer_append_string(b, content_type);
@@ -413,7 +413,7 @@ static int http_response_parse_range(server *srv, connection *con) {
 				
 			}
 			
-			chunkqueue_append_file(con->write_queue, con->physical.path, start, end - start + 1);
+			chunkqueue_append_file(con->write_queue, fce, start, end - start + 1);
 			con->response.content_length += end - start + 1;
 		}
 	}
@@ -450,7 +450,7 @@ static int http_response_parse_range(server *srv, connection *con) {
 		buffer_append_string(srv->range_buf, "-");
 		buffer_append_off_t(srv->range_buf, end);
 		buffer_append_string(srv->range_buf, "/");
-		buffer_append_off_t(srv->range_buf, st.st_size);
+		buffer_append_off_t(srv->range_buf, fce->st.st_size);
 		
 		response_header_insert(srv, con, CONST_STR_LEN("Content-Range"), CONST_BUF_LEN(srv->range_buf));
 	}
@@ -1054,151 +1054,24 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		char *pathinfo = NULL;
 		int found = 0;
 		size_t k;
+		file_cache_entry *fce = NULL;
+		handler_t ret;
 		
 		if (con->conf.log_request_handling) {
 			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling physical path");
 			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
 		}
 		
-		switch (file_cache_get_entry(srv, con, con->physical.path, &(con->fce))) {
-		case HANDLER_WAIT_FOR_FD:
-			return HANDLER_WAIT_FOR_FD;
-		case HANDLER_ERROR:
-			if (errno == EACCES) {
-				con->http_status = 403;
-				buffer_reset(con->physical.path);
-				
-				return HANDLER_FINISHED;
-			}
+		if (NULL != (fce = file_cache_get_entry(srv, con->physical.path)) ||
+		    HANDLER_GO_ON == (ret = file_cache_add_entry(srv, con, con->physical.path, &fce))) {
+			/* file exists */
 			
-			if (errno != ENOENT &&
-			    errno != ENOTDIR) {
-				/* we have no idea what happend. let's tell the user so. */
-				
-				con->http_status = 500;
-				buffer_reset(con->physical.path);
-				
-				log_error_write(srv, __FILE__, __LINE__, "ssbsb",
-						"file not found ... or so: ", strerror(errno),
-						con->uri.path,
-						"->", con->physical.path);
-				
-				return HANDLER_FINISHED;
-			}
-			
-			/* not found, perhaps PATHINFO */
-			
-			if (con->physical.rel_path->ptr[0] == '/') {
-				buffer_copy_string_len(srv->tmp_buf, con->physical.rel_path->ptr + 1, con->physical.rel_path->used - 2);
-			} else {
-				buffer_copy_string_buffer(srv->tmp_buf, con->physical.rel_path);
-			}
-			
-			/*
-			 * 
-			 * FIXME:
-			 * 
-			 * Check for PATHINFO fall to dir of 
-			 * 
-			 * /a is a dir and
-			 * 
-			 * /a/b/c is requested
-			 * 
-			 */
-			
-			do {
-				struct stat st;
-				
-				buffer_copy_string_buffer(con->physical.path, con->physical.doc_root);
-				BUFFER_APPEND_SLASH(con->physical.path);
-				if (slash) {
-					buffer_append_string_len(con->physical.path, srv->tmp_buf->ptr, slash - srv->tmp_buf->ptr);
-				} else {
-					buffer_append_string_buffer(con->physical.path, srv->tmp_buf);
-				}
-				
-				if (0 == stat(con->physical.path->ptr, &(st)) &&
-				    S_ISREG(st.st_mode)) {
-					found = 1;
-					break;
-				}
-				
-				if (pathinfo != NULL) {
-					*pathinfo = '\0';
-				}
-				slash = strrchr(srv->tmp_buf->ptr, '/');
-				
-				if (pathinfo != NULL) {
-					/* restore '/' */
-					*pathinfo = '/';
-				}
-				
-				if (slash) pathinfo = slash;
-			} while ((found == 0) && (slash != NULL) && (slash != srv->tmp_buf->ptr));
-			
-			if (found == 0) {
-				/* no it really doesn't exists */
-				con->http_status = 404;
-				
-				if (con->conf.log_file_not_found) {
-					log_error_write(srv, __FILE__, __LINE__, "sbsb",
-						"file not found:", con->uri.path,
-						"->", con->physical.path);
-				}
-				
-				buffer_reset(con->physical.path);
-				
-				return HANDLER_FINISHED;
-			}
-			
-			
-			/* we have a PATHINFO */
-			if (pathinfo) {
-				buffer_copy_string(con->request.pathinfo, pathinfo);
-				
-				/*
-				 * shorten uri.path
-				 */
-				
-				con->uri.path->used -= strlen(pathinfo);
-				con->uri.path->ptr[con->uri.path->used - 1] = '\0';
-			}
-			
-			if (con->conf.log_request_handling) {
-				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- after pathinfo check");
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "Pathinfo     :", con->request.pathinfo);
-			}
-			
-			/* setup the right file cache entry (FCE) */
-			switch (file_cache_get_entry(srv, con, con->physical.path, &(con->fce))) {
-			case HANDLER_ERROR:
-				con->http_status = 404;
-				
-				if (con->conf.log_file_not_found) {
-					log_error_write(srv, __FILE__, __LINE__, "sbsb",
-						"file not found:", con->uri.path,
-						"->", con->physical.path);
-				}
-				
-				return HANDLER_FINISHED;
-			case HANDLER_WAIT_FOR_FD:
-				return HANDLER_WAIT_FOR_FD;
-			case HANDLER_GO_ON:
-				break;
-			default:
-				break;
-			}
-			
-			break;
-		case HANDLER_GO_ON:
 			if (con->conf.log_request_handling) {
 				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- file found");
 				log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
 			}
 			
-			if (S_ISDIR(con->fce->st.st_mode)) {
+			if (S_ISDIR(fce->st.st_mode)) {
 				if (con->physical.path->ptr[con->physical.path->used - 2] != '/') {
 					/* redirect to .../ */
 					
@@ -1215,7 +1088,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 						buffer_copy_string_buffer(srv->tmp_buf, con->physical.path);
 						buffer_append_string_buffer(srv->tmp_buf, ds->value);
 						
-						switch (file_cache_get_entry(srv, con, srv->tmp_buf, &(con->fce))) {
+						switch (file_cache_add_entry(srv, con, srv->tmp_buf, &(fce))) {
 						case HANDLER_GO_ON:
 							/* rewrite uri.path to the real path (/ -> /index.php) */
 							buffer_append_string_buffer(con->uri.path, ds->value);
@@ -1223,7 +1096,6 @@ handler_t http_response_prepare(server *srv, connection *con) {
 							found = 1;
 							break;
 						case HANDLER_ERROR:
-							
 							if (errno == EACCES) {
 								con->http_status = 403;
 								buffer_reset(con->physical.path);
@@ -1255,7 +1127,6 @@ handler_t http_response_prepare(server *srv, connection *con) {
 					if (!found &&
 					    (k == con->conf.indexfiles->used)) {
 						/* directory listing ? */
-						
 						buffer_reset(srv->tmp_buf);
 
 						if (con->conf.dir_listing == 0) {
@@ -1270,22 +1141,152 @@ handler_t http_response_prepare(server *srv, connection *con) {
 						
 						return HANDLER_FINISHED;
 					}
-					
 					buffer_copy_string_buffer(con->physical.path, srv->tmp_buf);
 				}
 			}
-			break;
-		default:
-			break;
+		} else {
+			switch (ret) {
+			case HANDLER_WAIT_FOR_FD:
+				return HANDLER_WAIT_FOR_FD;
+			case HANDLER_ERROR:
+				if (errno == EACCES) {
+					con->http_status = 403;
+					buffer_reset(con->physical.path);
+					
+					return HANDLER_FINISHED;
+				}
+			
+				if (errno != ENOENT &&
+				    errno != ENOTDIR) {
+					/* we have no idea what happend. let's tell the user so. */
+					
+					con->http_status = 500;
+					buffer_reset(con->physical.path);
+				
+					log_error_write(srv, __FILE__, __LINE__, "ssbsb",
+							"file not found ... or so: ", strerror(errno),
+							con->uri.path,
+							"->", con->physical.path);
+				
+					return HANDLER_FINISHED;
+				}
+			
+				/* not found, perhaps PATHINFO */
+			
+				if (con->physical.rel_path->ptr[0] == '/') {
+					buffer_copy_string_len(srv->tmp_buf, con->physical.rel_path->ptr + 1, con->physical.rel_path->used - 2);
+				} else {
+					buffer_copy_string_buffer(srv->tmp_buf, con->physical.rel_path);
+				}
+			
+				/*
+				 * 
+				 * FIXME:
+				 * 
+				 * Check for PATHINFO fall to dir of 
+				 * 
+				 * /a is a dir and
+				 * 
+				 * /a/b/c is requested
+				 * 
+				 */
+			
+				do {
+					struct stat st;
+				
+					buffer_copy_string_buffer(con->physical.path, con->physical.doc_root);
+					BUFFER_APPEND_SLASH(con->physical.path);
+					if (slash) {
+						buffer_append_string_len(con->physical.path, srv->tmp_buf->ptr, slash - srv->tmp_buf->ptr);
+					} else {
+						buffer_append_string_buffer(con->physical.path, srv->tmp_buf);
+					}
+				
+					if (0 == stat(con->physical.path->ptr, &(st)) &&
+					    S_ISREG(st.st_mode)) {
+						found = 1;
+						break;
+					}
+				
+					if (pathinfo != NULL) {
+						*pathinfo = '\0';
+					}
+					slash = strrchr(srv->tmp_buf->ptr, '/');
+				
+					if (pathinfo != NULL) {
+						/* restore '/' */
+						*pathinfo = '/';
+					}
+					
+					if (slash) pathinfo = slash;
+				} while ((found == 0) && (slash != NULL) && (slash != srv->tmp_buf->ptr));
+			
+				if (found == 0) {
+					/* no it really doesn't exists */
+					con->http_status = 404;
+				
+					if (con->conf.log_file_not_found) {
+						log_error_write(srv, __FILE__, __LINE__, "sbsb",
+							"file not found:", con->uri.path,
+							"->", con->physical.path);
+					}
+				
+					buffer_reset(con->physical.path);
+					
+					return HANDLER_FINISHED;
+				}
+			
+			
+				/* we have a PATHINFO */
+				if (pathinfo) {
+					buffer_copy_string(con->request.pathinfo, pathinfo);
+				
+					/*
+					 * shorten uri.path
+				 	 */
+				
+					con->uri.path->used -= strlen(pathinfo);
+					con->uri.path->ptr[con->uri.path->used - 1] = '\0';
+				}
+			
+				if (con->conf.log_request_handling) {
+					log_error_write(srv, __FILE__, __LINE__,  "s",  "-- after pathinfo check");
+					log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+					log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
+					log_error_write(srv, __FILE__, __LINE__,  "sb", "Pathinfo     :", con->request.pathinfo);
+				}
+			
+				/* setup the right file cache entry (FCE) */
+				switch (file_cache_add_entry(srv, con, con->physical.path, &(fce))) {
+				case HANDLER_ERROR:
+					con->http_status = 404;
+				
+					if (con->conf.log_file_not_found) {
+						log_error_write(srv, __FILE__, __LINE__, "sbsb",
+							"file not found:", con->uri.path,
+							"->", con->physical.path);
+					}
+				
+					return HANDLER_FINISHED;
+				case HANDLER_WAIT_FOR_FD:
+					return HANDLER_WAIT_FOR_FD;
+				case HANDLER_GO_ON:
+					break;
+				default:
+					break;
+				}
+			default:
+				break;
+			}
 		}
 		
-		if (!S_ISREG(con->fce->st.st_mode)) {
+		if (!S_ISREG(fce->st.st_mode)) {
 			con->http_status = 404;
 			
 			if (con->conf.log_file_not_found) {
 				log_error_write(srv, __FILE__, __LINE__, "sbsb",
 					"not a regular file:", con->uri.path,
-					"->", con->fce->name);
+					"->", fce->name);
 			}
 			
 			return HANDLER_FINISHED;
@@ -1310,14 +1311,14 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			
 			/* set response content-type */
 
-			if (buffer_is_empty(con->fce->content_type)) {
+			if (buffer_is_empty(fce->content_type)) {
 				response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("application/octet-stream"));
 			} else {
-				response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(con->fce->content_type));
+				response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(fce->content_type));
 			}
 			
 			/* generate e-tag */
-			etag_mutate(con->physical.etag, con->fce->etag);
+			etag_mutate(con->physical.etag, fce->etag);
 			
 			/*
 			 * 14.26 If-None-Match
@@ -1333,8 +1334,8 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			if (con->http_status == 0 && 
 			    con->request.http_if_none_match) {
 				if (etag_is_equal(con->physical.etag, con->request.http_if_none_match)) {
-					if (con->request.http_method == HTTP_METHOD_GET || 
-					    con->request.http_method == HTTP_METHOD_HEAD) {
+					if (con->request.http_method_id == HTTP_METHOD_GET || 
+					    con->request.http_method_id == HTTP_METHOD_HEAD) {
 						
 						/* check if etag + last-modified */
 						if (con->request.http_if_modified_since) {
@@ -1343,7 +1344,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 							size_t used_len;
 							char *semicolon;
 						
-							strftime(buf, sizeof(buf)-1, "%a, %d %b %Y %H:%M:%S GMT", gmtime(&(con->fce->st.st_mtime)));
+							strftime(buf, sizeof(buf)-1, "%a, %d %b %Y %H:%M:%S GMT", gmtime(&(fce->st.st_mtime)));
 							
 							if (NULL == (semicolon = strchr(con->request.http_if_modified_since, ';'))) {
 								used_len = strlen(con->request.http_if_modified_since);
@@ -1363,7 +1364,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 									strptime(buf, "%a, %d %b %Y %H:%M:%S GMT", &tm);
 									
 									if (-1 != (t = mktime(&tm)) &&
-									    t <= con->fce->st.st_mtime) {
+									    t <= fce->st.st_mtime) {
 										con->http_status = 304;
 									}
 								} else {
@@ -1386,7 +1387,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 				size_t used_len;
 				char *semicolon;
 				
-				tm = gmtime(&(con->fce->st.st_mtime));
+				tm = gmtime(&(fce->st.st_mtime));
 				strftime(buf, sizeof(buf)-1, "%a, %d %b %Y %H:%M:%S GMT", tm);
 				
 				if (NULL == (semicolon = strchr(con->request.http_if_modified_since, ';'))) {

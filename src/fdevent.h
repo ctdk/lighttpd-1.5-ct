@@ -4,6 +4,7 @@
 #include "config.h"
 #include "settings.h"
 #include "bitset.h"
+#include "file_descr.h"
 
 /* select event-system */
 
@@ -194,8 +195,8 @@ fdevents *fdevent_init(size_t maxfds, fdevent_handler_t type);
 int fdevent_reset(fdevents *ev);
 void fdevent_free(fdevents *ev);
 
-int fdevent_event_add(fdevents *ev, int *fde_ndx, int fd, int events);
-int fdevent_event_del(fdevents *ev, int *fde_ndx, int fd);
+int fdevent_event_add(fdevents *ev, file_descr *fd, int events);
+int fdevent_event_del(fdevents *ev, file_descr *fd);
 int fdevent_event_get_revent(fdevents *ev, size_t ndx);
 int fdevent_event_get_fd(fdevents *ev, size_t ndx);
 fdevent_handler fdevent_get_handler(fdevents *ev, int fd);
@@ -205,10 +206,10 @@ int fdevent_event_next_fdndx(fdevents *ev, int ndx);
 
 int fdevent_poll(fdevents *ev, int timeout_ms);
 
-int fdevent_register(fdevents *ev, int fd, fdevent_handler handler, void *ctx);
-int fdevent_unregister(fdevents *ev, int fd);
+int fdevent_register(fdevents *ev, file_descr *fd, fdevent_handler handler, void *ctx);
+int fdevent_unregister(fdevents *ev, file_descr *fd);
 
-int fdevent_fcntl_set(fdevents *ev, int fd);
+int fdevent_fcntl_set(fdevents *ev, file_descr *fd);
 
 int fdevent_select_init(fdevents *ev);
 int fdevent_poll_init(fdevents *ev);

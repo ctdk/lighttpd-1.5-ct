@@ -11,7 +11,7 @@
 #include <fcntl.h>
 
 #include "log.h"
-#include "file_cache.h"
+#include "file_cache_funcs.h"
 #include "fdevent.h"
 #include "etag.h"
 
@@ -173,6 +173,25 @@ file_cache_entry * file_cache_get_unused_entry(server *srv) {
 	return fce;
 }
 
+file_cache_entry * file_cache_get_entry(server *srv, buffer *name) {
+	file_cache *fc = srv->file_cache;
+	size_t i;
+	
+	if (fc->size == 0) return NULL;
+
+	for (i = 0; i < fc->used; i++) {
+		file_cache_entry *f = fc->ptr[i];
+
+		if (f->fd != -1 && 
+		    buffer_is_equal(f->name, name)) {
+			return f;
+		}
+	}
+	
+	return NULL;
+}
+
+
 handler_t file_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 	size_t i;
 	server *srv = _srv;
@@ -202,192 +221,79 @@ handler_t file_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 	return HANDLER_GO_ON;
 }
 
+handler_t file_cache_check_entry(server *srv, file_cache_entry *fce) {
+	struct stat st;
+	/* no need to recheck */
 
-#if 0
-/* dead code, might be reused somewhere again */
+	if (fce->stat_ts == srv->cur_ts) return HANDLER_GO_ON;
 
-int file_cache_check_cache() {
-	file_cache_entry *first_unused_fce = NULL;
-	file_cache *fc = srv->file_cache;
-	size_t i;
-	
-	/* check the cache */
-	for (i = 0; i < fc->used; i++) {
-		fce = fc->ptr[i];
-		
-		if (buffer_is_equal(name, fce->name)) {
-			log_error_write(srv, __FILE__, __LINE__, "sb", "cache hit:", name);
-
-#ifdef USE_LINUX_SIGIO
-			if (fce->is_dirty == 0) {
-				fce->in_use++;
-				return fce;
-			}
-#endif
-			
-			/* get the etag information */
-			if (-1 == (stat(name->ptr, &(fce->st)))) {
-				fce->in_use = 0;
-				
-				log_error_write(srv, __FILE__, __LINE__, "sbs", "stat failed: ", name, strerror(errno));
-				
-				file_cache_entry_reset(srv, fce);
-				
-				return NULL;
-			}
-			fce->stat_ts = srv->cur_ts;
-			
-			/* create etag */
-			etag_create(srv->file_cache_etag, &(fce->st));
-			
-			if (!buffer_is_equal(srv->file_cache_etag, fce->etag)) {
-				size_t s_len = 0, k;
-				/* etag has changed: reopen file */
-				
-				file_cache_entry_reset(srv, fce);
-				
-				if (-1 == (fce->fd = open(fce->name->ptr, O_RDONLY | O_LARGEFILE))) {
-					log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
-					
-					buffer_reset(fce->name);
-					return NULL;
-				}
-				
-				srv->cur_fds++;
-			
-				buffer_copy_string_buffer(fce->etag, srv->file_cache_etag);
-			
-				/* determine mimetype */
-				buffer_reset(fce->content_type);
-		
-				s_len = name->used - 1;
-		
-				for (k = 0; k < con->conf.mimetypes->used; k++) {
-					data_string *ds = (data_string *)con->conf.mimetypes->data[k];
-					size_t ct_len;
-					
-					ct_len = ds->key->used - 1;
-					
-					if (buffer_is_equal_right_len(name, ds->key, ct_len)) {
-						buffer_copy_string_buffer(fce->content_type, ds->value);
-						break;
-					}
-				}
-			
-#ifdef HAVE_XATTR
-				if (buffer_is_empty(fce->content_type)) {
-					fce_attr_get(fce->content_type, name->ptr);
-				}
-#endif
-			}
-			
-#ifdef USE_LINUX_SIGIO
-			fce->is_dirty = 0;
-#endif
-			
-			fce->in_use++;
-
-	if (fce->fd == -1) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", "fd is still -1 !", fce->name);
-	}
-	if (fce->st.st_size == 0) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", "size is still 0 !", fce->name);
-	}
-
-
-
-
-			return fce;
-		}
-		
-		if (fce->in_use == 0) {
-			if (!first_unused_fce) first_unused_fce = fce;
-			
-			if (srv->cur_ts - fce->stat_ts > 10) {
-				file_cache_entry_reset(srv, fce);
-			}
-		}
-	}
-	
-	if (first_unused_fce) {
-		file_cache_entry_reset(srv, fce);
-		
-		fce = first_unused_fce;
-	} else {
-		/* not found, insert */
-		fce = file_cache_get_unused_entry(srv);
-	}
-}
-#endif
-
-
-handler_t file_cache_get_entry(server *srv, connection *con, buffer *name, file_cache_entry **o_fce_ptr) {
-	file_cache_entry *fce = NULL;
-	file_cache_entry *o_fce = *o_fce_ptr;
-	
-	
-	UNUSED(con);
-	
-	/* still valid ? */
-	if (o_fce != NULL) {
-		if (buffer_is_equal(name, o_fce->name) &&
-		    (o_fce->fd != -1) &&
-		    (o_fce->stat_ts == srv->cur_ts)
-		    ) {
-			return HANDLER_GO_ON;
-		} else {
-			o_fce->in_use--;
-		}
-		file_cache_entry_reset(srv, o_fce);
-	}
-
-
-	fce = file_cache_get_unused_entry(srv);
-	
-	buffer_copy_string_buffer(fce->name, name);
-	fce->in_use = 0;
-	fce->fd = -1;
-	
-	if (-1 == (con->conf.follow_symlink ? stat(name->ptr, &(fce->st)) : lstat(name->ptr, &(fce->st)))) {
+	if (-1 == (fce->follow_symlink ? stat(fce->name->ptr, &(st)) : lstat(fce->name->ptr, &(st)))) {
 		int oerrno = errno;
-#if 0
-		log_error_write(srv, __FILE__, __LINE__, "sbs", "stat failed:", name, strerror(errno));
-#endif
+
 		file_cache_entry_reset(srv, fce);
-		
-		buffer_reset(fce->name);
 		
 		errno = oerrno;
 		return HANDLER_ERROR;
 	}
 	
 	fce->stat_ts = srv->cur_ts;
+
+	/* still the same file */
+	if (st.st_mtime == fce->st.st_mtime &&
+	    st.st_size == fce->st.st_size &&
+	    st.st_ino == fce->st.st_ino) return HANDLER_GO_ON;
+
+	fce->st = st;
 	
 	if (S_ISREG(fce->st.st_mode)) {
-		size_t k, s_len;
-#ifdef USE_LINUX_SIGIO		
-		file_cache_entry *dir_fce;
-		char *slash;
-#endif
+		if (fce->fd != -1) {
+			/* reopen file */
+			close(fce->fd);
+			srv->cur_fds--;
+		}
 		
-		if (-1 == (fce->fd = open(name->ptr, O_RDONLY | O_LARGEFILE))) {
+		if (-1 == (fce->fd = open(fce->name->ptr, O_RDONLY | O_LARGEFILE))) {
 			int oerrno = errno;
 			if (errno == EMFILE || errno == EINTR) {
 				return HANDLER_WAIT_FOR_FD;
 			}
 			
 			log_error_write(srv, __FILE__, __LINE__, "sbs", 
-					"open failed for:", name, 
+					"open failed for:", fce->name, 
 					strerror(errno));
 			
 			buffer_reset(fce->name);
-			
+
 			errno = oerrno;
 			return HANDLER_ERROR;
 		}
-		
-		srv->cur_fds++;
-		
+	
+		srv->cur_fds++;	
+		etag_create(fce->etag, &(fce->st));
+	}
+
+	return HANDLER_GO_ON;
+}
+
+handler_t file_cache_add_entry(server *srv, connection *con, buffer *name, file_cache_entry **fce_ptr) {
+	file_cache_entry *fce = NULL;
+	handler_t ret;
+
+	fce = file_cache_get_unused_entry(srv);
+	
+	buffer_copy_string_buffer(fce->name, name);
+	fce->in_use = 0;
+	fce->fd = -1;
+	fce->follow_symlink = con->conf.follow_symlink;
+	fce->stat_ts = 0;
+
+	if (HANDLER_GO_ON != (ret = file_cache_check_entry(srv, fce))) {
+		return ret;
+	}
+
+	if (S_ISREG(fce->st.st_mode)) {
+		size_t k, s_len;
+
 		/* determine mimetype */
 		buffer_reset(fce->content_type);
 		
@@ -414,67 +320,16 @@ handler_t file_cache_get_entry(server *srv, connection *con, buffer *name, file_
 			fce_attr_get(fce->content_type, name->ptr);
 		}
 #endif
-		
-		etag_create(fce->etag, &(fce->st));
-		
-#ifdef USE_LINUX_SIGIO
-		/* register sigio for the directory */
-		dir_fce = file_cache_get_unused_entry(srv);
-		
-		buffer_copy_string_buffer(fc->dir_name, name);
-		
-		/* get dirname */
-		if (0 == (slash = strrchr(fc->dir_name->ptr, '/'))) {
-			SEGFAULT();
-		}
-		*(slash+1) = '\0';
-		
-		if (-1 == (dir_fce->fd = open(fc->dir_name->ptr, O_RDONLY))) {
-			int oerrno = errno;
-			log_error_write(srv, __FILE__, __LINE__, "sbs", 
-					"open failed:", fc->dir_name, strerror(errno));
-			
-			errno = oerrno;
-			return HANDLER_ERROR;
-		}
-		
-		srv->cur_fds++;
-		
-		if (fcntl(dir_fce->fd, F_NOTIFY, DN_CREATE|DN_DELETE|DN_MODIFY|DN_MULTISHOT) < 0) {
-			int oerrno = errno;
-			log_error_write(srv, __FILE__, __LINE__, "ss", 
-					"fcntl failed:", strerror(errno));
-			
-			close(dir_fce->fd);
-			srv->cur_fds--;
-			
-			errno = oerrno;
-			return HANDLER_ERROR;
-		}
-		
-		/* ->used is not updated -> no _buffer copy */
-		buffer_copy_string(dir_fce->name, fc->dir_name->ptr);
-		
-		/* register fd-handler */
-		fdevent_register(srv->ev, dir_fce->fd, file_cache_handle_fdevent, dir_fce);
-		fdevent_event_add(srv->ev, &(dir_fce->fde_ndx), dir_fce->fd, FDEVENT_IN);
-# if 1	
-		log_error_write(srv, __FILE__, __LINE__, "sddb", "fdevent_event_add:", fce->fde_ndx, fce->fd, fce->name);
-# endif
-#endif
 	}
 
 	fce->in_use++;
 	
-	*o_fce_ptr = fce;
+	*fce_ptr = fce;
 	
 	return HANDLER_GO_ON;
 }
 
-int file_cache_entry_release(server *srv, connection *con, file_cache_entry *fce) {
-	UNUSED(srv);
-	UNUSED(con);
-
+int file_cache_release_entry(server *srv, file_cache_entry *fce) {
 	if (fce->in_use > 0) fce->in_use--;
 	file_cache_entry_reset(srv, fce);
 	

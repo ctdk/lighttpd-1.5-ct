@@ -7,6 +7,7 @@
 #include "log.h"
 #include "buffer.h"
 #include "response.h"
+#include "file_cache_funcs.h"
 
 #include "plugin.h"
 
@@ -315,7 +316,11 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 			int ts;
 			time_t t;
 			size_t len;
+			file_cache_entry *fce = NULL;
 			
+			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
+				file_cache_add_entry(srv, con, con->physical.path, &fce);
+			}
 			switch(mod_expire_get_offset(srv, p, ds->value, &ts)) {
 			case 0:
 				/* access */
@@ -324,7 +329,7 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 			case 1:
 				/* modification */
 				
-				t = (ts += con->fce->st.st_mtime);
+				t = (ts += fce->st.st_mtime);
 				break;
 			default:
 				/* -1 is handled at parse-time */

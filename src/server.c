@@ -25,7 +25,7 @@
 #include "http_chunk.h"
 #include "fdevent.h"
 #include "connections.h"
-#include "file_cache.h"
+#include "file_cache_funcs.h"
 #include "plugin.h"
 #include "joblist.h"
 
@@ -391,7 +391,6 @@ int main (int argc, char **argv) {
 		dup2(fd, STDOUT_FILENO);
 		close(fd);
 	}
-	
 	if (0 != config_set_defaults(srv)) {
 		log_error_write(srv, __FILE__, __LINE__, "s", 
 				"setting default values failed");
@@ -743,7 +742,7 @@ int main (int argc, char **argv) {
 		int n;
 		size_t ndx;
 		time_t min_ts;
-		
+
 		if (handle_sig_hup) {
 			handler_t r;
 			
@@ -810,13 +809,13 @@ int main (int argc, char **argv) {
 					con = conns->ptr[ndx];
 
 					if (con->state == CON_STATE_READ ||
-					    con->state == CON_STATE_READ_POST) {
+					    (con->state == CON_STATE_HANDLE_REQUEST && con->request.content_finished == 0)) {
 						if (con->request_count == 1) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_read_idle) {
 								/* time - out */
 #if 0
 								log_error_write(srv, __FILE__, __LINE__, "sd", 
-										"connection closed - read-timeout:", con->fd);
+										"connection closed - read-timeout:", con->fd->fd);
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
@@ -826,7 +825,7 @@ int main (int argc, char **argv) {
 								/* time - out */
 #if 0
 								log_error_write(srv, __FILE__, __LINE__, "sd", 
-										"connection closed - read-timeout:", con->fd);
+										"connection closed - read-timeout:", con->fd->fd);
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
@@ -839,7 +838,7 @@ int main (int argc, char **argv) {
 #if 0
 						if (srv->cur_ts - con->write_request_ts > 60) {
 							log_error_write(srv, __FILE__, __LINE__, "sdd", 
-									"connection closed - pre-write-request-timeout:", con->fd, srv->cur_ts - con->write_request_ts);
+									"connection closed - pre-write-request-timeout:", con->fd->fd, srv->cur_ts - con->write_request_ts);
 						}
 #endif
 						
@@ -847,7 +846,7 @@ int main (int argc, char **argv) {
 							/* time - out */
 #if 1
 							log_error_write(srv, __FILE__, __LINE__, "sd", 
-									"connection closed - write-request-timeout:", con->fd);
+									"connection closed - write-request-timeout:", con->fd->fd);
 #endif
 							connection_set_state(srv, con, CON_STATE_ERROR);
 							changed = 1;
@@ -875,11 +874,6 @@ int main (int argc, char **argv) {
 						fprintf(stderr, "connection-state: ");
 						cs = 1;
 					}
-					
-					fprintf(stderr, "c[%d,%d]: %s ",
-						con->fd,
-						con->fcgi.fd,
-						connection_get_state(con->state));
 #endif
 				}
 				
@@ -895,7 +889,7 @@ int main (int argc, char **argv) {
 			
 			for (i = 0; i < srv->srv_sockets.used; i++) {
 				server_socket *srv_socket = srv->srv_sockets.ptr[i];
-				fdevent_event_del(srv->ev, &(srv_socket->fde_ndx), srv_socket->fd);
+				fdevent_event_del(srv->ev, srv_socket->fd);
 			}
 			
 			log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, out-of-fds");
@@ -906,7 +900,7 @@ int main (int argc, char **argv) {
 			
 			for (i = 0; i < srv->srv_sockets.used; i++) {
 				server_socket *srv_socket = srv->srv_sockets.ptr[i];
-				fdevent_event_add(srv->ev, &(srv_socket->fde_ndx), srv_socket->fd, FDEVENT_IN);
+				fdevent_event_add(srv->ev, srv_socket->fd, FDEVENT_IN);
 			}
 			
 			log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets enabled, out-of-fds");
@@ -974,11 +968,11 @@ int main (int argc, char **argv) {
 					"fdevent_poll failed:", 
 					strerror(errno));
 		}
-		
+
 		for (ndx = 0; ndx < srv->joblist->used; ndx++) {
 			connection *con = srv->joblist->ptr[ndx];
 			handler_t r;
-			
+
 			connection_state_machine(srv, con);
 			
 			switch(r = plugins_call_handle_joblist(srv, con)) {
@@ -995,7 +989,7 @@ int main (int argc, char **argv) {
 		
 		srv->joblist->used = 0;
 	}
-	
+
 	if (srv->srvconf.pid_file->used &&
 	    srv->srvconf.changeroot->used == 0) {
 		if (0 != unlink(srv->srvconf.pid_file->ptr)) {

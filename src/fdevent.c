@@ -91,64 +91,6 @@ int fdevent_reset(fdevents *ev) {
 	
 	return 0;
 }
-
-fdnode *fdnode_init() {
-	fdnode *fdn;
-	
-	fdn = calloc(1, sizeof(*fdn));
-	fdn->fd = -1;
-	return fdn;
-}
-
-void fdnode_free(fdnode *fdn) {
-	free(fdn);
-}
-
-int fdevent_register(fdevents *ev, int fd, fdevent_handler handler, void *ctx) {
-	fdnode *fdn;
-	
-	fdn = fdnode_init();
-	fdn->handler = handler;
-	fdn->fd      = fd;
-	fdn->ctx     = ctx;
-	
-	ev->fdarray[fd] = fdn;
-
-	return 0;
-}
-
-int fdevent_unregister(fdevents *ev, int fd) {
-	fdnode *fdn;
-        if (!ev) return 0;
-	fdn = ev->fdarray[fd];
-	
-	fdnode_free(fdn);
-	
-	ev->fdarray[fd] = NULL;
-	
-	return 0;
-}
-
-int fdevent_event_del(fdevents *ev, int *fde_ndx, int fd) {
-	int fde = fde_ndx ? *fde_ndx : -1;
-	
-	if (ev->event_del) fde = ev->event_del(ev, fde, fd);
-	
-	if (fde_ndx) *fde_ndx = fde;
-	
-	return 0;
-}
-
-int fdevent_event_add(fdevents *ev, int *fde_ndx, int fd, int events) {
-	int fde = fde_ndx ? *fde_ndx : -1;
-	
-	if (ev->event_add) fde = ev->event_add(ev, fde, fd, events);
-	
-	if (fde_ndx) *fde_ndx = fde;
-	
-	return 0;
-}
-
 int fdevent_poll(fdevents *ev, int timeout_ms) {
 	if (ev->poll == NULL) SEGFAULT();
 	return ev->poll(ev, timeout_ms);
@@ -179,20 +121,6 @@ void * fdevent_get_context(fdevents *ev, int fd) {
 	
 	return ev->fdarray[fd]->ctx;
 }
-
-int fdevent_fcntl_set(fdevents *ev, int fd) {
-#ifdef FD_CLOEXEC
-	/* close fd on exec (cgi) */
-	fcntl(fd, F_SETFD, FD_CLOEXEC);
-#endif
-	if (ev->fcntl_set) return ev->fcntl_set(ev, fd);
-#ifdef O_NONBLOCK	
-	return fcntl(fd, F_SETFL, O_NONBLOCK | O_RDWR);
-#else
-	return 0;
-#endif
-}
-
 
 int fdevent_event_next_fdndx(fdevents *ev, int ndx) {
 	if (ev->event_next_fdndx) return ev->event_next_fdndx(ev, ndx);

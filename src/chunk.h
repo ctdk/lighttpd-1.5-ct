@@ -2,6 +2,7 @@
 #define _CHUNK_H_
 
 #include "buffer.h"
+#include "file_cache.h"
 
 typedef struct chunk {
 	/* ok, this one is tricky:
@@ -17,7 +18,7 @@ typedef struct chunk {
 	union {
 		buffer *mem;
 		struct {
-			buffer *name;
+			file_cache_entry *fce;
 			off_t  offset;
 			off_t  length;
 		} file;
@@ -38,7 +39,7 @@ typedef struct {
 } chunkqueue;
 
 chunkqueue *chunkqueue_init(void);
-int chunkqueue_append_file(chunkqueue *c, buffer *fn, off_t offset, off_t len);
+int chunkqueue_append_file(chunkqueue *c, file_cache_entry *fce, off_t offset, off_t len);
 int chunkqueue_append_mem(chunkqueue *c, const char *mem, size_t len);
 int chunkqueue_append_buffer(chunkqueue *c, buffer *mem);
 int chunkqueue_prepend_buffer(chunkqueue *c, buffer *mem);
@@ -50,6 +51,8 @@ off_t chunkqueue_length(chunkqueue *c);
 off_t chunkqueue_written(chunkqueue *c);
 void chunkqueue_free(chunkqueue *c);
 void chunkqueue_reset(chunkqueue *c);
+
+int chunkqueue_remove_empty_chunks(chunkqueue *cq);
 
 int chunkqueue_is_empty(chunkqueue *c);
 

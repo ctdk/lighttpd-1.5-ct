@@ -390,7 +390,7 @@ EOF
 
 SKIP: {
 	skip "no fcgi-auth found", 9 unless -x $basedir."/tests/fcgi-responder"; 
-	
+
 	$configfile = 'fastcgi-responder.conf';
 	ok(start_proc == 0, "Starting lighttpd with $configfile") or die();
 	@request  = ( <<EOF

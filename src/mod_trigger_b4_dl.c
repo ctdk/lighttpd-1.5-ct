@@ -143,6 +143,8 @@ SETDEFAULTS_FUNC(mod_trigger_b4_dl_set_defaults) {
 #if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)		
 		if (!buffer_is_empty(s->db_filename)) {
 			if (NULL == (s->db = gdbm_open(s->db_filename->ptr, 4096, GDBM_WRCREAT | GDBM_NOLOCK, S_IRUSR | S_IWUSR, 0))) {
+				log_error_write(srv, __FILE__, __LINE__, "s", 
+						"gdbm-open failed");
 				return HANDLER_ERROR;
 			}
 		}
@@ -151,6 +153,9 @@ SETDEFAULTS_FUNC(mod_trigger_b4_dl_set_defaults) {
 			if (NULL == (s->download_regex = pcre_compile(s->download_url->ptr,
 								      0, &errptr, &erroff, NULL))) {
 				
+				log_error_write(srv, __FILE__, __LINE__, "sbss", 
+						"compiling regex for download-url failed:", 
+						s->download_url, "pos:", erroff);
 				return HANDLER_ERROR;
 			}
 		}
@@ -159,10 +164,16 @@ SETDEFAULTS_FUNC(mod_trigger_b4_dl_set_defaults) {
 			if (NULL == (s->trigger_regex = pcre_compile(s->trigger_url->ptr,
 								     0, &errptr, &erroff, NULL))) {
 				
+				log_error_write(srv, __FILE__, __LINE__, "sbss", 
+						"compiling regex for trigger-url failed:", 
+						s->trigger_url, "pos:", erroff);
+				
 				return HANDLER_ERROR;
 			}
 		}
 #else
+		log_error_write(srv, __FILE__, __LINE__, "s", 
+				"pcre and gdbm are require, but were not found, aborting");
 		return HANDLER_ERROR;
 #endif
 	}
@@ -199,7 +210,7 @@ static int mod_trigger_b4_dl_patch_connection(server *srv, connection *con, plug
 				PATCH(db);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("trigger-before-download.trigger-timeout"))) {
 				PATCH(trigger_timeout);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("trigger-before-download.deny_url"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("trigger-before-download.deny-url"))) {
 				PATCH(deny_url);
 			}
 #endif
@@ -258,7 +269,7 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 	if ((n = pcre_exec(p->conf.trigger_regex, NULL, con->uri.path->ptr, con->uri.path->used - 1, 0, 0, ovec, 3 * N)) < 0) {
 		if (n != PCRE_ERROR_NOMATCH) {
 			log_error_write(srv, __FILE__, __LINE__, "sd",
-					"execution error while matching: ", n);
+					"execution error while matching:", n);
 			
 			return HANDLER_ERROR;
 		}

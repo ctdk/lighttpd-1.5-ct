@@ -22,6 +22,7 @@
 #include "joblist.h"
 #include "file_cache_funcs.h"
 #include "file_descr_funcs.h"
+#include "chunk_funcs.h"
 
 #include "plugin.h"
 
@@ -341,7 +342,7 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 				}
 				
 				if (con->request.http_method_id == HTTP_METHOD_HEAD) {
-					chunkqueue_reset(con->write_queue);
+					chunkqueue_reset(srv, con->write_queue);
 				}
 				
 				http_response_write_header(srv, con, 
@@ -373,7 +374,7 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 		default:
 			/* disable chunked encoding again as we have no body */
 			con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
-			chunkqueue_reset(con->write_queue);
+			chunkqueue_reset(srv, con->write_queue);
 			
 			http_response_write_header(srv, con, 0, 0);
 			con->file_finished = 1;
@@ -388,7 +389,7 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 		    con->http_status == 205) {
 			/* remove possible chunks */
 			con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
-			chunkqueue_reset(con->write_queue);
+			chunkqueue_reset(srv, con->write_queue);
 		}
 		
 		if (0 == (con->parsed_response & HTTP_CONNECTION)) {
@@ -676,7 +677,7 @@ int connection_reset(server *srv, connection *con) {
 	array_reset(con->response.headers);
 	array_reset(con->environment);
 	
-	chunkqueue_reset(con->write_queue);
+	chunkqueue_reset(srv, con->write_queue);
 	
 	for (i = 0; i < srv->plugins.used; i++) {
 		con->plugin_ctx[0] = NULL;
@@ -759,7 +760,7 @@ int connection_handle_read_state(server *srv, connection *con)  {
 	}
 
 	/* move the empty chunks out of the way */
-	chunkqueue_remove_empty_chunks(cq);
+	chunkqueue_remove_empty_chunks(srv, cq);
 	
 	/* nothing to handle */
 	if (chunkqueue_is_empty(cq)) return 0;
@@ -850,7 +851,7 @@ int connection_handle_read_state(server *srv, connection *con)  {
 			}
 		}
 		
-		chunkqueue_remove_empty_chunks(cq);
+		chunkqueue_remove_empty_chunks(srv, cq);
 		
 		/* con->request.request is setup up */
 		if (h_term) {
@@ -886,7 +887,7 @@ int connection_handle_read_state(server *srv, connection *con)  {
 			
 				c->offset += toRead;
 				
-				chunkqueue_remove_empty_chunks(cq);
+				chunkqueue_remove_empty_chunks(srv, cq);
 			}
 		
 			/* Content is ready */
@@ -1310,7 +1311,7 @@ int connection_state_machine(server *srv, connection *con) {
 						"state for fd", con->fd->fd, connection_get_state(con->state));
 			}
 			
-			chunkqueue_reset(con->read_queue);
+			chunkqueue_reset(srv, con->read_queue);
 			
 			con->request_count = 0;
 			

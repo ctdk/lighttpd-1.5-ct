@@ -87,15 +87,6 @@ static int file_cache_entry_reset(server *srv, file_cache_entry *fce) {
 	close(fce->fd);
 	srv->cur_fds--;
 			
-#ifdef USE_LINUX_SIGIO
-	/* doesn't work anymore */
-	if (fce->fde_ndx != -1) {
-		fdevent_event_del(srv->ev, &(fce->fde_ndx), fce->fd);
-	}
-#else 
-	UNUSED(srv);
-#endif
-	
 	if (fce->mmap_p) {
 		munmap(fce->mmap_p, fce->mmap_length); 
 		fce->mmap_p = NULL;

@@ -30,6 +30,7 @@
 #include "file_descr_funcs.h"
 #include "network.h"
 #include "chunk.h"
+#include "chunk_funcs.h"
 
 #include "plugin.h"
 
@@ -1229,7 +1230,7 @@ SUBREQUEST_FUNC(mod_cgi_fetch_post_data) {
 		c->offset += toRead;
 		hctx->post_data_fetched += toRead;
 		
-		chunkqueue_remove_empty_chunks(cq);
+		chunkqueue_remove_empty_chunks(srv, cq);
 	}
 		
 	/* Content is ready */

@@ -387,7 +387,8 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 			b = chunkqueue_get_append_buffer(con->write_queue);
 
 			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-				file_cache_add_entry(srv, con, con->physical.path, &fce);
+				/* */
+				SEGFAULT();
 			}
 #ifdef HAVE_PWD_H
 			if (NULL == (pw = getpwuid(fce->st.st_uid))) {
@@ -405,7 +406,8 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 			file_cache_entry *fce = NULL;
 		       
 			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-				file_cache_add_entry(srv, con, con->physical.path, &fce);
+				/* */
+				SEGFAULT();
 			}
 			t = fce->st.st_mtime;
 			
@@ -575,7 +577,7 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 				break;
 			case SSI_INCLUDE: 
 				if (NULL == (fce = file_cache_get_entry(srv, p->stat_fn))) {
-					file_cache_add_entry(srv, con, p->stat_fn, &fce);
+					SEGFAULT();
 				}
 
 				chunkqueue_append_file(con->write_queue, fce, 0, st.st_size);

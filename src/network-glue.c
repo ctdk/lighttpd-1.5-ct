@@ -21,6 +21,7 @@
 #include "sys-mmap.h"
 #include "sys-socket.h"
 #include "file_descr_funcs.h"
+#include "chunk_funcs.h"
 
 #ifdef USE_OPENSSL
 # include <openssl/ssl.h> 
@@ -44,7 +45,7 @@ network_t network_write_chunkqueue(server *srv, file_descr *write_fd, chunkqueue
 
 	switch (ret) {
 	case NETWORK_OK:
-		chunkqueue_remove_empty_chunks(cq);
+		chunkqueue_remove_empty_chunks(srv, cq);
 		
 		if (chunkqueue_is_empty(cq)) ret = NETWORK_QUEUE_EMPTY;
 	default:

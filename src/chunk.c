@@ -16,6 +16,8 @@
 #include <string.h>
 
 #include "chunk.h"
+#include "chunk_funcs.h"
+#include "file_cache_funcs.h"
 
 chunkqueue *chunkqueue_init(void) {
 	chunkqueue *cq;
@@ -117,13 +119,16 @@ static int chunkqueue_append_chunk(chunkqueue *cq, chunk *c) {
 	return 0;
 }
 
-void chunk_reset(chunk *c) {
+void chunk_reset(server *srv, chunk *c) {
 	if (!c) return;
 	
 	switch(c->type) {
 	case FILE_CHUNK:
-		if (c->data.file.fce) c->data.file.fce->in_use--;
-		c->data.file.fce = NULL;
+		if (c->data.file.fce) {
+			file_cache_release_entry(srv, c->data.file.fce);
+			c->data.file.fce = NULL;
+		}
+		
 		break;
 	case MEM_CHUNK:
 		buffer_free(c->data.mem);
@@ -134,14 +139,14 @@ void chunk_reset(chunk *c) {
 	}
 }
 
-void chunkqueue_reset(chunkqueue *cq) {
+void chunkqueue_reset(server *srv, chunkqueue *cq) {
 	chunk *c;
 	/* move everything to the unused queue */
 	
 	if (cq->last == NULL) return;
 	
 	for (c = cq->first; c; c = c->next) {
-		chunk_reset(c);
+		chunk_reset(srv, c);
 	}
 	
 	cq->last->next = cq->unused;
@@ -172,7 +177,7 @@ int chunkqueue_append_file(chunkqueue *cq, file_cache_entry *fce, off_t offset, 
 	return 0;
 }
 
-int chunkqueue_remove_empty_chunks(chunkqueue *cq) {
+int chunkqueue_remove_empty_chunks(server *srv, chunkqueue *cq) {
 	chunk *c;
 	
 	for (c = cq->first; c; c = cq->first) {
@@ -189,7 +194,7 @@ int chunkqueue_remove_empty_chunks(chunkqueue *cq) {
 			
 			cq->first = fc;
 			
-			chunk_reset(c);
+			chunk_reset(srv, c);
 			
 		} else {
 			break;

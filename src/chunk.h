@@ -50,9 +50,6 @@ buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
 off_t chunkqueue_length(chunkqueue *c);
 off_t chunkqueue_written(chunkqueue *c);
 void chunkqueue_free(chunkqueue *c);
-void chunkqueue_reset(chunkqueue *c);
-
-int chunkqueue_remove_empty_chunks(chunkqueue *cq);
 
 int chunkqueue_is_empty(chunkqueue *c);
 

@@ -24,6 +24,7 @@
 
 #include "inet_ntop_cache.h"
 #include "network.h"
+#include "chunk_funcs.h"
 
 #include <stdio.h>
 
@@ -1118,7 +1119,7 @@ SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
 		c->offset += toRead;
 		hctx->post_data_fetched += toRead;
 		
-		chunkqueue_remove_empty_chunks(cq);
+		chunkqueue_remove_empty_chunks(srv, cq);
 	}
 		
 	/* Content is ready */

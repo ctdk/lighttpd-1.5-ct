@@ -319,7 +319,8 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 			file_cache_entry *fce = NULL;
 			
 			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-				file_cache_add_entry(srv, con, con->physical.path, &fce);
+				/* someone else should have generated a fce for us */
+				SEGFAULT();
 			}
 			switch(mod_expire_get_offset(srv, p, ds->value, &ts)) {
 			case 0:

@@ -21,6 +21,8 @@
 
 #include "config.h"
 
+#include "chunk_funcs.h"
+
 #if defined HAVE_ZLIB_H && defined HAVE_LIBZ
 # define USE_ZLIB
 # include <zlib.h>
@@ -511,10 +513,11 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 	
 	if (ret != 0) return -1;
 	
-	chunkqueue_reset(con->write_queue);
+	chunkqueue_reset(srv, con->write_queue);
 	b = chunkqueue_get_append_buffer(con->write_queue);
 	buffer_copy_memory(b, p->b->ptr, p->b->used);
 	
+	file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
 	buffer_reset(con->physical.path);
 	
 	con->file_finished = 1;
@@ -594,7 +597,8 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	max_fsize = p->conf.compress_max_filesize;
 
 	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-		file_cache_add_entry(srv, con, con->physical.path, &fce);
+		/* */
+		SEGFAULT();
 	}
 
 	
@@ -713,10 +717,9 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 							
 							response_header_insert(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(srv->mtime_cache[i].str));
 							
-							/* prepare fce */
-							if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-								file_cache_add_entry(srv, con, con->physical.path, &fce);
-							}
+							/* we modified physical.path, update fce */
+							file_cache_release_entry(srv, fce);
+							file_cache_add_entry(srv, con, con->physical.path, &fce);
 							
 							return HANDLER_FINISHED;
 						}

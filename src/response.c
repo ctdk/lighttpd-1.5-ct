@@ -265,7 +265,7 @@ static int http_response_parse_range(server *srv, connection *con) {
 
 	
 	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-		file_cache_add_entry(srv, con, con->physical.path, &fce);
+		SEGFAULT();
 	}
 	
 	start = 0;
@@ -1082,6 +1082,9 @@ handler_t http_response_prepare(server *srv, connection *con) {
 					found = 0;
 					/* indexfile */
 					
+					/* we will replace it anyway, as physical.path will change */
+					file_cache_release_entry(srv, fce);
+					
 					for (k = 0; !found && (k < con->conf.indexfiles->used); k++) {
 						data_string *ds = (data_string *)con->conf.indexfiles->data[k];
 						
@@ -1149,6 +1152,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			case HANDLER_WAIT_FOR_FD:
 				return HANDLER_WAIT_FOR_FD;
 			case HANDLER_ERROR:
+				/* fce is not set up, no need to reset it */
 				if (errno == EACCES) {
 					con->http_status = 403;
 					buffer_reset(con->physical.path);

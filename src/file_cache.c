@@ -169,7 +169,7 @@ file_cache_entry * file_cache_get_entry(server *srv, buffer *name) {
 	size_t i;
 	
 	if (fc->size == 0) return NULL;
-
+	
 	for (i = 0; i < fc->used; i++) {
 		file_cache_entry *f = fc->ptr[i];
 
@@ -215,9 +215,9 @@ handler_t file_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 handler_t file_cache_check_entry(server *srv, file_cache_entry *fce) {
 	struct stat st;
 	/* no need to recheck */
-
+	
 	if (fce->stat_ts == srv->cur_ts) return HANDLER_GO_ON;
-
+	
 	if (-1 == (fce->follow_symlink ? stat(fce->name->ptr, &(st)) : lstat(fce->name->ptr, &(st)))) {
 		int oerrno = errno;
 
@@ -228,7 +228,7 @@ handler_t file_cache_check_entry(server *srv, file_cache_entry *fce) {
 	}
 	
 	fce->stat_ts = srv->cur_ts;
-
+	
 	/* still the same file */
 	if (st.st_mtime == fce->st.st_mtime &&
 	    st.st_size == fce->st.st_size &&
@@ -277,6 +277,9 @@ handler_t file_cache_add_entry(server *srv, connection *con, buffer *name, file_
 	fce->fd = -1;
 	fce->follow_symlink = con->conf.follow_symlink;
 	fce->stat_ts = 0;
+	fce->st.st_mtime = 0;
+	fce->st.st_ino = 0;
+	
 
 	if (HANDLER_GO_ON != (ret = file_cache_check_entry(srv, fce))) {
 		return ret;

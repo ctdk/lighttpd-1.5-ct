@@ -31,7 +31,7 @@ typedef struct {
 /* plugin config for all request/connections */
 
 typedef struct {
-	array *extensions;
+	buffer *progress_url;
 } plugin_config;
 
 typedef struct {
@@ -174,7 +174,7 @@ FREE_FUNC(mod_uploadprogress_free) {
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
 			
-			array_free(s->extensions);
+			buffer_free(s->progress_url);
 			
 			free(s);
 		}
@@ -195,7 +195,7 @@ SETDEFAULTS_FUNC(mod_uploadprogress_set_defaults) {
 	size_t i = 0;
 	
 	config_values_t cv[] = { 
-		{ "upload-progress.extensions",             NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ "upload-progress.progress-url", NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
@@ -207,9 +207,9 @@ SETDEFAULTS_FUNC(mod_uploadprogress_set_defaults) {
 		plugin_config *s;
 		
 		s = calloc(1, sizeof(plugin_config));
-		s->extensions    = array_init();
+		s->progress_url    = buffer_init();
 		
-		cv[0].destination = s->extensions;
+		cv[0].destination = s->progress_url;
 		
 		p->config_storage[i] = s;
 	
@@ -241,8 +241,8 @@ static int mod_uploadprogress_patch_connection(server *srv, connection *con, plu
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 			
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("upload-progress.extensions"))) {
-				PATCH(extensions);
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN("upload-progress.progress-url"))) {
+				PATCH(progress_url);
 			}
 		}
 	}
@@ -255,7 +255,7 @@ static int mod_uploadprogress_setup_connection(server *srv, connection *con, plu
 	UNUSED(srv);
 	UNUSED(con);
 		
-	PATCH(extensions);
+	PATCH(progress_url);
 	
 	return 0;
 }
@@ -335,11 +335,20 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		
 		return HANDLER_GO_ON;
 	case HTTP_METHOD_GET:
-		if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "X-Progress-ID"))) {
+		if (!buffer_is_equal(con->uri.path, p->conf.progress_url)) {
 			return HANDLER_GO_ON;
 		}
 		
-		b = ds->value;
+		if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "X-Progress-ID"))) {
+			if (!buffer_is_empty(con->uri.query)) {
+				/* perhaps the GET request is using the querystring to pass the X-Progress-ID */ 
+				b = con->uri.query;
+			} else {
+				return HANDLER_GO_ON;
+			}
+		} else {
+			b = ds->value;
+		}
 		
 		if (b->used != 32 + 1) {
 			log_error_write(srv, __FILE__, __LINE__, "sd",

@@ -188,9 +188,10 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			return (dc->cond == CONFIG_COND_EQ) ? 0 : 1;
 		}
 		break;
-#ifdef HAVE_PCRE_H
+
 	case CONFIG_COND_NOMATCH:
 	case CONFIG_COND_MATCH: {
+#ifdef HAVE_PCRE_H
 #define N 10
 		int ovec[N * 3];
 		int n;
@@ -202,10 +203,13 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 		} else {
 			return (dc->cond == CONFIG_COND_MATCH) ? 0 : 1;
 		}
-		
+#else
+		log_error_write(srv, __FILE__, __LINE__, "s", "ERROR: using a condition like =~ or !~ but not compiled with pcre support");
+		return 0;
+#endif		
 		break;
 	}
-#endif
+
 	default:
 		/* no way */
 		break;

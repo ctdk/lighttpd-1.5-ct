@@ -3351,6 +3351,9 @@ SUBREQUEST_FUNC(mod_fastcgi_fetch_post_data) {
 		weHave = c->data.mem->used - c->offset - 1;
 				
 		toRead = weHave > weWant ? weWant : weHave;
+
+		/* don't read more than the max possible length */
+		if (toRead > FCGI_MAX_LENGTH) toRead = FCGI_MAX_LENGTH;
 		
 		fcgi_header(&(header), FCGI_STDIN, hctx->request_id, toRead, 0);
 		chunkqueue_append_mem(hctx->write_queue, (const char *)&header, sizeof(header) + 1);

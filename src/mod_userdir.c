@@ -219,11 +219,12 @@ URIHANDLER_FUNC(mod_userdir_docroot_handler) {
 		if (!found_user) return HANDLER_GO_ON;
 	}
 	 
-	buffer_copy_string(con->physical.path, pwd->pw_dir);
-	BUFFER_APPEND_SLASH(con->physical.path);
-	buffer_append_string_buffer(con->physical.path, p->conf.path); /* skip the / */
-	BUFFER_APPEND_SLASH(con->physical.path);
-	buffer_append_string(con->physical.path, rel_url + 1); /* skip the / */
+	buffer_copy_string(con->physical.doc_root, pwd->pw_dir);
+	BUFFER_APPEND_SLASH(con->physical.doc_root);
+	buffer_append_string_buffer(con->physical.doc_root, p->conf.path); /* skip the / */
+	BUFFER_APPEND_SLASH(con->physical.doc_root);
+	
+	buffer_copy_string(con->physical.rel_path, rel_url + 1); /* skip the / */
 	
 	return HANDLER_GO_ON;
 #else

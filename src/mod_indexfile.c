@@ -157,10 +157,8 @@ static int mod_indexfile_setup_connection(server *srv, connection *con, plugin_d
 URIHANDLER_FUNC(mod_indexfile_subrequest) {
 	plugin_data *p = p_d;
 	size_t k, i;
-	int found;
+	file_cache_entry *fce = NULL;
 	
-	UNUSED(srv);
-
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	if (con->uri.path->ptr[con->uri.path->used - 2] != '/') return HANDLER_GO_ON;
 	
@@ -171,15 +169,18 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 		mod_indexfile_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
 	}
 	
-	found = 0;
+	if (con->conf.log_request_handling) {
+		log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling the request as Indexfile");
+		log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
+	}
+	
 	/* indexfile */
 	
 	/* we will replace it anyway, as physical.path will change */
 	file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
 	
-	for (k = 0; !found && (k < p->conf.indexfiles->used); k++) {
+	for (k = 0; k < p->conf.indexfiles->used; k++) {
 		data_string *ds = (data_string *)p->conf.indexfiles->data[k];
-		file_cache_entry *fce = NULL;
 		
 		buffer_copy_string_buffer(p->tmp_buf, con->physical.path);
 		buffer_append_string_buffer(p->tmp_buf, ds->value);
@@ -192,8 +193,7 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 			
 			/* fce is already set up a few lines above */
 			
-			found = 1;
-			break;
+			return HANDLER_GO_ON;
 		case HANDLER_ERROR:
 			if (errno == EACCES) {
 				con->http_status = 403;
@@ -223,6 +223,9 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 			break;
 		}
 	}
+	
+	/* setup the old FCE */
+	file_cache_add_entry(srv, con, con->physical.path, &(fce));
 
 	/* not found */
 	return HANDLER_GO_ON;
@@ -235,7 +238,7 @@ int mod_indexfile_plugin_init(plugin *p) {
 	p->name        = buffer_init_string("indexfile");
 	
 	p->init        = mod_indexfile_init;
-	p->handle_subrequest = mod_indexfile_subrequest;
+	p->handle_subrequest_start = mod_indexfile_subrequest;
 	p->set_defaults  = mod_indexfile_set_defaults;
 	p->cleanup     = mod_indexfile_free;
 	

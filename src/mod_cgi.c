@@ -351,9 +351,19 @@ static int cgi_demux_response(server *srv, handler_ctx *hctx) {
 	connection  *con  = hctx->remote_conn;
 	
 	while(1) {
-		int n;
+		int n, b;
 		
-		buffer_prepare_copy(hctx->response, 1024);
+		/* 
+		 * check how much we have to read 
+		 */
+		if (ioctl(hctx->read_fd->fd, FIONREAD, &b)) {
+			log_error_write(srv, __FILE__, __LINE__, "sd", 
+					"unexpected end-of-file (perhaps the fastcgi process died):",
+					hctx->read_fd->fd);
+			return -1;
+		}
+		
+		buffer_prepare_copy(hctx->response, b);
 		if (-1 == (n = read(hctx->read_fd->fd, hctx->response->ptr, hctx->response->size - 1))) {
 			if (errno == EAGAIN || errno == EINTR) {
 				/* would block, wait for signal */
@@ -1119,6 +1129,10 @@ static int mod_cgi_setup_connection(server *srv, connection *con, plugin_data *p
 }
 #undef PATCH
 
+/* prepare everything,
+ * the handling of the data flow is down by the subrequest handler itself
+ */
+
 URIHANDLER_FUNC(cgi_is_handled) {
 	size_t k, s_len, i;
 	plugin_data *p = p_d;
@@ -1145,11 +1159,15 @@ URIHANDLER_FUNC(cgi_is_handled) {
 		if (0 == strncmp(fn->ptr + s_len - ct_len, ds->key->ptr, ct_len)) {
 			if (cgi_create_env(srv, con, p, ds->value)) {
 				con->http_status = 500;
+				con->mode = DIRECT;
 				
 				buffer_reset(con->physical.path);
+				return HANDLER_FINISHED;
 			}
 			
-			return HANDLER_FINISHED;
+			/* env is setup */
+			
+			break;
 		}
 	}
 	
@@ -1157,10 +1175,11 @@ URIHANDLER_FUNC(cgi_is_handled) {
 }
 
 TRIGGER_FUNC(cgi_trigger) {
+#ifndef __WIN32
 	plugin_data *p = p_d;
 	size_t ndx;
 	/* the trigger handle only cares about lonely PID which we have to wait for */
-#ifndef __WIN32
+	
 
 	for (ndx = 0; ndx < p->cgi_pid.used; ndx++) {
 		int status;
@@ -1209,7 +1228,6 @@ SUBREQUEST_FUNC(mod_cgi_fetch_post_data) {
 
 #if 0
 	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, hctx->post_data_fetched, con->request.content_length);
-
 #endif
 	cq = con->read_queue;
 
@@ -1250,16 +1268,19 @@ SUBREQUEST_FUNC(mod_cgi_handle_subrequest) {
 	if (con->mode != p->id) return HANDLER_GO_ON;
 	if (NULL == hctx) return HANDLER_GO_ON;
 	
-#if 0
-	log_error_write(srv, __FILE__, __LINE__, "sdd", "subrequest, pid =", hctx, hctx->pid);
-#endif	
 	if (hctx->pid == 0) return HANDLER_FINISHED;
+	
+	/* we will be called as soon as data has arrived */
+	
 #ifndef __WIN32	
 	switch(waitpid(hctx->pid, &status, WNOHANG)) {
 	case 0:
 		/* not finished yet */
 		if (con->file_started) {
-			return HANDLER_GO_ON;
+			/* ok, we parsed the header,
+			 * the rest will be done by piping all the content to the client
+			 */
+			return HANDLER_FINISHED;
 		} else {
 			return HANDLER_WAIT_FOR_EVENT;
 		}
@@ -1313,6 +1334,10 @@ SUBREQUEST_FUNC(mod_cgi_handle_subrequest) {
 		con->plugin_ctx[p->id] = NULL;
 		return HANDLER_FINISHED;
 	}
+	
+	
+	
+	
 #else
 	return HANDLER_ERROR;
 #endif

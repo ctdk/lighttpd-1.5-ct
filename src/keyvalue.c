@@ -15,6 +15,11 @@ static keyvalue http_methods[] = {
 	{ HTTP_METHOD_GET,  "GET" },
 	{ HTTP_METHOD_POST, "POST" },
 	{ HTTP_METHOD_HEAD, "HEAD" },
+	{ HTTP_METHOD_PROPFIND, "PROPFIND" },
+	{ HTTP_METHOD_OPTIONS, "OPTIONS" },
+	{ HTTP_METHOD_MKCOL, "MKCOL" },
+	{ HTTP_METHOD_PUT, "PUT" },
+	{ HTTP_METHOD_DELETE, "DELETE" },
 	{ HTTP_METHOD_UNSET, NULL }
 };
 
@@ -28,6 +33,7 @@ static keyvalue http_status[] = {
 	{ 204, "No Content" },
 	{ 205, "Reset Content" },
 	{ 206, "Partial Content" },
+	{ 207, "Multi-status" },
 	{ 300, "Multiple Choices" },
 	{ 301, "Moved Permanently" },
 	{ 302, "Found" },

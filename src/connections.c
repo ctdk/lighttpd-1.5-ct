@@ -481,6 +481,7 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 		break;
 	default:
 		if (con->request.http_method == HTTP_METHOD_HEAD ||
+          con->request.http_method == HTTP_METHOD_OPTIONS ||
 		    con->http_status == 301 ||
 		    con->http_status == 304 ||
 		    con->http_status == 205) {

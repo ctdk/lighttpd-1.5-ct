@@ -129,7 +129,7 @@ AC_ARG_WITH(ldap, AC_HELP_STRING([--with-ldap],[enable LDAP support]),
   AC_CHECK_HEADERS([ldap.h],[
     LDAP_LIB=-lldap
     AC_DEFINE([HAVE_LIBLDAP], [1], [libldap])
-    AC_DEFINE([HAVE_LDAP_H], [1])
+    AC_DEFINE([HAVE_LDAP_H], [1], [ldap.h])
   ])
  ])
  AC_SUBST(LDAP_LIB)
@@ -137,7 +137,7 @@ AC_ARG_WITH(ldap, AC_HELP_STRING([--with-ldap],[enable LDAP support]),
   AC_CHECK_HEADERS([lber.h],[
     LBER_LIB=-llber
     AC_DEFINE([HAVE_LIBLBER], [1], [liblber])
-    AC_DEFINE([HAVE_LBER_H], [1])
+    AC_DEFINE([HAVE_LBER_H], [1], [lber.h])
   ])
  ])
  AC_SUBST(LBER_LIB)
@@ -151,7 +151,7 @@ AC_ARG_WITH(attr, AC_HELP_STRING([--with-attr],[enable extended attribute suppor
 	AC_CHECK_HEADERS([attr/attributes.h],[
 		ATTR_LIB=-lattr
 		AC_DEFINE([HAVE_XATTR], [1], [libattr])
-		AC_DEFINE([HAVE_ATTR_ATTRIBUTES_H], [1])
+		AC_DEFINE([HAVE_ATTR_ATTRIBUTES_H], [1], [attributes.h])
 	])
  ])
 ],[AC_MSG_RESULT(no)])
@@ -164,7 +164,7 @@ AC_ARG_WITH(gdbm, AC_HELP_STRING([--with-gdbm],[gdbm storage for mod_trigger_b4_
 	AC_CHECK_HEADERS([gdbm.h],[
 		GDBM_LIB=-lgdbm
 		AC_DEFINE([HAVE_GDBM], [1], [libgdbm])
-		AC_DEFINE([HAVE_GDBM_H], [1])
+		AC_DEFINE([HAVE_GDBM_H], [1], [gdbm.h])
 	])
  ])
 ],[AC_MSG_RESULT(no)])
@@ -374,7 +374,7 @@ AC_CHECK_LIB(fcgi, FCGI_Accept, [
 AM_CONDITIONAL(CHECK_WITH_FASTCGI, test "x$fastcgi_found" = xyes)
 
 if test "${GCC}" = "yes"; then
-       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic"
+       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic -Wno-unused-parameter -Wcast-align"
 fi
 
 dnl build version-id

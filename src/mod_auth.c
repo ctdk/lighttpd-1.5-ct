@@ -406,6 +406,12 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 			if (method == NULL) {
 				log_error_write(srv, __FILE__, __LINE__, "sssss", "missing entry for key: ", "auth.require", "[", "method", "](string)");
 				return HANDLER_ERROR;
+			} else {
+				if (0 != strcmp(method, "basic") &&
+				    0 != strcmp(method, "digest")) {
+					log_error_write(srv, __FILE__, __LINE__, "sssss", "auth.require->method has to be either 'basic' or 'digest'");
+					return HANDLER_ERROR;
+				}
 			}
 			
 			if (realm == NULL) {

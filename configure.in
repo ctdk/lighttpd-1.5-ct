@@ -354,15 +354,9 @@ if test x$ipv6 = xtrue; then
 fi
 
 
-AC_MSG_CHECKING(for Large File System support)
-AC_ARG_ENABLE(lfs,
- AC_HELP_STRING([--enable-lfs],[Turn on Large File System (default)]),
- [case "${enableval}" in
-   yes) CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES"; enable_lfs="yes" ;;
-    no) enable_lfs="no";;
-     *) AC_MSG_ERROR(bad value ${enableval} for --enable-lfs) ;;
-  esac],[CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES"; enable_lfs="yes"])
-AC_MSG_RESULT($enableval)
+AC_SYS_LARGEFILE
+
+CPPFLAGS="$CPPFLAGS -D_FILE_OFFSET_BITS=$ac_cv_sys_file_offset_bits"
 
 AC_CHECK_SIZEOF(long)
 AC_CHECK_SIZEOF(off_t)

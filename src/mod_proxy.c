@@ -312,9 +312,9 @@ void proxy_connection_cleanup(server *srv, handler_ctx *hctx) {
 	
 	if (con->mode != p->id) return;
 	
-	fdevent_event_del(srv->ev, &(hctx->fde_ndx), hctx->fd);
-	fdevent_unregister(srv->ev, hctx->fd);
 	if (hctx->fd != -1) {
+		fdevent_event_del(srv->ev, &(hctx->fde_ndx), hctx->fd);
+		fdevent_unregister(srv->ev, hctx->fd);
 		close(hctx->fd);
 		srv->cur_fds--;
 	}

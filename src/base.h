@@ -443,9 +443,7 @@ typedef struct {
 	
 	buffer *tmp_chunk_len;
 	
-	buffer *range_buf;
-	
-	buffer *empty_string; /* is necessary for cond_match */
+	buffer *cond_check_buf;
 	
 	/* caches */
 #ifdef HAVE_IPV6

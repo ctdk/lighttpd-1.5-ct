@@ -146,38 +146,146 @@ int config_insert_values_global(server *srv, array *ca, const config_values_t cv
 	return config_insert_values_internal(srv, ca, cv);
 }
 
+unsigned short sock_addr_get_port(sock_addr *addr) {
+#ifdef HAVE_IPV6
+	return ntohs(addr->plain.sa_family ? addr->ipv6.sin6_port : addr->ipv4.sin_port);
+#else
+	return ntohs(addr->ipv4.sin_port);
+#endif
+}
+
 int config_check_cond(server *srv, connection *con, data_config *dc) {
-	buffer *l;
 	server_socket *srv_sock = con->srv_socket;
+	buffer *l;
+	
 	/* pass the rules */
 	
-	l = srv->empty_string;
+	/* 
+	 * OPTIMIZE
+	 * 
+	 * - replace all is_equal be simple == to an enum
+	 * - only check each condition once at the start of the request
+	 *   afterwards they will always evaluate in the same way 
+	 *   as they have the same input data
+	 * 
+	 */
+	
+	buffer_copy_string(srv->cond_check_buf, "");
 	
 	if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPhost"))) {
-		l = con->uri.authority;
+		char *ck_colon = NULL, *val_colon = NULL;
+		/* 
+		 * append server-port to the HTTP_POST if necessary
+		 */
+		
+		buffer_copy_string_buffer(srv->cond_check_buf, con->uri.authority);
+		
+		switch(dc->cond) {
+		case CONFIG_COND_NE:
+		case CONFIG_COND_EQ:
+			ck_colon = strchr(dc->match.string->ptr, ':');
+			val_colon = strchr(con->uri.authority->ptr, ':');
+		
+			if (ck_colon && !val_colon) {
+				/* colon found */
+				BUFFER_APPEND_STRING_CONST(srv->cond_check_buf, ":");
+				buffer_append_long(srv->cond_check_buf, sock_addr_get_port(&(srv_sock->addr)));
+			}
+			break;
+		default:
+			break;
+		}
+	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPremoteip"))) {
+		char *nm_slash;
+		/* handle remoteip limitations 
+		 * 
+		 * "10.0.0.1" is provided for all comparisions
+		 * 
+		 * only for == and != we support
+		 * 
+		 * "10.0.0.1/24"
+		 */
+		
+		if ((dc->cond == CONFIG_COND_EQ ||
+		     dc->cond == CONFIG_COND_EQ) &&
+		    (con->dst_addr.plain.sa_family == AF_INET) &&
+		    (NULL != (nm_slash = strchr(dc->match.string->ptr, '/')))) {
+			int nm_bits;
+			long nm;
+			char *err;
+			struct in_addr val_inp;
+			
+			if (*(nm_slash+1) == '\0') {
+				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: no number after / ", dc->match.string);
+					
+				return 0;
+			}
+			
+			nm_bits = strtol(nm_slash + 1, &err, 10);
+			
+			if (*err) {
+				log_error_write(srv, __FILE__, __LINE__, "sbs", "ERROR: non-digit found in netmask:", dc->match.string, *err);
+				
+				return 0;
+			}
+			
+			/* take IP convert to the native */
+			buffer_copy_string_len(srv->cond_check_buf, dc->match.string->ptr, nm_slash - dc->match.string->ptr);
+			
+			if (0 == inet_aton(srv->cond_check_buf->ptr, &val_inp)) {
+				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: ip addr is invalid:", srv->cond_check_buf);
+				
+				return 0;
+			}
+			
+			/* build netmask */
+			nm = htonl(~((1 << (32 - nm_bits)) - 1));
+			
+			if ((val_inp.s_addr & nm) == (con->dst_addr.ipv4.sin_addr.s_addr & nm)) {
+				return (dc->cond == CONFIG_COND_EQ) ? 1 : 0;
+			} else {
+				return (dc->cond == CONFIG_COND_EQ) ? 0 : 1;
+			}
+		} else {
+			const char *s;
+#ifdef HAVE_IPV6
+			char b2[INET6_ADDRSTRLEN + 1];
+			
+			s = inet_ntop(con->dst_addr.plain.sa_family, 
+				      con->dst_addr.plain.sa_family == AF_INET6 ? 
+				      (const void *) &(con->dst_addr.ipv6.sin6_addr) :
+				      (const void *) &(con->dst_addr.ipv4.sin_addr),
+				      b2, sizeof(b2)-1);
+#else
+			s = inet_ntoa(con->dst_addr.ipv4.sin_addr);
+#endif
+			buffer_copy_string(srv->cond_check_buf, s);
+		}
 	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPurl"))) {
-		l = con->uri.path;
+		buffer_copy_string_buffer(srv->cond_check_buf, con->uri.path);
 	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("SERVERsocket"))) {
-		l = srv_sock->srv_token;
+		buffer_copy_string_buffer(srv->cond_check_buf, srv_sock->srv_token);
 	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPreferer"))) {
 		data_string *ds;
 		
 		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Referer"))) {
-			l = ds->value;
+			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
 	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPcookie"))) {
 		data_string *ds;
 		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Cookie"))) {
-			l = ds->value;
+			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
 	} else if (buffer_is_equal_string(dc->comp_key, CONST_STR_LEN("HTTPuseragent"))) {
 		data_string *ds;
 		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "User-Agent"))) {
-			l = ds->value;
+			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
 	} else {
 		return 0;
 	}
+	
+	l = srv->cond_check_buf;
 	
 	switch(dc->cond) {
 	case CONFIG_COND_NE:

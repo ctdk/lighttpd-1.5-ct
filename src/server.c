@@ -50,7 +50,7 @@
 #include <sys/resource.h>
 #endif
 
-const char *patches[] = { "SERVERsocket", "HTTPurl", "HTTPhost", "HTTPreferer", "HTTPuseragent", "HTTPcookie", NULL };
+const char *patches[] = { "SERVERsocket", "HTTPurl", "HTTPhost", "HTTPreferer", "HTTPuseragent", "HTTPcookie", "HTTPremoteip", NULL };
 
 
 #ifndef __sgi
@@ -126,10 +126,7 @@ static server *server_init(void) {
 	CLEAN(response_range);
 	CLEAN(tmp_buf);
 	CLEAN(file_cache_etag);
-	CLEAN(range_buf);
-	CLEAN(empty_string);
-	
-	buffer_copy_string(srv->empty_string, "");
+	CLEAN(cond_check_buf);
 	
 	CLEAN(srvconf.error_logfile);
 	CLEAN(srvconf.groupname);
@@ -208,8 +205,7 @@ static void server_free(server *srv) {
 	CLEAN(response_range);
 	CLEAN(tmp_buf);
 	CLEAN(file_cache_etag);
-	CLEAN(range_buf);
-	CLEAN(empty_string);
+	CLEAN(cond_check_buf);
 	
 	CLEAN(srvconf.error_logfile);
 	CLEAN(srvconf.groupname);

@@ -212,6 +212,12 @@ URIHANDLER_FUNC(mod_usertrack_uri_handler) {
 		 * 
 		 */
 		
+		/* FIXME:
+		 * 
+		 * parse the cookie the right way
+		 * 
+		 */
+		
 		if (NULL != (g = strstr(ds->value->ptr, p->conf.cookie_name->ptr))) {
 			char *nc;
 			

@@ -8,7 +8,6 @@ compress.txt \
 configuration.txt \
 fastcgi-state.txt \
 fastcgi.txt \
-features.txt \
 performance.txt \
 plugins.txt \
 proxy.txt \
@@ -37,7 +36,6 @@ HTMLDOCS=accesslog.html \
 	 configuration.html \
 	 fastcgi-state.html \
 	 fastcgi.html \
-	 features.html \
 	 performance.html \
 	 plugins.html \
 	 proxy.html \

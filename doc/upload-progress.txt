@@ -1,0 +1,74 @@
+=============================
+Progress Bar for File Uploads
+=============================
+
+--------------------------
+Module: mod_uploadprogress
+--------------------------
+
+:Author: Jan Kneschke
+:Date: $Date$
+:Revision: $Revision$
+
+:abstract:
+  Progress for File Uploads
+  
+.. meta::
+  :keywords: lighttpd, file-upload, post, progress bar
+  
+.. contents:: Table of Contents
+
+Description
+===========
+
+In general a File-Upload doesn't give you any feedback how much data
+has been transfered and how long it take to finish it. In Opera you get
+the feedback in the status-bar but all the other ones just let you wait.
+
+mod_uploadprogress removes this limitation. Whenever you do a POST
+request for a file-upload it registers a X-Progress-ID internally to
+reference the request later. A second request can now query how far the
+upload is for the upload by querying this X-Progress-ID. ::
+
+  <?xml version="1.0" encoding="iso-8859-1"?>
+  <upload><size>432855</size><received>65532</received></upload>
+
+will be sent out on request mentioning the full size of the transfered
+file and the size of already received part. (To be exact this is
+byte-count of request-body which has been forwarded to the handling
+plugin like CGI, FastCGI or mod_proxy).
+
+On browser-side you now need something that issues these side-request
+while the upload is running. This is done by Javascript and the
+XMLHttpRequest class. It is sending such a side request every 2s and is
+updating the progress-bar accordingly.
+
+Usage
+=====
+
+To use the upload-progress bar you have to add mod_uploadprogress to
+server.modules at startup and prepare you queries a little bit.
+
+All trackable file-uploads have to take a 'id' field as part of the form-tag
+which is named 'upload', the submit-button has to get a event-handler for ``onclick`` 
+and you need the progressbar itself: ::
+
+  <!-- the file-upload form -->
+  <form id="upload" enctype="multipart/form-data" action="upload.pl" method="post">
+  <input type="hidden" name="MAX_FILE_SIZE" value="30000000"  />
+  <input name="userfile" type="file" label="fileupload" />
+  <input type="submit" value="Send File" onclick="openProgressBar(); return true;" />
+  </form>
+  
+  <!-- the progressbar -->
+  <div>
+   <div id="progress" style="width: 400px; border: 1px solid black">
+    <div id="progressbar" style="width: 1px; background-color: black; border: 1px solid white">
+     &nbsp;
+    </div>
+   </div>
+   <div id="tp">(throughput)</div>
+  </div>
+  
+That is basicly all. The rest will be taken care of by a Javascript file
+which also maintaining the updating.

@@ -8,8 +8,8 @@ Module: mod_mysql_vhost
 -----------------------
 
 :Author: ada@riksnet.se
-:Date: $Date: 2004/08/29 09:43:49 $
-:Revision: $Revision: 1.1 $
+:Date: $Date$
+:Revision: $Revision$
 
 :abstract:
   This module provides virtual hosts (vhosts) based on a MySQL table, and

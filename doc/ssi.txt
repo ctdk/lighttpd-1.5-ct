@@ -7,8 +7,8 @@ Module: mod_ssi
 ---------------
 
 :Author: Jan Kneschke
-:Date: $Date: 2004/08/29 09:44:53 $
-:Revision: $Revision: 1.2 $
+:Date: $Date$
+:Revision: $Revision$
 
 :abstract:
   The module for server-side includes provides a compat layer for

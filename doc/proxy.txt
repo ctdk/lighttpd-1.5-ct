@@ -7,8 +7,8 @@ Module: mod_proxy
 -----------------
 
 :Author: Jan Kneschke
-:Date: $Date: 2004/08/01 07:01:29 $
-:Revision: $Revision: 1.1 $
+:Date: $Date$
+:Revision: $Revision$
 
 :abstract:
   The proxy module a simplest way to connect lighttpd to 

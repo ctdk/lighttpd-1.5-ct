@@ -7,8 +7,8 @@ Module: fastcgi
 ---------------
 
 :Author: Jan Kneschke
-:Date: $Date: 2004/08/01 07:01:29 $
-:Revision: $Revision: 1.1 $
+:Date: $Date$
+:Revision: $Revision$
 
 :abstract:
   This is a short summary of the state-engine which is driving the FastCGI 

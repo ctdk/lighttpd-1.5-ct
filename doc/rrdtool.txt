@@ -7,8 +7,8 @@ Module: mod_rrdtool
 -------------------
 
 :Author: Jan Kneschke
-:Date: $Date: 2004/08/29 09:43:49 $
-:Revision: $Revision: 1.1 $
+:Date: $Date$
+:Revision: $Revision$
 
 :abstract:
   mod_rrdtool is used to monitor the traffic and load on the webserver

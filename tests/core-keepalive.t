@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 9;
+use Test::More tests => 6;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -73,7 +73,7 @@ sub handle_http {
 		s/\r//g;
 		s/\n/$EOL/g;
 
-		print $remote $_.$BLANK;	
+		print $remote $_.$BLANK;
 	}
 
 	my $lines = "";
@@ -92,8 +92,9 @@ sub handle_http {
 		my $resp_body;
 		my $resp_line;
 		my $conditions = $_;
-
-		for (my $ln = 0; defined $lines; $ln++) {
+		my $ln = 0;
+		
+		for ($ln = 0; defined $lines; $ln++) {
 			(my $line, $lines) = split($EOL, $lines, 2);
 
 			# header finished
@@ -117,7 +118,9 @@ sub handle_http {
 
 		# check length
 		if (defined $resp_hdr{"content-length"}) {
-			($resp_body, $lines) = split("^.".$resp_hdr{"content-length"}, $lines, 2);
+			$resp_body = substr($lines, 0, $resp_hdr{"content-length"});
+			$lines = substr($lines, $resp_hdr{"content-length"});
+			undef $lines if (length($lines) == 0);
 		} else {
 			$resp_body = $lines;
 			undef $lines;
@@ -188,57 +191,56 @@ sub handle_http {
     
 ok(start_proc == 0, "Starting lighttpd") or die();
 
-# mod-cgi
-#
 @request  = ( <<EOF
-GET /cgi.pl HTTP/1.0
+GET /12345.txt HTTP/1.0
+Connection: keep-alive
+Host: 123.example.org
+
+GET /12345.txt HTTP/1.0
+Host: 123.example.org
+Connection: close
 EOF
  );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } );
-ok(handle_http == 0, 'perl via cgi');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 }, { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 }  );
+ok(handle_http == 0, 'Explicit HTTP/1.0 Keep-Alive');
 
 @request  = ( <<EOF
-GET /cgi.pl/foo HTTP/1.0
+GET /12345.txt HTTP/1.0
+Connection: keep-alive
+Host: 123.example.org
+
+GET /12345.txt HTTP/1.0
+Host: 123.example.org
 EOF
  );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '/cgi.pl' } );
-ok(handle_http == 0, 'perl via cgi + pathinfo');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 }, { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 }  );
+ok(handle_http == 0, 'Implicit HTTP/1.0 Keep-Alive');
+
 
 @request  = ( <<EOF
-GET /cgi-pathinfo.pl/foo HTTP/1.0
+GET /12345.txt HTTP/1.1
+Connection: keep-alive
+Host: 123.example.org
+
+GET /12345.txt HTTP/1.1
+Host: 123.example.org
+Connection: close
 EOF
  );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '/foo' } );
-ok(handle_http == 0, 'perl via cgi + pathinfo');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.1', 'HTTP-Status' => 200 }, { 'HTTP-Protocol' => 'HTTP/1.1', 'HTTP-Status' => 200 }  );
+ok(handle_http == 0, 'Explicit HTTP/1.1 Keep-Alive');
 
 @request  = ( <<EOF
-GET /nph-status.pl HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } );
-ok(handle_http == 0, 'NPH + perl, Bug #14');
+GET /12345.txt HTTP/1.1
+Host: 123.example.org
 
-@request  = ( <<EOF
-GET /get-header.pl?QUERY_STRING HTTP/1.0
+GET /12345.txt HTTP/1.1
+Host: 123.example.org
+Connection: close
 EOF
  );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'QUERY_STRING' } );
-ok(handle_http == 0, 'cgi-env: QUERY_STRING');
-
-@request  = ( <<EOF
-GET /get-header.pl?GATEWAY_INTERFACE HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'CGI/1.1' } );
-ok(handle_http == 0, 'cgi-env: GATEWAY_INTERFACE');
-
-@request  = ( <<EOF
-GET /get-header.pl?HTTP_HOST HTTP/1.0
-Host: www.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'www.example.org' } );
-ok(handle_http == 0, 'cgi-env: HTTP_HOST');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.1', 'HTTP-Status' => 200 }, { 'HTTP-Protocol' => 'HTTP/1.1', 'HTTP-Status' => 200 }  );
+ok(handle_http == 0, 'Implicit HTTP/1.1 Keep-Alive');
 
 
 

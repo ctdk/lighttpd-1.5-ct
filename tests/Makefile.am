@@ -24,6 +24,7 @@ CONFS=fastcgi-10.conf \
       bug-12.conf \
       core-request.t \
       core-response.t \
+      core-keepalive.t \
       core.t \
       mod-access.t \
       mod-auth.t \
@@ -33,6 +34,7 @@ CONFS=fastcgi-10.conf \
       mod-redirect.t \
       mod-userdir.t \
       mod-rewrite.t \
+      mod-setenv.t \
       request.t 
 
 

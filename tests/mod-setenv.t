@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 9;
+use Test::More tests => 6;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -10,7 +10,7 @@ my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
 my $testname;
 my @request;
 my @response;
-my $configfile = $srcdir.'/lighttpd.conf';
+my $configfile = 'lighttpd.conf';
 my $lighttpd_path = $basedir.'/src/lighttpd';
 my $pidfile = '/tmp/lighttpd/lighttpd.pid';
 my $pidoffile = '/tmp/lighttpd/pidof.pid';
@@ -25,7 +25,9 @@ sub pidof {
 	my $pid = <F>;
 	close F;
 
-	return $pid;
+	if (defined $pid) { return $pid; }
+
+	return -1;
 }
 
 sub stop_proc {
@@ -33,8 +35,10 @@ sub stop_proc {
 	my $pid = <F>;
 	close F;
 
-	kill('TERM',$pid) or return -1;
-	select(undef, undef, undef, 0.01);
+	if (defined $pid) {
+		kill('TERM',$pid) or return -1;
+		select(undef, undef, undef, 0.01);
+	}
 
 	return 0;
 }
@@ -44,9 +48,18 @@ sub start_proc {
 	# kill old proc if necessary
 	stop_proc;
 
-	unlink($pidfile);
-	system($lighttpd_path." -f ".$configfile);
+	# pre-process configfile if necessary
+	#
 
+	my $pwd = `pwd`;
+	chomp($pwd);
+	unlink("/tmp/cfg.file");
+	system("cat ".$srcdir."/".$configfile.' | perl -pe "s#\@SRCDIR\@#'.$pwd.'/'.$basedir.'/tests/#" > /tmp/cfg.file');
+
+	unlink($pidfile);
+	system($lighttpd_path." -f /tmp/cfg.file");
+
+	unlink("/tmp/cfg.file");
 	if (-e $pidfile) {
 		return 0;
 	} else {
@@ -186,63 +199,40 @@ sub handle_http {
 	return 0;
 }
     
+
 ok(start_proc == 0, "Starting lighttpd") or die();
 
-# mod-cgi
-#
 @request  = ( <<EOF
-GET /cgi.pl HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } );
-ok(handle_http == 0, 'perl via cgi');
-
-@request  = ( <<EOF
-GET /cgi.pl/foo HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '/cgi.pl' } );
-ok(handle_http == 0, 'perl via cgi + pathinfo');
-
-@request  = ( <<EOF
-GET /cgi-pathinfo.pl/foo HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '/foo' } );
-ok(handle_http == 0, 'perl via cgi + pathinfo');
-
-@request  = ( <<EOF
-GET /nph-status.pl HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } );
-ok(handle_http == 0, 'NPH + perl, Bug #14');
-
-@request  = ( <<EOF
-GET /get-header.pl?QUERY_STRING HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'QUERY_STRING' } );
-ok(handle_http == 0, 'cgi-env: QUERY_STRING');
-
-@request  = ( <<EOF
-GET /get-header.pl?GATEWAY_INTERFACE HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'CGI/1.1' } );
-ok(handle_http == 0, 'cgi-env: GATEWAY_INTERFACE');
-
-@request  = ( <<EOF
-GET /get-header.pl?HTTP_HOST HTTP/1.0
+GET /get-header.pl?TRAC_ENV HTTP/1.0
 Host: www.example.org
 EOF
  );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'www.example.org' } );
-ok(handle_http == 0, 'cgi-env: HTTP_HOST');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'tracenv' } );
+ok(handle_http == 0, 'query first setenv');
 
+@request  = ( <<EOF
+GET /get-header.pl?SETENV HTTP/1.0
+Host: www.example.org
+EOF
+ );
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'setenv' } );
+ok(handle_http == 0, 'query second setenv');
 
+@request  = ( <<EOF
+GET /get-header.pl?HTTP_FOO HTTP/1.0
+Host: www.example.org
+EOF
+ );
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'foo' } );
+ok(handle_http == 0, 'query add-request-header');
 
-
+@request  = ( <<EOF
+GET /index.html HTTP/1.0
+Host: www.example.org
+EOF
+ );
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'BAR' => 'foo' } );
+ok(handle_http == 0, 'query add-response-header');
 
 ok(stop_proc == 0, "Stopping lighttpd");
 

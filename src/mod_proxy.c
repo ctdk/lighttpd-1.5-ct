@@ -809,13 +809,6 @@ static handler_t proxy_connection_close(server *srv, handler_ctx *hctx) {
 	
 	if (con->mode != p->id) return HANDLER_GO_ON;
 	
-	log_error_write(srv, __FILE__, __LINE__, "ssdsd", 
-			"emergency exit: proxy:", 
-			"connection-fd:", con->fd->fd,
-			"proxy-fd:", hctx->fd);
-	
-	
-	
 	proxy_connection_cleanup(srv, hctx);
 	
 	return HANDLER_FINISHED;

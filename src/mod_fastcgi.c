@@ -2661,13 +2661,6 @@ static handler_t fcgi_connection_close(server *srv, handler_ctx *hctx) {
 	
 	if (con->mode != p->id) return HANDLER_GO_ON;
 	
-	log_error_write(srv, __FILE__, __LINE__, "ssdsd", 
-			"emergency exit: fastcgi:", 
-			"connection-fd:", con->fd->fd,
-			"fcgi-fd:", hctx->fd);
-	
-	
-	
 	fcgi_connection_cleanup(srv, hctx);
 	
 	return HANDLER_FINISHED;

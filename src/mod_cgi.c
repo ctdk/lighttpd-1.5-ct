@@ -527,14 +527,6 @@ static handler_t cgi_connection_close(server *srv, handler_ctx *hctx) {
 	if (con->mode != p->id) return HANDLER_GO_ON;
 
 #ifndef __WIN32
-	
-#if 0
-	log_error_write(srv, __FILE__, __LINE__, "sdd", 
-			"emergency exit: cgi", 
-			con->fd->fd,
-			hctx->read_fd->fd);
-#endif
-	
 	/* the connection to the browser went away, but we still have a connection
 	 * to the CGI script 
 	 *

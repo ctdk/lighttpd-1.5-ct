@@ -362,7 +362,7 @@ typedef struct {
 TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 #if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
 	plugin_data *p = p_d;
-	size_t i;
+	size_t i, j;
 	
 	/* check DB each minute */
 	if (srv->cur_ts % 60 != 0) return HANDLER_GO_ON;
@@ -420,21 +420,21 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 		}
 		if (okey.dptr) free(okey.dptr);
 		
-		for (i = 0; i < delme.used; i++) {
-			key.dptr = delme.ptr[i];
+		for (j = 0; j < delme.used; j++) {
+			key.dptr = delme.ptr[j];
 			key.dsize = strlen(key.dptr);
 			
 			if (0 != gdbm_delete(s->db, key)) {
 				log_error_write(srv, __FILE__, __LINE__, "ss",
 						"delete failed for:", key.dptr);
 			}
-			free(delme.ptr[i]);
+			free(delme.ptr[j]);
 		}
 		
 		free(delme.ptr);
 		
-		/* reorg once a day */
-		if ((srv->cur_ts % (60 * 60 * 24) != 0)) gdbm_reorganize(s->db);
+		/* reorg once a hour */
+		if ((srv->cur_ts % (60 * 60) == 0)) gdbm_reorganize(s->db);
 	}
 #endif
 	return HANDLER_GO_ON;

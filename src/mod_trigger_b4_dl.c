@@ -352,6 +352,55 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 	return HANDLER_GO_ON;
 }
 
+TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
+	plugin_data *p = p_d;
+	size_t i;
+	
+	/* check DB each minute */
+	if (srv->cur_ts % 60 != 0) return HANDLER_GO_ON;
+	
+	/* cleanup */
+	for (i = 0; i < srv->config_context->used; i++) {
+		plugin_config *s = p->config_storage[i];
+		datum key, val, okey;
+		
+		if (!s->db) continue;
+		
+		okey.dptr = NULL;
+		
+		/* according to the manual this loop + delete does delete all entries on its way 
+		 * 
+		 * we don't care as the next round will remove them. We don't have to perfect here.
+		 */
+		for (key = gdbm_firstkey(s->db); key.dptr; key = gdbm_nextkey(s->db, okey)) {
+			time_t last_hit;
+			if (okey.dptr) {
+				free(okey.dptr);
+				okey.dptr = NULL;
+			}
+			
+			val = gdbm_fetch(s->db, key);
+			
+			last_hit = *(time_t *)(val.dptr);
+			
+			free(val.dptr);
+			
+			if (srv->cur_ts - last_hit > s->trigger_timeout) {
+				gdbm_delete(s->db, key);
+			}
+			
+			okey = key;
+		}
+		if (okey.dptr) free(okey.dptr);
+		
+		/* reorg once a day */
+		if ((srv->cur_ts % (60 * 60 * 24) != 0) gdbm_reorganize(s->db);
+	}
+#endif
+	return HANDLER_GO_ON;
+}
+
 /* this function is called at dlopen() time and inits the callbacks */
 
 int mod_trigger_b4_dl_plugin_init(plugin *p) {
@@ -361,6 +410,7 @@ int mod_trigger_b4_dl_plugin_init(plugin *p) {
 	p->init        = mod_trigger_b4_dl_init;
 	p->handle_uri_clean  = mod_trigger_b4_dl_uri_handler;
 	p->set_defaults  = mod_trigger_b4_dl_set_defaults;
+	p->handle_trigger  = mod_trigger_b4_dl_handle_trigger;
 	p->cleanup     = mod_trigger_b4_dl_free;
 	
 	p->data        = NULL;

@@ -1,0 +1,45 @@
+=======================
+Trigger before Download
+=======================
+
+-------------------------
+Module: mod_trigger_b4_dl
+-------------------------
+
+:Author: Jan Kneschke
+:Date: $Date: 2005-03-28 10:30:05 +0200 (Mo, 28 Mär 2005) $
+:Revision: $Revision: 226 $
+
+:abstract:
+  a nice, short abstrace about the module
+  
+.. meta::
+  :keywords: lighttpd, skeleton
+  
+.. contents:: Table of Contents
+
+Description
+===========
+
+You have a page containing images and want to make sure that noone is
+linking the images directly somewhere else. You want that the images can
+only be seen if you reference the covering page too.
+
+requesting the protected files is forbidden as long as the
+triggering-page (the covering page) is not requested first.
+
+Options
+=======
+
+::
+  trigger-before-download.db-filename = "/var/share/lighttpd/trigger.db"
+  trigger-before-download.trigger-url = "^/trigger/"
+  trigger-before-download.download-url = "^/download/"
+  trigger-before-download.deny-url = "http://www.example.org/"
+  trigger-before-download.trigger-timeout = 10
+
+.trigger-url has to be requested before any download to .download-url is
+allowed. Denying access means here a redirect to .deny-url.
+.trigger-timeout seconds after the request if the .trigger-url the
+download is forbidden again. The information is stored in a gdbm
+database referenced in .db-filename

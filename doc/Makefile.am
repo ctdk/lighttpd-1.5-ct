@@ -28,7 +28,8 @@ access.txt \
 traffic-shaping.txt \
 setenv.txt \
 status.txt \
-upload-progress.txt
+upload-progress.txt \
+trigger-b4-dl.txt
 
 HTMLDOCS=accesslog.html \
 	 authentification.html \
@@ -57,7 +58,8 @@ HTMLDOCS=accesslog.html \
 	 traffic-shaping.html \
 	 setenv.html \
 	 status.html \
-	 upload-progress.html
+	 upload-progress.html \
+	 trigger-b4-dl.html
 
 EXTRA_DIST=lighttpd.conf lighttpd.user \
 	rc.lighttpd rc.lighttpd.redhat sysconfig.lighttpd \

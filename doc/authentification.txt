@@ -39,7 +39,7 @@ digest
 ``````
 
 The Digest method only transfers a hashed value over the 
-network which is performes a lot of work to harden the 
+network which performs a lot of work to harden the 
 authentification process in insecure networks.
 
 Backends
@@ -112,7 +112,7 @@ Using md5sum can also generate the password-hash: ::
 ldap
 ````
 
-the ldap backend is basicly performing the following steps 
+the ldap backend is basically performing the following steps 
 to authenticate a user
   
 1. connect anonymously  (at plugin init)
@@ -120,7 +120,7 @@ to authenticate a user
 3. auth against ldap server
 4. disconnect
    
-if step 4 is performs without any error the user is 
+if all 4 steps are performed without any error the user is 
 authenticated
 
 Configuration
@@ -152,6 +152,10 @@ Configuration
   auth.backend.ldap.hostname = "localhost"
   auth.backend.ldap.base-dn  = "dc=my-domain,dc=com"
   auth.backend.ldap.filter   = "(uid=$)"
+  # if enabled, startTLS needs a valid (base64-encoded) CA 
+  # certificate
+  auth.backend.ldap.starttls   = "enable"
+  auth.backend.ldap.cafile   = "/etc/CAcertificate.pem"
 
   ## restrictions
   # set restrictions:
@@ -162,7 +166,7 @@ Configuration
   #     "require" => "user=<username>" )
   # )
   #
-  # <realm> is a string that is should be display in the dialog 
+  # <realm> is a string to display in the dialog 
   #         presented to the user and is also used for the 
   #         digest-algorithm and has to match the realm in the 
   #         htdigest file (if used)
@@ -182,10 +186,10 @@ Configuration
 		   )
                  )
 
-Limitiations
+Limitations
 ============
 
 - The implementation of digest method is currently not 
-  completely conforming to the standard as it is still allowing 
+  completely compliant with the standard as it still allows
   a replay attack.
 

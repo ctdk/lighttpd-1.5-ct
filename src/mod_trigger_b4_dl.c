@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <gdbm.h>
+
 
 #include "base.h"
 #include "log.h"
@@ -13,6 +13,11 @@
 #include "inet_ntop_cache.h"
 
 #include "config.h"
+
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
+#include <gdbm.h>
+#include <pcre.h>
+#endif
 
 /**
  * this is a trigger_b4_dl for a lighttpd plugin
@@ -27,21 +32,18 @@ typedef struct {
 	buffer *trigger_url;
 	buffer *download_url;
 	buffer *deny_url;
-	
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
 	pcre *trigger_regex;
 	pcre *download_regex;
 	
 	GDBM_FILE db;
+#endif
 	
 	unsigned short trigger_timeout;
 } plugin_config;
 
 typedef struct {
 	PLUGIN_DATA;
-	
-	buffer *match_buf;
-	
-	
 	
 	plugin_config **config_storage;
 	
@@ -53,9 +55,6 @@ INIT_FUNC(mod_trigger_b4_dl_init) {
 	plugin_data *p;
 	
 	p = calloc(1, sizeof(*p));
-	
-	p->match_buf = buffer_init();
-	
 	
 	return p;
 }
@@ -78,16 +77,19 @@ FREE_FUNC(mod_trigger_b4_dl_free) {
 			buffer_free(s->trigger_url);
 			buffer_free(s->deny_url);
 			
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
+			if (s->trigger_regex) pcre_free(s->trigger_regex);
+			if (s->download_regex) pcre_free(s->download_regex);
+			
 			if (s->db) {
 				gdbm_close(s->db);
 			}
+#endif
 			
 			free(s);
 		}
 		free(p->config_storage);
 	}
-	
-	buffer_free(p->match_buf);
 	
 	free(p);
 	
@@ -112,14 +114,16 @@ SETDEFAULTS_FUNC(mod_trigger_b4_dl_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
 		const char *errptr;
 		int erroff;
+#endif
 		
-		s = malloc(sizeof(plugin_config));
+		s = calloc(1, sizeof(plugin_config));
 		s->db_filename    = buffer_init();
 		s->download_url    = buffer_init();
 		s->trigger_url    = buffer_init();
@@ -136,7 +140,7 @@ SETDEFAULTS_FUNC(mod_trigger_b4_dl_set_defaults) {
 		if (0 != config_insert_values_global(srv, ((data_config *)srv->config_context->data[i])->value, cv)) {
 			return HANDLER_ERROR;
 		}
-		
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)		
 		if (!buffer_is_empty(s->db_filename)) {
 			if (NULL == (s->db = gdbm_open(s->db_filename->ptr, 4096, GDBM_WRCREAT | GDBM_NOLOCK, S_IRUSR | S_IWUSR, 0))) {
 				return HANDLER_ERROR;
@@ -158,6 +162,9 @@ SETDEFAULTS_FUNC(mod_trigger_b4_dl_set_defaults) {
 				return HANDLER_ERROR;
 			}
 		}
+#else
+		return HANDLER_ERROR;
+#endif
 	}
 	
 	return HANDLER_GO_ON;
@@ -181,8 +188,9 @@ static int mod_trigger_b4_dl_patch_connection(server *srv, connection *con, plug
 		
 		/* merge config */
 		for (j = 0; j < dc->value->used; j++) {
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
 			data_unset *du = dc->value->data[j];
-			
+
 			if (buffer_is_equal_string(du->key, CONST_STR_LEN("trigger-before-download.download-url"))) {
 				PATCH(download_regex);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("trigger-before-download.trigger-url"))) {
@@ -194,6 +202,7 @@ static int mod_trigger_b4_dl_patch_connection(server *srv, connection *con, plug
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("trigger-before-download.deny_url"))) {
 				PATCH(deny_url);
 			}
+#endif
 		}
 	}
 	
@@ -204,19 +213,19 @@ static int mod_trigger_b4_dl_setup_connection(server *srv, connection *con, plug
 	plugin_config *s = p->config_storage[0];
 	UNUSED(srv);
 	UNUSED(con);
-		
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)		
 	PATCH(db);
 	PATCH(download_regex);
 	PATCH(trigger_regex);
 	PATCH(trigger_timeout);
 	PATCH(deny_url);
-	
+#endif	
 	return 0;
 }
 #undef PATCH
 
 URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
-#ifdef HAVE_PCRE_H
+#if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
 	plugin_data *p = p_d;
 	size_t i;
 	const char *remote_ip;
@@ -326,7 +335,7 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 #else
 	UNUSED(srv);
 	UNUSED(con);
-	UNUSED(p_data);
+	UNUSED(p_d);
 #endif
 	
 	return HANDLER_GO_ON;

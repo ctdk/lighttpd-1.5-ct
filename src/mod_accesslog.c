@@ -328,6 +328,8 @@ FREE_FUNC(mod_accesslog_free) {
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
 			
+			if (!s) continue;
+			
 			if (s->access_logbuffer->used) {
 				if (s->use_syslog) {
 # ifdef HAVE_SYSLOG_H
@@ -379,7 +381,7 @@ SETDEFAULTS_FUNC(log_access_open) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;

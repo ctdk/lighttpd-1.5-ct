@@ -4,6 +4,8 @@
 #include <dirent.h>
 #include <assert.h>
 #include <errno.h>
+#include <stdio.h>
+#include <unistd.h>
 
 #include "base.h"
 #include "log.h"
@@ -378,7 +380,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	i = dir->used - 1;
 
 #ifdef HAVE_PATHCONF
-	name_max = pathconf(dir->ptr, PC_NAME_MAX);
+	name_max = pathconf(dir->ptr, _PC_NAME_MAX);
 #else
 	name_max = NAME_MAX;
 #endif

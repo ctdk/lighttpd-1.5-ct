@@ -510,3 +510,6 @@ for p in $disable_feature; do
 done
 
 $ECHO
+
+
+$ECHO "Be sure to read UPGRADING-1.4.0.txt if you are upgrading from 1.3.13 and below"

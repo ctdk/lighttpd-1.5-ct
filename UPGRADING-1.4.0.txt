@@ -1,0 +1,39 @@
+
+lighttpd 1.4.0 will make a few things differently than previous 
+releases:
+
+1. index-files are now handled by by mod_indexfile
+
+   server.indexfiles = ( "index.html", "index.html" )
+   
+   becomes
+   
+   server.modules = ( ..., "mod_indexfile", ... )
+   
+   index-file.extensions = ( "index.html", "index.html" )
+   
+2. directory listings are handled by mod_dirlisting now
+
+   server.dir-listing = "enable"
+   
+   becomes
+   
+   server.modules = ( ..., "mod_dirlisting", ... )
+   
+   dir-listing.active = "enable"
+
+3. IMPORTANT: static files are now handled by mod_staticfile
+
+   This is the most important change. Static-files are now handled 
+   by mod_staticfile. If you don't load mod_staticfile you will 
+   always get a 403 error-page.
+   
+   server.modules = ( ..., "mod_staticfile", ... )
+   
+   static-file.exclude-extensions = ( ".php", ".cgi", ".fcgi" )
+
+You will get a ERROR if you use 
+
+- server.indexfiles or
+- server.dir-listing
+

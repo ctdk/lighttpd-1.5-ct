@@ -213,7 +213,8 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
       configparser.h mod_ssi_exprparser.h \
       sys-mmap.h sys-socket.h file_descr.h \
-      file_cache_funcs.h file_descr_funcs.h 
+      file_cache_funcs.h file_descr_funcs.h \
+      chunk_funcs.h
       
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""

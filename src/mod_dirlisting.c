@@ -20,6 +20,13 @@
  */
 
 
+#ifdef HAVE_SYS_SYSLIMITS_H
+#include <sys/syslimits.h>
+#endif
+
+#ifdef HAVE_ATTR_ATTRIBUTES_H
+#include <attr/attributes.h>
+#endif
 
 /* plugin config for all request/connections */
 
@@ -164,8 +171,8 @@ typedef struct {
 
 typedef struct {
 	dirls_entry_t **ent;
-	int used;
-	int size;
+	size_t used;
+	size_t size;
 } dirls_list_t;
 
 #define DIRLIST_ENT_NAME(ent)	(char*) ent + sizeof(dirls_entry_t)
@@ -240,6 +247,8 @@ static int http_list_directory_sizefmt(char *buf, off_t size) {
 }
 
 static void http_list_directory_header(server *srv, connection *con, plugin_data *p, buffer *out) {
+	UNUSED(srv);
+	
 	BUFFER_APPEND_STRING_CONST(out,
 		"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">\n"
 		"<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">\n"
@@ -318,6 +327,9 @@ static void http_list_directory_header(server *srv, connection *con, plugin_data
 }
 
 static void http_list_directory_footer(server *srv, connection *con, plugin_data *p, buffer *out) {
+	UNUSED(srv);
+	UNUSED(p);
+	
 	BUFFER_APPEND_STRING_CONST(out,
 		"</tbody>\n"
 		"</table>\n"
@@ -344,7 +356,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	struct dirent *dent;
 	struct stat st;
 	char *path, *path_file;
-	int i;
+	size_t i;
 	int hide_dotfiles = p->conf.hide_dot_files;
 	dirls_list_t dirs, files, *list;
 	dirls_entry_t *tmp;
@@ -352,6 +364,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	char datebuf[sizeof("2005-Jan-01 22:23:24")];
 	size_t k;
 	const char *content_type;
+	long name_max;
 #ifdef HAVE_XATTR
 	char attrval[128];
 	int attrlen;
@@ -360,10 +373,17 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	struct tm tm;
 #endif
 
-	i = dir->used - 1;
-	if (i <= 0) return -1;
+	if (dir->used == 0) return -1;
 	
-	path = malloc(i + NAME_MAX + 1);
+	i = dir->used - 1;
+
+#ifdef HAVE_PATHCONF
+	name_max = pathconf(dir->ptr, PC_NAME_MAX);
+#else
+	name_max = NAME_MAX;
+#endif
+	
+	path = malloc(dir->used + name_max);
 	assert(path);
 	strcpy(path, dir->ptr);
 	path_file = path + i;
@@ -384,7 +404,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	assert(files.ent);
 	files.size = DIRLIST_BLOB_SIZE;
 	files.used = 0;
-
+	
 	while ((dent = readdir(dp)) != NULL) {
 		if (dent->d_name[0] == '.') {
 			if (hide_dotfiles)
@@ -395,12 +415,14 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 				continue;
 		}
 
+		
+		i = strlen(dent->d_name);
+		
 		/* NOTE: the manual says, d_name is never more than NAME_MAX
 		 *       so this should actually not be a buffer-overflow-risk
 		 */
-		i = strlen(dent->d_name);
-		if (i > NAME_MAX)
-			continue;
+		if (i > name_max) continue;
+		
 		memcpy(path_file, dent->d_name, i + 1);
 		if (stat(path, &st) != 0)
 			continue;

@@ -56,8 +56,7 @@ Example
 Conditional Configuration
 =========================
 
-Most options can be configured conditionally by using the following syntax
-(including nesting).
+Most options can be configured conditionally by using the following syntax.
 
 ::
 

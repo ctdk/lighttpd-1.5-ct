@@ -30,6 +30,8 @@ typedef struct {
 typedef struct {
 	PLUGIN_DATA;
 	
+	buffer *range_buf;
+	
 	plugin_config **config_storage;
 	
 	plugin_config conf; 
@@ -40,6 +42,8 @@ INIT_FUNC(mod_staticfile_init) {
 	plugin_data *p;
 	
 	p = calloc(1, sizeof(*p));
+	
+	p->range_buf = buffer_init();
 	
 	return p;
 }
@@ -63,6 +67,7 @@ FREE_FUNC(mod_staticfile_free) {
 		}
 		free(p->config_storage);
 	}
+	buffer_free(p->range_buf);
 	
 	free(p);
 	
@@ -142,7 +147,7 @@ static int mod_staticfile_setup_connection(server *srv, connection *con, plugin_
 }
 #undef PATCH
 
-static int http_response_parse_range(server *srv, connection *con) {
+static int http_response_parse_range(server *srv, connection *con, plugin_data *p) {
 	int multipart = 0;
 	int error;
 	off_t start, end;
@@ -323,22 +328,22 @@ static int http_response_parse_range(server *srv, connection *con) {
 		
 		/* set header-fields */
 		
-		buffer_copy_string(srv->range_buf, "multipart/byteranges; boundary=");
-		buffer_append_string(srv->range_buf, boundary);
+		buffer_copy_string(p->range_buf, "multipart/byteranges; boundary=");
+		buffer_append_string(p->range_buf, boundary);
 		
 		/* overwrite content-type */
-		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(srv->range_buf));
+		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(p->range_buf));
 	} else {
 		/* add Content-Range-header */
 		
-		buffer_copy_string(srv->range_buf, "bytes ");
-		buffer_append_off_t(srv->range_buf, start);
-		buffer_append_string(srv->range_buf, "-");
-		buffer_append_off_t(srv->range_buf, end);
-		buffer_append_string(srv->range_buf, "/");
-		buffer_append_off_t(srv->range_buf, fce->st.st_size);
+		buffer_copy_string(p->range_buf, "bytes ");
+		buffer_append_off_t(p->range_buf, start);
+		buffer_append_string(p->range_buf, "-");
+		buffer_append_off_t(p->range_buf, end);
+		buffer_append_string(p->range_buf, "/");
+		buffer_append_off_t(p->range_buf, fce->st.st_size);
 		
-		response_header_insert(srv, con, CONST_STR_LEN("Content-Range"), CONST_BUF_LEN(srv->range_buf));
+		response_header_insert(srv, con, CONST_STR_LEN("Content-Range"), CONST_BUF_LEN(p->range_buf));
 	}
 
 	/* ok, the file is set-up */
@@ -550,7 +555,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 		/* content prepared, I'm done */
 		con->file_finished = 1;
 		
-		if (0 == http_response_parse_range(srv, con)) {
+		if (0 == http_response_parse_range(srv, con, p)) {
 			con->http_status = 206;
 		}
 		return HANDLER_FINISHED;

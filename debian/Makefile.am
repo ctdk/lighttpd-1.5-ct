@@ -7,21 +7,9 @@ copyright \
 cron.d.ex \
 dirs \
 docs \
-emacsen-install.ex \
-emacsen-remove.ex \
-emacsen-startup.ex \
 init.d \
-lighttpd-default.ex \
 lighttpd.conf \
-lighttpd.doc-base.EX \
 lighttpd.logrotate \
 lighttpd.postinst \
 manpage.1.ex \
-manpage.sgml.ex \
-manpage.xml.ex \
-menu.ex \
-postrm.ex \
-preinst.ex \
-prerm.ex \
-rules \
-watch.ex 
+rules 

@@ -3,7 +3,7 @@ Section: web
 Priority: optional
 Maintainer: Jan Kneschke <jan@kneschke.de>
 Build-Depends: debhelper (>= 4.0.0), libssl-dev, zlib1g-dev, libbz2-dev, libpcre3-dev
-Standards-Version: 3.6.0
+Standards-Version: 3.6.1
 
 Package: lighttpd
 Architecture: any

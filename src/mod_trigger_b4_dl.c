@@ -352,6 +352,13 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 	return HANDLER_GO_ON;
 }
 
+typedef struct {
+	char **ptr;
+	
+	size_t size;
+	size_t used;
+} delme_t;
+
 TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 #if defined(HAVE_GDBM) && defined(HAVE_PCRE_H)
 	plugin_data *p = p_d;
@@ -364,14 +371,20 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s = p->config_storage[i];
 		datum key, val, okey;
+		delme_t delme;
 		
 		if (!s->db) continue;
 		
 		okey.dptr = NULL;
 		
-		/* according to the manual this loop + delete does delete all entries on its way 
+		delme.ptr = NULL;
+		delme.used = 0;
+		delme.size = 0;
+		
+		/* fetch all IDs which have to be deleted into a array and delete them 
+		 * afterwards
 		 * 
-		 * we don't care as the next round will remove them. We don't have to perfect here.
+		 * 
 		 */
 		for (key = gdbm_firstkey(s->db); key.dptr; key = gdbm_nextkey(s->db, okey)) {
 			time_t last_hit;
@@ -387,12 +400,30 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 			free(val.dptr);
 			
 			if (srv->cur_ts - last_hit > s->trigger_timeout) {
-				gdbm_delete(s->db, key);
+				if (delme.size == 0) {
+					delme.size = 16;
+					delme.ptr = malloc(delme.size * sizeof(*delme.ptr));
+				} else if (delme.used == delme.size) {
+					delme.size += 16;
+					delme.ptr = realloc(delme.ptr, delme.size * sizeof(*delme.ptr));
+				}
+				
+				delme.ptr[delme.used++] = strdup(key.dptr);
 			}
 			
 			okey = key;
 		}
 		if (okey.dptr) free(okey.dptr);
+		
+		for (i = 0; i < delme.used; i++) {
+			key.dptr = delme.ptr[i];
+			key.dsize = strlen(key.dptr);
+			
+			gdbm_delete(s->db, key);
+			free(delme.ptr[i]);
+		}
+		
+		free(delme.ptr);
 		
 		/* reorg once a day */
 		if ((srv->cur_ts % (60 * 60 * 24) != 0)) gdbm_reorganize(s->db);

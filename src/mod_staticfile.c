@@ -555,7 +555,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	
 	con->file_finished = 1;
 	
-	return HANDLER_GO_ON;
+	return HANDLER_FINISHED;
 }
 
 /* this function is called at dlopen() time and inits the callbacks */

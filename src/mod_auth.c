@@ -550,8 +550,15 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 				
 					return HANDLER_ERROR;
 				}
+
+				if (s->auth_ldap_starttls) {
+					if (buffer_is_empty(s->auth_ldap_cafile)) {
+						log_error_write(srv, __FILE__, __LINE__, "s", "CA file has to be set");
+						
+						return HANDLER_ERROR;
+						
+					}
 			
-				if (s->auth_ldap_starttls && !buffer_is_empty(s->auth_ldap_cafile) ) {
 					if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_CACERTFILE, s->auth_ldap_cafile->ptr))) {
 						log_error_write(srv, __FILE__, __LINE__, "ss", "Loading CA certificate failed:", ldap_err2string(ret));
 						

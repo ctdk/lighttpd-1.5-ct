@@ -933,3 +933,34 @@ int light_isalpha(int c) {
 int light_isalnum(int c) {
 	return light_isdigit(c) || light_isalpha(c);
 }
+
+int buffer_to_lower(buffer *b) {
+	size_t i;
+	char *c;
+	
+	if (b->used == 0) return 0;
+	
+	for (c = b->ptr; *c; c++) {
+		if (*c >= 'A' && *c <= 'Z') {
+			*c |= 32;
+		}
+	}
+	
+	return 0;
+}
+
+
+int buffer_to_upper(buffer *b) {
+	size_t i;
+	char *c;
+	
+	if (b->used == 0) return 0;
+	
+	for (c = b->ptr; *c; c++) {
+		if (*c >= 'a' && *c <= 'z') {
+			*c &= ~32;
+		}
+	}
+	
+	return 0;
+}

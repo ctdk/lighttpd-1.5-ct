@@ -88,6 +88,9 @@ int buffer_append_string_html_encoded(buffer *b, const char *s);
 int buffer_urldecode(buffer *url);
 int buffer_path_simplify(buffer *dest, buffer *src);
 
+int buffer_to_lower(buffer *b);
+int buffer_to_upper(buffer *b);
+
 /** deprecated */
 int ltostr(char *buf, long val);
 char hex2int(unsigned char c);

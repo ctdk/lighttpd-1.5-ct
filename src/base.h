@@ -405,6 +405,8 @@ typedef struct {
 	
 	unsigned short log_request_header_on_error;
 	unsigned short log_state_handling;
+	
+	unsigned short close_stderr;
 } server_config;
 
 typedef struct {

@@ -68,7 +68,7 @@ static int config_insert(server *srv) {
 		
 		{ "server.protocol-http11",      NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 35 */
 		{ "debug.log-request-header-on-error", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER }, /* 36 */
-		
+		{ "server.close-stderr",         NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },      /* 37 */
 		
 		
 		
@@ -104,10 +104,13 @@ static int config_insert(server *srv) {
 	cv[23].destination = &(srv->srvconf.max_fds);
 	cv[36].destination = &(srv->srvconf.log_request_header_on_error);
 	cv[16].destination = &(srv->srvconf.log_state_handling);
+	cv[37].destination = &(srv->srvconf.close_stderr);
 	
 	srv->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 
 	assert(srv->config_storage);
+	
+	srv->srvconf.close_stderr = 1;
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		specific_config *s;

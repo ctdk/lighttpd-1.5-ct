@@ -21,10 +21,6 @@
 #include "log.h"
 #include "array.h"
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
-#include <valgrind/valgrind.h>
-#endif
-
 #ifndef O_LARGEFILE
 # define O_LARGEFILE 0
 #endif
@@ -39,7 +35,7 @@
 
 int log_error_open(server *srv) {
 	int fd;
-	int close_stderr = 1;
+	int close_stderr = srv->srvconf.close_stderr;
 	
 	if (srv->srvconf.error_logfile->used) {
 		const char *logfile = srv->srvconf.error_logfile->ptr;
@@ -66,11 +62,6 @@ int log_error_open(server *srv) {
 	
 	log_error_write(srv, __FILE__, __LINE__, "s", "server started");
 	
-#ifdef HAVE_VALGRIND_VALGRIND_H
-	/* don't close stderr for debugging purposes if run in valgrind */
-	if (RUNNING_ON_VALGRIND) close_stderr = 0;
-#endif
-
 	/* move stderr to /dev/null */
 	if (close_stderr &&
 	    -1 != (fd = open("/dev/null", O_WRONLY))) {

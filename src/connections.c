@@ -188,17 +188,21 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 	case DIRECT:
 		/* static files */
 		
-		if (con->http_status == 200 && 
-		    con->physical.path->used) {
-			switch(con->request.http_method_id) {
-			case HTTP_METHOD_GET:
-			case HTTP_METHOD_POST:
-			case HTTP_METHOD_HEAD:
+		switch(con->request.http_method_id) {
+		case HTTP_METHOD_GET:
+		case HTTP_METHOD_POST:
+		case HTTP_METHOD_HEAD:
+			break;
+		default:
+			switch(con->http_status) {
+			case 400: /* bad request */
+			case 505: /* unknown protocol */
 				break;
 			default:
 				con->http_status = 501;
 				break;
 			}
+			break;
 		}
 		
 		

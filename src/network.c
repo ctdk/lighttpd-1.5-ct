@@ -44,8 +44,6 @@ handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 	}
 	
 	while (NULL != (con = connection_accept(srv, srv_socket))) {
-		handler_t r;
-		
 		if (srv_socket->is_ssl) {
 #ifdef USE_OPENSSL
 			con->fd->write_func = network_write_chunkqueue_openssl;
@@ -68,15 +66,6 @@ handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 		}
 
 		connection_state_machine(srv, con);
-		
-		switch(r = plugins_call_handle_joblist(srv, con)) {
-		case HANDLER_FINISHED:
-		case HANDLER_GO_ON:
-			break;
-		default:
-			log_error_write(srv, __FILE__, __LINE__, "d", r);
-			break;
-		}
 	}
 	return HANDLER_GO_ON;
 }

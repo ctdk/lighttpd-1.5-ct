@@ -24,13 +24,11 @@
 /* plugin config for all request/connections */
 
 typedef struct {
-	array *match;
+	array *exclude_ext;
 } plugin_config;
 
 typedef struct {
 	PLUGIN_DATA;
-	
-	buffer *match_buf;
 	
 	plugin_config **config_storage;
 	
@@ -42,8 +40,6 @@ INIT_FUNC(mod_staticfile_init) {
 	plugin_data *p;
 	
 	p = calloc(1, sizeof(*p));
-	
-	p->match_buf = buffer_init();
 	
 	return p;
 }
@@ -61,14 +57,12 @@ FREE_FUNC(mod_staticfile_free) {
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
 			
-			array_free(s->match);
+			array_free(s->exclude_ext);
 			
 			free(s);
 		}
 		free(p->config_storage);
 	}
-	
-	buffer_free(p->match_buf);
 	
 	free(p);
 	
@@ -82,7 +76,7 @@ SETDEFAULTS_FUNC(mod_staticfile_set_defaults) {
 	size_t i = 0;
 	
 	config_values_t cv[] = { 
-		{ "staticfile.array",             NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ "static-file.exclude-extension", NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
@@ -94,9 +88,9 @@ SETDEFAULTS_FUNC(mod_staticfile_set_defaults) {
 		plugin_config *s;
 		
 		s = calloc(1, sizeof(plugin_config));
-		s->match    = array_init();
+		s->exclude_ext    = array_init();
 		
-		cv[0].destination = s->match;
+		cv[0].destination = s->exclude_ext;
 		
 		p->config_storage[i] = s;
 	
@@ -128,14 +122,25 @@ static int mod_staticfile_patch_connection(server *srv, connection *con, plugin_
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 			
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("staticfile.array"))) {
-				PATCH(match);
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN("static-file.exclude-extension"))) {
+				PATCH(exclude_ext);
 			}
 		}
 	}
 	
 	return 0;
 }
+
+static int mod_staticfile_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(exclude_ext);
+	
+	return 0;
+}
+#undef PATCH
 
 static int http_response_parse_range(server *srv, connection *con) {
 	int multipart = 0;
@@ -367,20 +372,10 @@ static buffer * strftime_cache_get(server *srv, time_t last_mod) {
 	return srv->mtime_cache[i].str;
 }
 
-static int mod_staticfile_setup_connection(server *srv, connection *con, plugin_data *p) {
-	plugin_config *s = p->config_storage[0];
-	UNUSED(srv);
-	UNUSED(con);
-		
-	PATCH(match);
-	
-	return 0;
-}
-#undef PATCH
-
 URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	plugin_data *p = p_d;
-	size_t i;
+	size_t i, k;
+	int s_len;
 	buffer *mtime;
 	file_cache_entry *fce = NULL;
 	
@@ -408,6 +403,23 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 		
 		mod_staticfile_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
 	}
+	
+	s_len = con->uri.path->used - 1;
+	
+	/* ignore certain extensions */
+	for (k = 0; k < p->conf.exclude_ext->used; k++) {
+		data_string *ds = (data_string *)p->conf.exclude_ext->data[k];
+		int ct_len = ds->value->used - 1;
+		
+		if (ct_len > s_len) continue;
+		
+		if (ds->value->used == 0) continue;
+		
+		if (0 == strncmp(con->uri.path->ptr + s_len - ct_len, ds->value->ptr, ct_len)) {
+			return HANDLER_GO_ON;
+		}
+	}
+	
 
 	if (con->conf.log_request_handling) {
 		log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling file as static file");
@@ -546,16 +558,10 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	
 	/* if we are still here, prepare body */
 	
-	switch(con->request.http_method_id) {
-	case HTTP_METHOD_GET:
-	case HTTP_METHOD_POST:
-	case HTTP_METHOD_HEAD:
-		/* we add it here for the HEAD request which will drop it afterwards again */
-		http_chunk_append_file(srv, con, fce, 0, fce->st.st_size);
-		break;
-	default:
-		break;
-	}
+	/* we add it here for all requests 
+	 * the HEAD request will drop it afterwards again 
+	 */
+	http_chunk_append_file(srv, con, fce, 0, fce->st.st_size);
 	
 	con->file_finished = 1;
 	

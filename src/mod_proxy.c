@@ -669,6 +669,8 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 			int socket_error;
 			socklen_t socket_error_len = sizeof(socket_error);
 			
+			fdevent_event_del(srv->ev, hctx->fd);
+			
 			/* try to finish the connect() */
 			if (0 != getsockopt(hctx->fd->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", 
@@ -826,8 +828,6 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	connection  *con  = hctx->remote_conn;
 	plugin_data *p    = hctx->plugin_data;
 	
-	joblist_append(srv, con);
-	
 	if ((revents & FDEVENT_IN) &&
 	    hctx->state == PROXY_STATE_READ) {
 		switch (proxy_demux_response(srv, hctx)) {
@@ -861,6 +861,9 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	}
 	
 	if (revents & FDEVENT_OUT) {
+		
+		hctx->fd->is_writable = 1;
+		
 		if (hctx->state == PROXY_STATE_CONNECT) {
 			/* we are allowed to send something out
 			 * 
@@ -875,10 +878,15 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 				if (con->request.content_finished) {
 					/* wait for input */
 					proxy_set_state(srv, hctx, PROXY_STATE_READ);
+				} else if (hctx->fd->is_writable) {
+					fdevent_event_del(srv->ev, hctx->fd);
 				}
 				break;
 			case NETWORK_OK:
 				/* not finished yet, queue not empty yet, wait for event */
+				if (!hctx->fd->is_writable) {
+					fdevent_event_add(srv->ev, hctx->fd, FDEVENT_OUT);
+				}
 				break;
 			case NETWORK_ERROR: /* error on our side */
 				log_error_write(srv, __FILE__, __LINE__, "sds",
@@ -1055,38 +1063,11 @@ static handler_t mod_proxy_check_extension(server *srv, connection *con, void *p
 	return HANDLER_GO_ON;
 }
 
-JOBLIST_FUNC(mod_proxy_handle_joblist) {
-	plugin_data *p = p_d;
-	handler_ctx *hctx = con->plugin_ctx[p->id];
-	
-	if (hctx == NULL) return HANDLER_GO_ON;
-
-	if (hctx->fd->fd != -1) {
-		switch (hctx->state) {
-		case PROXY_STATE_READ:
-			fdevent_event_add(srv->ev, hctx->fd, FDEVENT_IN);
-			
-			break;
-		case PROXY_STATE_CONNECT:
-			fdevent_event_add(srv->ev, hctx->fd, FDEVENT_OUT);
-			
-			break;
-		default:
-			log_error_write(srv, __FILE__, __LINE__, "sd", "unhandled proxy.state", hctx->state);
-			break;
-		}
-	}
-
-	return HANDLER_GO_ON;
-}
-
-
 static handler_t mod_proxy_connection_close_callback(server *srv, connection *con, void *p_d) {
 	plugin_data *p = p_d;
 	
 	return proxy_connection_close(srv, con->plugin_ctx[p->id]);
 }
-
 
 SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
 	plugin_data *p = p_d;
@@ -1097,9 +1078,6 @@ SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
 	if (con->mode != p->id) return HANDLER_GO_ON;
 	if (NULL == hctx) return HANDLER_GO_ON;
 
-#if 0
-	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, con->post_data_fetched, con->request.content_length);
-#endif
 	cq = con->read_queue;
 
 	for (c = cq->first; c && (con->post_data_fetched != con->request.content_length); c = cq->first) {
@@ -1124,6 +1102,8 @@ SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
 	if (con->post_data_fetched == con->request.content_length) {
 		con->request.content_finished = 1;
 	}
+	
+	fdevent_event_add(srv->ev, hctx->fd, FDEVENT_OUT);
 
 	return HANDLER_FINISHED;
 }
@@ -1141,7 +1121,6 @@ int mod_proxy_plugin_init(plugin *p) {
 	p->handle_connection_close = mod_proxy_connection_close_callback;
 	p->handle_uri_clean        = mod_proxy_check_extension;
 	p->handle_subrequest       = mod_proxy_handle_subrequest;
-	p->handle_joblist          = mod_proxy_handle_joblist;
 	p->handle_fetch_post_data  = mod_proxy_fetch_post_data;
 	
 	

@@ -663,13 +663,11 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 				
 				fdevent_event_add(srv->ev, hctx->read_fd, FDEVENT_IN);
 				/* wait for input */
-			} else {
-				if (hctx->write_fd->is_writable) {
-					/* we are still writable, wait for new content and 
-					 * let the fetch_data send the content directly 
-					 */
-					fdevent_event_del(srv->ev, hctx->write_fd);
-				}
+			} else if (hctx->write_fd->is_writable) {
+				/* we are still writable, wait for new content and 
+				 * let the fetch_data send the content directly 
+				 */
+				fdevent_event_del(srv->ev, hctx->write_fd);
 			}
 			break;
 		case NETWORK_OK:

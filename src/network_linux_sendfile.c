@@ -80,6 +80,7 @@ network_t network_write_chunkqueue_linuxsendfile(server *srv, file_descr *write_
 			if ((r = writev(write_fd->fd, chunks, num_chunks)) < 0) {
 				switch (errno) {
 				case EAGAIN:
+					write_fd->is_writable = 0;
 				case EINTR:
 					r = 0;
 					break;

@@ -47,7 +47,12 @@ network_t network_write_chunkqueue(server *srv, file_descr *write_fd, chunkqueue
 	case NETWORK_OK:
 		chunkqueue_remove_empty_chunks(srv, cq);
 		
-		if (chunkqueue_is_empty(cq)) ret = NETWORK_QUEUE_EMPTY;
+		if (chunkqueue_is_empty(cq)) {
+			ret = NETWORK_QUEUE_EMPTY;
+		} else {
+			/* we couldn't finish the transfer -> EAGAIN, EINTR, ... */
+			write_fd->is_writable = 0;
+		}
 	default:
 		break;
 	}

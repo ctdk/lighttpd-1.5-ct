@@ -401,7 +401,7 @@ static handler_t mod_status_handle_server_status(server *srv, connection *con, v
 		
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"string\">");
 		
-		buffer_append_string_html_encoded(b, c->uri.path->ptr);
+		buffer_append_string_html_encoded(b, CONST_BUF_LEN(c->uri.path));
 		
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"string\">");
 		

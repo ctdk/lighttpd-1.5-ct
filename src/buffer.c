@@ -635,7 +635,7 @@ int buffer_append_string_hex(buffer *b, const char *in, size_t in_len) {
 	return 0;
 }
 
-int buffer_append_string_url_encoded(buffer *b, const char *s) {
+int buffer_append_string_url_encoded(buffer *b, const char *s, size_t s_len) {
 	unsigned char *ds, *d;
 	size_t d_len;
 	
@@ -645,6 +645,7 @@ int buffer_append_string_url_encoded(buffer *b, const char *s) {
 		SEGFAULT();
 	}
 	
+	if (s_len == 0) return 0;
 	
 	/* count to-be-encoded-characters */
 	for (ds = (unsigned char *)s, d_len = 0; *ds; ds++) {
@@ -722,7 +723,7 @@ int buffer_append_string_url_encoded(buffer *b, const char *s) {
 	return 0;
 }
 
-int buffer_append_string_html_encoded(buffer *b, const char *s) {
+int buffer_append_string_html_encoded(buffer *b, const char *s, size_t s_len) {
 	unsigned char *ds, *d;
 	size_t d_len;
 	
@@ -732,6 +733,8 @@ int buffer_append_string_html_encoded(buffer *b, const char *s) {
 		SEGFAULT();
 	}
 	
+	/* nothing to append */
+	if (s_len == 0) return 0;
 	
 	/* count to-be-encoded-characters */
 	for (ds = (unsigned char *)s, d_len = 0; *ds; ds++) {
@@ -935,7 +938,6 @@ int light_isalnum(int c) {
 }
 
 int buffer_to_lower(buffer *b) {
-	size_t i;
 	char *c;
 	
 	if (b->used == 0) return 0;
@@ -951,7 +953,6 @@ int buffer_to_lower(buffer *b) {
 
 
 int buffer_to_upper(buffer *b) {
-	size_t i;
 	char *c;
 	
 	if (b->used == 0) return 0;

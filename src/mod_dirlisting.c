@@ -257,7 +257,7 @@ static void http_list_directory_header(server *srv, connection *con, plugin_data
 		"<head>\n"
 		"<title>Index of "
 	);
-	buffer_append_string_html_encoded(out, con->uri.path->ptr);
+	buffer_append_string_html_encoded(out, CONST_BUF_LEN(con->uri.path));
 	BUFFER_APPEND_STRING_CONST(out, "</title>\n");
 
 	if (p->conf.external_css->used > 1) {
@@ -305,7 +305,7 @@ static void http_list_directory_header(server *srv, connection *con, plugin_data
 	}
 
 	BUFFER_APPEND_STRING_CONST(out, "</head>\n<body>\n<h2>Index of ");
-	buffer_append_string_html_encoded(out, con->uri.path->ptr);
+	buffer_append_string_html_encoded(out, CONST_BUF_LEN(con->uri.path));
 	BUFFER_APPEND_STRING_CONST(out,
 		"</h2>\n"
 		"<div class=\"list\">\n"
@@ -469,9 +469,9 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 #endif
 
 		BUFFER_APPEND_STRING_CONST(out, "<tr><td class=\"n\"><a href=\"");
-		buffer_append_string_url_encoded(out, DIRLIST_ENT_NAME(tmp));
+		buffer_append_string_url_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
 		BUFFER_APPEND_STRING_CONST(out, "/\">");
-		buffer_append_string_html_encoded(out, DIRLIST_ENT_NAME(tmp));
+		buffer_append_string_html_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
 		BUFFER_APPEND_STRING_CONST(out, "</a>/</td><td class=\"m\">");
 		buffer_append_string_len(out, datebuf, sizeof(datebuf) - 1);
 		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"s\">- &nbsp;</td><td class=\"t\">Directory</td></tr>\n");
@@ -525,9 +525,9 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 		http_list_directory_sizefmt(sizebuf, tmp->size);
 
 		BUFFER_APPEND_STRING_CONST(out, "<tr><td class=\"n\"><a href=\"");
-		buffer_append_string_url_encoded(out, DIRLIST_ENT_NAME(tmp));
+		buffer_append_string_url_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
 		BUFFER_APPEND_STRING_CONST(out, "\">");
-		buffer_append_string_html_encoded(out, DIRLIST_ENT_NAME(tmp));
+		buffer_append_string_html_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
 		BUFFER_APPEND_STRING_CONST(out, "</a></td><td class=\"m\">");
 		buffer_append_string_len(out, datebuf, sizeof(datebuf) - 1);
 		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"s\">");

@@ -400,6 +400,7 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 			free(val.dptr);
 			
 			if (srv->cur_ts - last_hit > s->trigger_timeout) {
+				char *str;
 				if (delme.size == 0) {
 					delme.size = 16;
 					delme.ptr = malloc(delme.size * sizeof(*delme.ptr));
@@ -408,7 +409,11 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 					delme.ptr = realloc(delme.ptr, delme.size * sizeof(*delme.ptr));
 				}
 				
-				delme.ptr[delme.used++] = strdup(key.dptr);
+				str = malloc(key.dsize + 1);
+				strncpy(str, key.dptr, key.dsize);
+				str[key.dsize] = '\0';
+				
+				delme.ptr[delme.used++] = str;
 			}
 			
 			okey = key;
@@ -419,7 +424,10 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 			key.dptr = delme.ptr[i];
 			key.dsize = strlen(key.dptr);
 			
-			gdbm_delete(s->db, key);
+			if (0 != gdbm_delete(s->db, key)) {
+				log_error_write(srv, __FILE__, __LINE__, "ss",
+						"delete failed for:", key.dptr);
+			}
 			free(delme.ptr[i]);
 		}
 		

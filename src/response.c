@@ -848,6 +848,11 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		
 		fce = NULL; /* fce might not be valid after plugin call */
 		
+		if (con->conf.log_request_handling) {
+			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling subrequest");
+			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+		}
+		
 		/* call the handlers */
 		switch(r = plugins_call_handle_subrequest_start(srv, con)) {
 		case HANDLER_GO_ON:
@@ -855,8 +860,16 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			break;
 		case HANDLER_FINISHED:
 		default:
+			if (con->conf.log_request_handling) {
+				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- subrequest finished");
+			}
+			
 			/* something strange happend */
 			return r;
+		}
+		
+		if (con->conf.log_request_handling) {
+			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling file as static file");
 		}
 		
 		if (NULL != (fce = file_cache_get_entry(srv, con->physical.path))) {

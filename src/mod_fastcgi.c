@@ -3057,6 +3057,12 @@ static handler_t fcgi_check_extension(server *srv, connection *con, void *p_d, i
 				host->load++;
 				
 				con->mode = p->id;
+				
+				if (con->conf.log_request_handling) {
+					log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling the request as FastCGI");
+					log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
+				}
+				
 			}
 			return HANDLER_GO_ON;
 		} else {
@@ -3077,7 +3083,12 @@ static handler_t fcgi_check_extension(server *srv, connection *con, void *p_d, i
 			
 			con->mode = p->id;
 			
-			return HANDLER_FINISHED;
+			if (con->conf.log_request_handling) {
+				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling the request as FastCGI");
+				log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
+			}
+			
+			return HANDLER_GO_ON;
 		}
 	} else {
 		/* no handler found */

@@ -534,7 +534,7 @@ URIHANDLER_FUNC(mod_dirlisting_subrequest) {
 	file_cache_entry *fce = NULL;
 	
 	UNUSED(srv);
-
+	
 	if (con->physical.path->used == 0) return HANDLER_GO_ON;
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	if (con->uri.path->ptr[con->uri.path->used - 2] != '/') return HANDLER_GO_ON;
@@ -547,6 +547,11 @@ URIHANDLER_FUNC(mod_dirlisting_subrequest) {
 	}
 
 	if (!p->conf.dir_listing) return HANDLER_GO_ON;
+	
+	if (con->conf.log_request_handling) {
+		log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling the request as Dir-Listing");
+		log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
+	}
 	
 	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
 		fprintf(stderr, "%s.%d: %s\n", __FILE__, __LINE__, con->physical.path->ptr);

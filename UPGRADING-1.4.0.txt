@@ -10,7 +10,7 @@ releases:
    
    server.modules = ( ..., "mod_indexfile", ... )
    
-   index-file.extensions = ( "index.html", "index.html" )
+   index-file.names = ( "index.html", "index.php" )
    
 2. directory listings are handled by mod_dirlisting now
 

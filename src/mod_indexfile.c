@@ -88,7 +88,7 @@ SETDEFAULTS_FUNC(mod_indexfile_set_defaults) {
 	size_t i = 0;
 	
 	config_values_t cv[] = { 
-		{ "index-file.extensions",       NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ "index-file.names",       NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
@@ -134,7 +134,7 @@ static int mod_indexfile_patch_connection(server *srv, connection *con, plugin_d
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 			
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("index-file.extensions"))) {
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN("index-file.names"))) {
 				PATCH(indexfiles);
 			}
 		}

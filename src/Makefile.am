@@ -81,6 +81,11 @@ mod_cgi_la_SOURCES = mod_cgi.c
 mod_cgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_cgi_la_LIBADD = $(common_libadd)
 
+lib_LTLIBRARIES += mod_staticfile.la
+mod_staticfile_la_SOURCES = mod_staticfile.c 
+mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_staticfile_la_LIBADD = $(common_libadd)
+
 lib_LTLIBRARIES += mod_dirlisting.la
 mod_dirlisting_la_SOURCES = mod_dirlisting.c 
 mod_dirlisting_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined

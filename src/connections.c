@@ -181,13 +181,11 @@ static network_t connection_handle_read(server *srv, connection *con) {
 }
 
 static int connection_handle_write_prepare(server *srv, connection *con) {
-	struct stat st;
-	int s_len;
+	fprintf(stderr, "%s.%d: %d\n", __FILE__, __LINE__, con->mode);
 	
-	switch(con->mode) {
-	case DIRECT:
+	if (con->mode == DIRECT) {
 		/* static files */
-		
+		fprintf(stderr, "%s.%d\n", __FILE__, __LINE__);
 		switch(con->request.http_method_id) {
 		case HTTP_METHOD_GET:
 		case HTTP_METHOD_POST:
@@ -204,196 +202,118 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 			}
 			break;
 		}
+	}
+	
+	if (con->http_status == 0) {
+		con->http_status = 403;
+	}
+	
+	fprintf(stderr, "%s.%d\n", __FILE__, __LINE__);
+	switch(con->http_status) {
+	case 400: /* class: header + custom body */
+	case 401:
+	case 403:
+	case 404:
+	case 408:
+	case 411:
+	case 416:
+	case 500:
+	case 501:
+	case 503:
+	case 505: 
+		/* generate error page yourself */
+		if (con->mode != DIRECT) break;
 		
+		/* rewrite the filename */
+		con->file_finished = 0;
 		
-		switch(con->http_status) {
-		case 400: /* class: header + custom body */
-		case 401:
-		case 403:
-		case 404:
-		case 408:
-		case 411:
-		case 416:
-		case 500:
-		case 501:
-		case 503:
-		case 505: {
-			con->file_finished = 1;
-				
-			/* rewrite the filename */
+		file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
+		buffer_reset(con->physical.path);
+		
+		/* try to send static errorfile */
+		if (!buffer_is_empty(srv->srvconf.errorfile_prefix)) {
+			file_cache_entry *fce = NULL;
 			
-			/* FIXME: use con.physical.errorfile
-			 * 
-			 * 
-			 */
-			buffer_reset(con->physical.path);
+			buffer_copy_string_buffer(con->physical.path, srv->srvconf.errorfile_prefix);
+			buffer_append_string(con->physical.path, get_http_status_body_name(con->http_status));
 			
-			if (srv->srvconf.errorfile_prefix->used) {
-				buffer_copy_string_buffer(con->physical.path, srv->srvconf.errorfile_prefix);
-				buffer_append_string(con->physical.path, get_http_status_body_name(con->http_status));
-			}
-			
-			if ((con->physical.path->used <= 1) || 
-			    (-1 == (stat(con->physical.path->ptr, &st)))) {
-				buffer *b;
-				
-				buffer_reset(con->physical.path);
-				
-				b = chunkqueue_get_append_buffer(con->write_queue);
-				
-				/* build default error-page */
-				buffer_copy_string(b, 
-					      "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n"
-					      "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\"\n"
-					      "         \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n"
-					      "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">\n"
-					      " <head>\n"
-					      "  <title>");
-				buffer_append_long(b, con->http_status);
-				buffer_append_string(b, " - ");
-				buffer_append_string(b, get_http_status_name(con->http_status));
-				
-				buffer_append_string(b,
-					      "</title>\n"
-					      " </head>\n"
-					      " <body>\n"
-					      "  <h1>");
-				buffer_append_long(b, con->http_status);
-				buffer_append_string(b, " - ");
-				buffer_append_string(b, get_http_status_name(con->http_status));
-				
-				buffer_append_string(b,"</h1>\n" 
-					      " </body>\n"
-					      "</html>\n"
-					      );
-				
-				response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
-			} else {
-				/* get content-type */
-				size_t k;
-				s_len = con->physical.path->used - 1;
-				
-				for (k = 0; k < con->conf.mimetypes->used; k++) {
-					data_string *ds = (data_string *)con->conf.mimetypes->data[k];
-					int ct_len = ds->key->used - 1;
-					
-					if (s_len < ct_len ||
-					    ds->key->used == 0) continue;
-					
-					if (0 == strncmp(con->physical.path->ptr + s_len - ct_len, ds->key->ptr, ct_len)) {
-						response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(ds->value));
-						break;
-					}
-				}
-				
-				if (k == con->conf.mimetypes->used) {
-					/* the error message should be HTML */
-					response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
-				}
-			}
-		}
-			/* fall through */
-			
-		case 200: /* class: header + body */
-			if (con->physical.path->used) {
-				file_cache_entry *fce = NULL;
+			if (HANDLER_GO_ON == file_cache_add_entry(srv, con, con->physical.path, &fce)) {
 				con->file_finished = 1;
 				
-				if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-					log_error_write(srv, __FILE__, __LINE__, "sb",
-							strerror(errno), con->physical.path);
-					
-					connection_set_state(srv, con, CON_STATE_ERROR);
-					
-					return -1;
-				}
-				
-				if (S_ISREG(fce->st.st_mode)) {
-					if (con->request.http_method_id == HTTP_METHOD_GET ||
-					    con->request.http_method_id == HTTP_METHOD_POST) {
-						http_chunk_append_file(srv, con, fce, 0, fce->st.st_size);
-						con->response.content_length = http_chunkqueue_length(srv, con);
-					} else if (con->request.http_method_id == HTTP_METHOD_HEAD) {
-						con->response.content_length = fce->st.st_size;
-					} else {
-						connection_set_state(srv, con, CON_STATE_ERROR);
-						return -1;
-					}
-					
-					http_response_write_header(srv, con, 
-								   con->response.content_length, 
-								   fce->st.st_mtime);
-					
-					
-				} else {
-					/* why the heck ? */
-					
-					log_error_write(srv, __FILE__, __LINE__, "sb",
-							"connection closed: no regular-file to send:", 
-							con->physical.path);
-					
-					con->file_finished = 1;
-				}
-			} else {
-				if (con->file_finished) {
-					con->response.content_length = (ssize_t)http_chunkqueue_length(srv, con);
-				}
-				
-				/* disable keep-alive if size-info for the body is missing */
-				if ((con->parsed_response & HTTP_CONTENT_LENGTH) &&
-				    ((con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) == 0)) {
-					con->keep_alive = 0;
-				}
-				
-				if (con->request.http_method_id == HTTP_METHOD_HEAD) {
-					chunkqueue_reset(srv, con->write_queue);
-				}
-				
-				http_response_write_header(srv, con, 
-							   con->response.content_length, 
-							   0);
-				
+				http_chunk_append_file(srv, con, fce, 0, fce->st.st_size);
 			}
-			break;
-			
-		case 206: /* write_queue is already prepared */
-			http_response_write_header(srv, con, 
-						   con->response.content_length,
-						   0);
-			con->file_finished = 1;
-			break;
-		case 302:
-			con->file_finished = 1;
-			
-			con->response.content_length = (ssize_t)http_chunkqueue_length(srv, con);
-				
-			http_response_write_header(srv, con, 
-						   con->response.content_length, 
-						   0);
-			
-			break;
-		case 205: /* class: header only */
-		case 301:
-		case 304:
-		default:
-			/* disable chunked encoding again as we have no body */
-			con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
-			chunkqueue_reset(srv, con->write_queue);
-			
-			http_response_write_header(srv, con, 0, 0);
-			con->file_finished = 1;
-			break;
 		}
 		
+		if (!con->file_finished) {
+			buffer *b;
+			
+			buffer_reset(con->physical.path);
+			
+			con->file_finished = 1;
+			b = chunkqueue_get_append_buffer(con->write_queue);
+			
+			/* build default error-page */
+			buffer_copy_string(b, 
+					   "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n"
+					   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\"\n"
+					   "         \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n"
+					   "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">\n"
+					   " <head>\n"
+					   "  <title>");
+			buffer_append_long(b, con->http_status);
+			buffer_append_string(b, " - ");
+			buffer_append_string(b, get_http_status_name(con->http_status));
+			
+			buffer_append_string(b,
+					     "</title>\n"
+					     " </head>\n"
+					     " <body>\n"
+					     "  <h1>");
+			buffer_append_long(b, con->http_status);
+			buffer_append_string(b, " - ");
+			buffer_append_string(b, get_http_status_name(con->http_status));
+			
+			buffer_append_string(b,"</h1>\n" 
+					     " </body>\n"
+					     "</html>\n"
+					     );
+				
+			response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
+		}
+		/* fall through */
+		
+	case 200: /* class: header + body */
 		break;
+		
+	case 206: /* write_queue is already prepared */
+	case 302:
+		con->file_finished = 1;
+		
+		break;
+	case 205: /* class: header only */
+	case 301:
+	case 304:
 	default:
-		if (con->request.http_method_id == HTTP_METHOD_HEAD ||
-		    con->http_status == 301 ||
-		    con->http_status == 304 ||
-		    con->http_status == 205) {
-			/* remove possible chunks */
-			con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
-			chunkqueue_reset(srv, con->write_queue);
+		/* disable chunked encoding again as we have no body */
+		con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
+		chunkqueue_reset(srv, con->write_queue);
+		
+		con->file_finished = 1;
+		break;
+	}
+	
+	fprintf(stderr, "%s.%d\n", __FILE__, __LINE__);
+	if (con->file_finished) {
+		/* content-len */
+		
+		buffer_copy_off_t(srv->tmp_buf, chunkqueue_length(con->write_queue));
+		
+		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Length"), CONST_BUF_LEN(srv->tmp_buf));
+	} else {
+		/* disable keep-alive if size-info for the body is missing */
+		if ((con->parsed_response & HTTP_CONTENT_LENGTH) &&
+		    ((con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) == 0)) {
+			con->keep_alive = 0;
 		}
 		
 		if (0 == (con->parsed_response & HTTP_CONNECTION)) {
@@ -415,12 +335,14 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 				/* FIXME: we have to drop the Connection: Header from the subrequest */
 			}
 		}
-		
-		con->response.content_length = (ssize_t)http_chunkqueue_length(srv, con);
-		http_response_write_basic_header(srv, con);
-			
-		break;
 	}
+	
+	if (con->request.http_method_id == HTTP_METHOD_HEAD) {
+		chunkqueue_reset(srv, con->write_queue);
+	}
+	
+	http_response_write_header(srv, con);
+	fprintf(stderr, "%s.%d: header added\n", __FILE__, __LINE__);
 	
 	return 0;
 }
@@ -461,6 +383,7 @@ static network_t network_write_traffic_shaped(server *srv, connection *con, chun
 
 static int connection_handle_write(server *srv, connection *con) {
 	network_t ret;
+	
 	switch(ret = network_write_traffic_shaped(srv, con, con->write_queue)) {
 	case NETWORK_QUEUE_EMPTY:
 		if (con->file_finished) {

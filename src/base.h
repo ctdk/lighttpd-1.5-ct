@@ -189,7 +189,6 @@ typedef struct {
 } physical;
 
 typedef struct {
-	array *indexfiles;
 	array *mimetypes;
 	
 	/* virtual-servers */
@@ -197,10 +196,7 @@ typedef struct {
 	buffer *server_name;
 	buffer *error_handler;
 	buffer *server_tag;
-	buffer *dirlist_css;
 	
-	unsigned short dir_listing;
-	unsigned short hide_dotfiles;
 	unsigned short max_keep_alive_requests;
 	unsigned short max_keep_alive_idle;
 	unsigned short max_read_idle;

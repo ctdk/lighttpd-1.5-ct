@@ -495,7 +495,6 @@ static handler_t mod_status_handle_server_config(server *srv, connection *con, v
 	}
 	
 	mod_status_header_append(b, "Config-File-Settings");
-	mod_status_row_append(b, "Directory Listings", con->conf.dir_listing ? "enabled" : "disabled");
 	
 	for (i = 0; i < srv->plugins.used; i++) {
 		plugin **ps = srv->plugins.ptr;

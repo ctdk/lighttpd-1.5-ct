@@ -1244,7 +1244,11 @@ int connection_state_machine(server *srv, connection *con) {
 						"state for fd", con->fd->fd, connection_get_state(con->state));
 			}
 			
-			connection_handle_write_prepare(srv, con);
+			if (-1 == connection_handle_write_prepare(srv, con)) {
+				connection_set_state(srv, con, CON_STATE_ERROR);
+				
+				break;
+			}
 			
 			connection_set_state(srv, con, CON_STATE_WRITE);
 			break;

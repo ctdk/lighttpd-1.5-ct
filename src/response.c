@@ -1,7 +1,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <dirent.h>
 #include <limits.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -462,377 +461,6 @@ static int http_response_parse_range(server *srv, connection *con) {
 	return 0;
 }
 
-typedef struct {
-	size_t  namelen;
-	time_t  mtime;
-	off_t   size;
-} dirls_entry_t;
-
-typedef struct {
-	dirls_entry_t **ent;
-	int used;
-	int size;
-} dirls_list_t;
-
-#define DIRLIST_ENT_NAME(ent)	(char*) ent + sizeof(dirls_entry_t)
-#define DIRLIST_BLOB_SIZE		16
-
-/* simple combsort algorithm */
-static void http_dirls_sort(dirls_entry_t **ent, int num) {
-	int gap = num;
-	int i, j;
-	int swapped;
-	dirls_entry_t *tmp;
-
-	do {
-		gap = (gap * 10) / 13;
-		if (gap == 9 || gap == 10)
-			gap = 11;
-		if (gap < 1)
-			gap = 1;
-		swapped = 0;
-
-		for (i = 0; i < num - gap; i++) {
-			j = i + gap;
-			if (strcmp(DIRLIST_ENT_NAME(ent[i]), DIRLIST_ENT_NAME(ent[j])) > 0) {
-				tmp = ent[i];
-				ent[i] = ent[j];
-				ent[j] = tmp;
-				swapped = 1;
-			}
-		}
-
-	} while (gap > 1 || swapped);
-}
-
-/* buffer must be able to hold "999.9K"
- * conversion is simple but not perfect
- */
-static int http_list_directory_sizefmt(char *buf, off_t size) {
-	const char unit[] = "KMGTPE";	/* Kilo, Mega, Tera, Peta, Exa */
-	const char *u = unit - 1;		/* u will always increment at least once */
-	int remain;
-	char *out = buf;
-
-	if (size < 100)
-		size += 99;
-	if (size < 100)
-		size = 0;
-
-	while (1) {
-		remain = (int) size & 1023;
-		size >>= 10;
-		u++;
-		if ((size & (~0 ^ 1023)) == 0)
-			break;
-	}
-
-	remain /= 100;
-	if (remain > 9)
-		remain = 9;
-	if (size > 999) {
-		size   = 0;
-		remain = 9;
-		u++;
-	}
-
-	out   += ltostr(out, size);
-	out[0] = '.';
-	out[1] = remain + '0';
-	out[2] = *u;
-	out[3] = '\0';
-
-	return (out + 3 - buf);
-}
-
-static void http_list_directory_header(buffer *out, connection *con) {
-	BUFFER_APPEND_STRING_CONST(out,
-		"<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1//EN\" \"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd\">\n"
-		"<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\">\n"
-		"<head>\n"
-		"<title>Index of "
-	);
-	buffer_append_string_html_encoded(out, con->uri.path->ptr);
-	BUFFER_APPEND_STRING_CONST(out, "</title>\n");
-
-	if (con->conf.dirlist_css->used > 1) {
-		BUFFER_APPEND_STRING_CONST(out, "<link rel=\"stylesheet\" type=\"text/css\" href=\"");
-		buffer_append_string_buffer(out, con->conf.dirlist_css);
-		BUFFER_APPEND_STRING_CONST(out, "\" />\n");
-	} else {
-		BUFFER_APPEND_STRING_CONST(out,
-			"<style type=\"text/css\">\n"
-			"a, a:active {text-decoration: none; color: blue;}\n"
-			"a:visited {color: #48468F;}\n"
-			"a:hover, a:focus {text-decoration: underline; color: red;}\n"
-			"body {background-color: #F5F5F5;}\n"
-			"h2 {margin-bottom: 12px;}\n"
-			"table {margin-left: 12px;}\n"
-			"th, td {"
-			" font-family: \"Courier New\", Courier, monospace;"
-			" font-size: 10pt;"
-			" text-align: left;"
-			"}\n"
-			"th {"
-			" font-weight: bold;"
-			" padding-right: 14px;"
-			" padding-bottom: 3px;"
-			"}\n"
-		);
-		BUFFER_APPEND_STRING_CONST(out,
-			"td {padding-right: 14px;}\n"
-			"td.s, th.s {text-align: right;}\n"
-			"div.list {"
-			" background-color: white;"
-			" border-top: 1px solid #646464;"
-			" border-bottom: 1px solid #646464;"
-			" padding-top: 10px;"
-			" padding-bottom: 14px;"
-			"}\n"
-			"div.foot {"
-			" font-family: \"Courier New\", Courier, monospace;"
-			" font-size: 10pt;"
-			" color: #787878;"
-			" padding-top: 4px;"
-			"}\n"
-			"</style>\n"
-		);
-	}
-
-	BUFFER_APPEND_STRING_CONST(out, "</head>\n<body>\n<h2>Index of ");
-	buffer_append_string_html_encoded(out, con->uri.path->ptr);
-	BUFFER_APPEND_STRING_CONST(out,
-		"</h2>\n"
-		"<div class=\"list\">\n"
-		"<table cellpadding=\"0\" cellspacing=\"0\">\n"
-		"<thead>"
-		"<tr>"
-			"<th class=\"n\">Name</th>"
-			"<th class=\"m\">Last Modified</th>"
-			"<th class=\"s\">Size</th>"
-			"<th class=\"t\">Type</th>"
-		"</tr>"
-		"</thead>\n"
-		"<tbody>\n"
-		"<tr>"
-			"<td class=\"n\"><a href=\"../\">Parent Directory</a>/</td>"
-			"<td class=\"m\">&nbsp;</td>"
-			"<td class=\"s\">- &nbsp;</td>"
-			"<td class=\"t\">Directory</td>"
-		"</tr>\n"
-	);
-}
-
-static void http_list_directory_footer(buffer *out, connection *con) {
-	BUFFER_APPEND_STRING_CONST(out,
-		"</tbody>\n"
-		"</table>\n"
-		"</div>\n"
-		"<div class=\"foot\">"
-	);
-
-	if (buffer_is_empty(con->conf.server_tag)) {
-		BUFFER_APPEND_STRING_CONST(out, PACKAGE_NAME "/" PACKAGE_VERSION);
-	} else {
-		buffer_append_string_buffer(out, con->conf.server_tag);
-	}
-
-	BUFFER_APPEND_STRING_CONST(out,
-		"</div>\n"
-		"</body>\n"
-		"</html>\n"
-	);
-}
-
-static int http_list_directory(server *srv, connection *con, buffer *dir) {
-	DIR *dp;
-	buffer *out;
-	struct dirent *dent;
-	struct stat st;
-	char *path, *path_file;
-	int i;
-	int hide_dotfiles = con->conf.hide_dotfiles;
-	dirls_list_t dirs, files, *list;
-	dirls_entry_t *tmp;
-	char sizebuf[sizeof("999.9K")];
-	char datebuf[sizeof("2005-Jan-01 22:23:24")];
-	size_t k;
-	const char *content_type;
-#ifdef HAVE_XATTR
-	char attrval[128];
-	int attrlen;
-#endif
-#ifdef HAVE_LOCALTIME_R
-	struct tm tm;
-#endif
-
-	i = dir->used - 1;
-	if (i <= 0) return -1;
-	
-	path = malloc(i + NAME_MAX + 1);
-	assert(path);
-	strcpy(path, dir->ptr);
-	path_file = path + i;
-
-	if (NULL == (dp = opendir(path))) {
-		log_error_write(srv, __FILE__, __LINE__, "sbs", 
-			"opendir failed:", dir, strerror(errno));
-
-		free(path);
-		return -1;
-	}
-
-	dirs.ent   = (dirls_entry_t**) malloc(sizeof(dirls_entry_t*) * DIRLIST_BLOB_SIZE);
-	assert(dirs.ent);
-	dirs.size  = DIRLIST_BLOB_SIZE;
-	dirs.used  = 0;
-	files.ent  = (dirls_entry_t**) malloc(sizeof(dirls_entry_t*) * DIRLIST_BLOB_SIZE);
-	assert(files.ent);
-	files.size = DIRLIST_BLOB_SIZE;
-	files.used = 0;
-
-	while ((dent = readdir(dp)) != NULL) {
-		if (dent->d_name[0] == '.') {
-			if (hide_dotfiles)
-				continue;
-			if (dent->d_name[1] == '\0')
-				continue;
-			if (dent->d_name[1] == '.' && dent->d_name[2] == '\0')
-				continue;
-		}
-
-		/* NOTE: the manual says, d_name is never more than NAME_MAX
-		 *       so this should actually not be a buffer-overflow-risk
-		 */
-		i = strlen(dent->d_name);
-		if (i > NAME_MAX)
-			continue;
-		memcpy(path_file, dent->d_name, i + 1);
-		if (stat(path, &st) != 0)
-			continue;
-
-		list = &files;
-		if (S_ISDIR(st.st_mode))
-			list = &dirs;
-
-		if (list->used == list->size) {
-			list->size += DIRLIST_BLOB_SIZE;
-			list->ent   = (dirls_entry_t**) realloc(list->ent, sizeof(dirls_entry_t*) * list->size);
-			assert(list->ent);
-		}
-
-		tmp = (dirls_entry_t*) malloc(sizeof(dirls_entry_t) + 1 + i);
-		tmp->mtime = st.st_mtime;
-		tmp->size  = st.st_size;
-		tmp->namelen = i;
-		memcpy(DIRLIST_ENT_NAME(tmp), dent->d_name, i + 1);
-
-		list->ent[list->used++] = tmp;
-	}
-	closedir(dp);
-
-	if (dirs.used) http_dirls_sort(dirs.ent, dirs.used);
-
-	if (files.used) http_dirls_sort(files.ent, files.used);
-
-	out = chunkqueue_get_append_buffer(con->write_queue);
-	BUFFER_COPY_STRING_CONST(out, "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n");
-	http_list_directory_header(out, con);
-
-	/* directories */
-	for (i = 0; i < dirs.used; i++) {
-		tmp = dirs.ent[i];
-
-#ifdef HAVE_LOCALTIME_R
-		localtime_r(&(tmp->mtime), &tm);
-		strftime(datebuf, sizeof(datebuf), "%Y-%b-%d %H:%M:%S", &tm);
-#else
-		strftime(datebuf, sizeof(datebuf), "%Y-%b-%d %H:%M:%S", localtime(&(tmp->mtime)));
-#endif
-
-		BUFFER_APPEND_STRING_CONST(out, "<tr><td class=\"n\"><a href=\"");
-		buffer_append_string_url_encoded(out, DIRLIST_ENT_NAME(tmp));
-		BUFFER_APPEND_STRING_CONST(out, "/\">");
-		buffer_append_string_html_encoded(out, DIRLIST_ENT_NAME(tmp));
-		BUFFER_APPEND_STRING_CONST(out, "</a>/</td><td class=\"m\">");
-		buffer_append_string_len(out, datebuf, sizeof(datebuf) - 1);
-		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"s\">- &nbsp;</td><td class=\"t\">Directory</td></tr>\n");
-
-		free(tmp);
-	}
-
-	/* files */
-	for (i = 0; i < files.used; i++) {
-		tmp = files.ent[i];
-
-#ifdef HAVE_XATTR
-		content_type = NULL;
-		if (con->conf.use_xattr) {
-			memcpy(path_file, DIRLIST_ENT_NAME(tmp), tmp->namelen + 1);
-			attrlen = sizeof(attrval) - 1;
-			if (attr_get(path, "Content-Type", attrval, &attrlen, 0) == 0) {
-				attrval[attrlen] = '\0';
-				content_type = attrval;
-			}
-		}
-		if (content_type == NULL) {
-#else
-		if (1) {
-#endif
-			content_type = "application/octet-stream";
-			for (k = 0; k < con->conf.mimetypes->used; k++) {
-				data_string *ds = (data_string *)con->conf.mimetypes->data[k];
-				size_t ct_len;
-
-				if (ds->key->used == 0)
-					continue;
-
-				ct_len = ds->key->used - 1;
-				if (tmp->namelen < ct_len)
-					continue;
-
-				if (0 == strncmp(DIRLIST_ENT_NAME(tmp) + tmp->namelen - ct_len, ds->key->ptr, ct_len)) {
-					content_type = ds->value->ptr;
-					break;
-				}
-			}
-		}
-
-#ifdef HAVE_LOCALTIME_R
-		localtime_r(&(tmp->mtime), &tm);
-		strftime(datebuf, sizeof(datebuf), "%Y-%b-%d %H:%M:%S", &tm);
-#else
-		strftime(datebuf, sizeof(datebuf), "%Y-%b-%d %H:%M:%S", localtime(&(tmp->mtime)));
-#endif
-		http_list_directory_sizefmt(sizebuf, tmp->size);
-
-		BUFFER_APPEND_STRING_CONST(out, "<tr><td class=\"n\"><a href=\"");
-		buffer_append_string_url_encoded(out, DIRLIST_ENT_NAME(tmp));
-		BUFFER_APPEND_STRING_CONST(out, "\">");
-		buffer_append_string_html_encoded(out, DIRLIST_ENT_NAME(tmp));
-		BUFFER_APPEND_STRING_CONST(out, "</a></td><td class=\"m\">");
-		buffer_append_string_len(out, datebuf, sizeof(datebuf) - 1);
-		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"s\">");
-		buffer_append_string(out, sizebuf);
-		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"t\">");
-		buffer_append_string(out, content_type);
-		BUFFER_APPEND_STRING_CONST(out, "</td></tr>\n");
-
-		free(tmp);
-	}
-
-	free(files.ent);
-	free(dirs.ent);
-	free(path);
-
-	http_list_directory_footer(out, con);
-	response_header_insert(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
-	con->file_finished = 1;
-
-	return 0;
-}
-
-
 
 handler_t http_response_prepare(server *srv, connection *con) {
 	handler_t r;
@@ -1054,7 +682,6 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		char *slash = NULL;
 		char *pathinfo = NULL;
 		int found = 0;
-		size_t k;
 		file_cache_entry *fce = NULL;
 		handler_t ret;
 		
@@ -1079,73 +706,6 @@ handler_t http_response_prepare(server *srv, connection *con) {
 					http_response_redirect_to_directory(srv, con);
 					
 					return HANDLER_FINISHED;
-				} else {
-					found = 0;
-					/* indexfile */
-					
-					/* we will replace it anyway, as physical.path will change */
-					file_cache_release_entry(srv, fce);
-					
-					for (k = 0; !found && (k < con->conf.indexfiles->used); k++) {
-						data_string *ds = (data_string *)con->conf.indexfiles->data[k];
-						
-						buffer_copy_string_buffer(srv->tmp_buf, con->physical.path);
-						buffer_append_string_buffer(srv->tmp_buf, ds->value);
-						
-						switch (file_cache_add_entry(srv, con, srv->tmp_buf, &(fce))) {
-						case HANDLER_GO_ON:
-							/* rewrite uri.path to the real path (/ -> /index.php) */
-							buffer_append_string_buffer(con->uri.path, ds->value);
-							
-							found = 1;
-							break;
-						case HANDLER_ERROR:
-							if (errno == EACCES) {
-								con->http_status = 403;
-								buffer_reset(con->physical.path);
-								
-								return HANDLER_FINISHED;
-							}
-							
-							if (errno != ENOENT &&
-							    errno != ENOTDIR) {
-								/* we have no idea what happend. let's tell the user so. */
-								
-								con->http_status = 500;
-								buffer_reset(con->physical.path);
-								
-								log_error_write(srv, __FILE__, __LINE__, "ssbsb",
-										"file not found ... or so: ", strerror(errno),
-										con->uri.path,
-										"->", con->physical.path);
-								
-								return HANDLER_FINISHED;
-							}
-							
-							break;
-						default:
-							break;
-						}
-					}
-					
-					if (!found &&
-					    (k == con->conf.indexfiles->used)) {
-						/* directory listing ? */
-						buffer_reset(srv->tmp_buf);
-
-						if (con->conf.dir_listing == 0) {
-							/* dirlisting disabled */
-							con->http_status = 403;
-						} else if (0 != http_list_directory(srv, con, con->physical.path)) {
-							/* dirlisting failed */
-							con->http_status = 403;
-						}
-						
-						buffer_reset(con->physical.path);
-						
-						return HANDLER_FINISHED;
-					}
-					buffer_copy_string_buffer(con->physical.path, srv->tmp_buf);
 				}
 			}
 		} else {
@@ -1154,6 +714,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 				return HANDLER_WAIT_FOR_FD;
 			case HANDLER_ERROR:
 				/* fce is not set up, no need to reset it */
+				
 				if (errno == EACCES) {
 					con->http_status = 403;
 					buffer_reset(con->physical.path);
@@ -1285,33 +846,43 @@ handler_t http_response_prepare(server *srv, connection *con) {
 			}
 		}
 		
-		if (!S_ISREG(fce->st.st_mode)) {
-			con->http_status = 404;
-			
-			if (con->conf.log_file_not_found) {
-				log_error_write(srv, __FILE__, __LINE__, "sbsb",
-					"not a regular file:", con->uri.path,
-					"->", fce->name);
-			}
-			
-			return HANDLER_FINISHED;
-		}
+		fce = NULL; /* fce might not be valid after plugin call */
 		
 		/* call the handlers */
 		switch(r = plugins_call_handle_subrequest_start(srv, con)) {
-		case HANDLER_FINISHED:
-			/* request was handled */
-			break;
 		case HANDLER_GO_ON:
 			/* request was not handled */
 			break;
+		case HANDLER_FINISHED:
 		default:
 			/* something strange happend */
 			return r;
 		}
 		
+		if (NULL != (fce = file_cache_get_entry(srv, con->physical.path))) {
+			if (!S_ISREG(fce->st.st_mode)) {
+				con->http_status = 404;
+			
+				if (con->conf.log_file_not_found) {
+					log_error_write(srv, __FILE__, __LINE__, "sbsb",
+							"not a regular file:", con->uri.path,
+							"->", fce->name);
+				}
+				
+				return HANDLER_FINISHED;
+			}
+		} else {
+			con->http_status = 403;
+			
+			log_error_write(srv, __FILE__, __LINE__, "sbsb",
+					"not a regular file:", con->uri.path,
+					"->", con->physical.path);
+			
+			return HANDLER_FINISHED;
+		}
+		
 		/* ok, noone has handled the file up to now, so we do the fileserver-stuff */
-		if (r == HANDLER_GO_ON) {
+		if (r == HANDLER_GO_ON && NULL != fce) {
 			/* DIRECT */
 			
 			/* set response content-type */

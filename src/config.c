@@ -42,8 +42,8 @@ static int config_insert(server *srv) {
 		{ "server.max-request-size",     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 12 */
 		{ "server.max-worker",           NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_SERVER },       /* 13 */
 		{ "server.document-root",        NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },  /* 14 */
-		{ "server.dir-listing",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 15 */
-		{ "server.indexfiles",           NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },   /* 16 */
+		{ "ssl.ca-file",                 NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 15 */
+		{ "debug.log-state-handling",    NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 16 */
 		{ "server.max-keep-alive-requests", NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION }, /* 17 */
 		{ "server.name",                 NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },  /* 18 */
 		{ "server.max-keep-alive-idle",  NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 19 */
@@ -68,12 +68,9 @@ static int config_insert(server *srv) {
 		
 		{ "server.protocol-http11",      NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 35 */
 		{ "debug.log-request-header-on-error", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER }, /* 36 */
-		{ "debug.log-state-handling",    NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 37 */
 		
-		{ "ssl.ca-file",                 NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 38 */
 		
-		{ "dir-listing.hide-dotfiles",   NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 39 */
-		{ "dir-listing.external-css",    NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },  /* 40 */
+		
 		
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -83,6 +80,8 @@ static int config_insert(server *srv) {
 		{ "server.userid",               "use server.username instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.groupid",              "use server.groupname instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.use-keep-alive",       "use server.max-keep-alive-requests = 0 instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
+		{ "server.dir-listing",          "load mod_dirlisting and use dir-listing.activate instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION }, /* 15 */
+		{ "server.indexfiles",           "load mod_indexfile and use index-file.extensions instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },
 		
 		{ NULL,                          NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
@@ -104,7 +103,7 @@ static int config_insert(server *srv) {
 	cv[13].destination = &(srv->srvconf.max_worker);
 	cv[23].destination = &(srv->srvconf.max_fds);
 	cv[36].destination = &(srv->srvconf.log_request_header_on_error);
-	cv[37].destination = &(srv->srvconf.log_state_handling);
+	cv[16].destination = &(srv->srvconf.log_state_handling);
 	
 	srv->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 
@@ -116,16 +115,12 @@ static int config_insert(server *srv) {
 		s = calloc(1, sizeof(specific_config));
 		assert(s);
 		s->document_root = buffer_init();
-		s->dir_listing   = 0;
-		s->hide_dotfiles = 1;
-		s->indexfiles    = array_init();
 		s->mimetypes     = array_init();
 		s->server_name   = buffer_init();
 		s->ssl_pemfile   = buffer_init();
 		s->ssl_ca_file   = buffer_init();
 		s->error_handler = buffer_init();
 		s->server_tag    = buffer_init();
-		s->dirlist_css   = buffer_init();
 		s->max_keep_alive_requests = 128;
 		s->max_keep_alive_idle = 30;
 		s->max_read_idle = 60;
@@ -147,8 +142,7 @@ static int config_insert(server *srv) {
 		cv[12].destination = &(s->max_request_size);
 		/* 13 max-worker */
 		cv[14].destination = s->document_root;
-		cv[15].destination = &(s->dir_listing);
-		cv[16].destination = s->indexfiles;
+		cv[15].destination = s->ssl_ca_file;
 		cv[17].destination = &(s->max_keep_alive_requests);
 		cv[18].destination = s->server_name;
 		cv[19].destination = &(s->max_keep_alive_idle);
@@ -170,9 +164,7 @@ static int config_insert(server *srv) {
 		cv[34].destination = &(s->log_request_header);
 		
 		cv[35].destination = &(s->allow_http11);
-		cv[38].destination = s->ssl_ca_file;
-		cv[39].destination = &(s->hide_dotfiles);
-		cv[40].destination = s->dirlist_css;
+		
 		
 		srv->config_storage[i] = s;
 	
@@ -193,10 +185,6 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(allow_http11);
 	PATCH(mimetypes);
 	PATCH(document_root);
-	PATCH(dir_listing);
-	PATCH(dirlist_css);
-	PATCH(hide_dotfiles);
-	PATCH(indexfiles);
 	PATCH(max_keep_alive_requests);
 	PATCH(max_keep_alive_idle);
 	PATCH(max_read_idle);
@@ -239,16 +227,8 @@ int config_patch_connection(server *srv, connection *con, const char *stage, siz
 			
 			if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.document-root"))) {
 				PATCH(document_root);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.dir-listing"))) {
-				PATCH(dir_listing);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("dir-listing.hide-dotfiles"))) {
-				PATCH(hide_dotfiles);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("dir-listing.external-css"))) {
-				PATCH(dirlist_css);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.error-handler-404"))) {
 				PATCH(error_handler);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.indexfiles"))) {
-				PATCH(indexfiles);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("mimetype.assign"))) {
 				PATCH(mimetypes);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.max-keep-alive-requests"))) {

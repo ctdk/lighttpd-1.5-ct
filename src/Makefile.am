@@ -81,6 +81,21 @@ mod_cgi_la_SOURCES = mod_cgi.c
 mod_cgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_cgi_la_LIBADD = $(common_libadd)
 
+lib_LTLIBRARIES += mod_dirlisting.la
+mod_dirlisting_la_SOURCES = mod_dirlisting.c 
+mod_dirlisting_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_dirlisting_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_trigger_b4_dl.la
+mod_trigger_b4_dl_la_SOURCES = mod_trigger_b4_dl.c 
+mod_trigger_b4_dl_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_trigger_b4_dl_la_LIBADD = $(common_libadd) -lgdbm
+
+lib_LTLIBRARIES += mod_indexfile.la
+mod_indexfile_la_SOURCES = mod_indexfile.c 
+mod_indexfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_indexfile_la_LIBADD = $(common_libadd)
+
 lib_LTLIBRARIES += mod_setenv.la
 mod_setenv_la_SOURCES = mod_setenv.c 
 mod_setenv_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined

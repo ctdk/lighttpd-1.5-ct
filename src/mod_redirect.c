@@ -9,9 +9,7 @@
 #include "plugin.h"
 #include "response.h"
 
-#ifdef HAVE_CONFIG_H
 #include "config.h"
-#endif
 
 typedef struct {
 	pcre_keyvalue_buffer *redirect;

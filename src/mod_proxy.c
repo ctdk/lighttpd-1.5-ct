@@ -23,6 +23,7 @@
 #include "plugin.h"
 
 #include "inet_ntop_cache.h"
+#include "network.h"
 
 #include <stdio.h>
 
@@ -81,8 +82,9 @@ typedef struct {
 	buffer *response;
 	buffer *response_header;
 	
-	buffer *write_buffer;
-	size_t  write_offset;
+	ssize_t post_data_fetched;
+	
+	chunkqueue *write_queue;
 	
 	file_descr *fd; /* fd to the proxy process */
 
@@ -108,7 +110,7 @@ static handler_ctx * handler_ctx_init() {
 	hctx->response = buffer_init();
 	hctx->response_header = buffer_init();
 
-	hctx->write_buffer = buffer_init();
+	hctx->write_queue = chunkqueue_init();
 
 	hctx->fd = file_descr_init();
 	
@@ -118,7 +120,7 @@ static handler_ctx * handler_ctx_init() {
 static void handler_ctx_free(handler_ctx *hctx) {
 	buffer_free(hctx->response);
 	buffer_free(hctx->response_header);
-	buffer_free(hctx->write_buffer);
+	chunkqueue_free(hctx->write_queue);
 
 	file_descr_free(hctx->fd);
 	
@@ -376,18 +378,20 @@ static int proxy_establish_connection(server *srv, handler_ctx *hctx) {
 
 static int proxy_create_env(server *srv, handler_ctx *hctx) {
 	size_t i;
-	
 	connection *con   = hctx->remote_conn;
-	UNUSED(srv);
 	
 	/* build header */
 	
-	buffer_reset(hctx->write_buffer);
+	/* we might be called after the POST_DATA came in 
+	 */
+	buffer *write_buffer = chunkqueue_get_prepend_buffer(hctx->write_queue);
+	
+	UNUSED(srv);
 	
 	/* request line */
-	buffer_copy_string_buffer(hctx->write_buffer, con->request.http_method_name);
-	buffer_append_string_buffer(hctx->write_buffer, con->request.uri);
-	BUFFER_APPEND_STRING_CONST(hctx->write_buffer, " HTTP/1.0\r\n");
+	buffer_copy_string_buffer(write_buffer, con->request.http_method_name);
+	buffer_append_string_buffer(write_buffer, con->request.uri);
+	BUFFER_APPEND_STRING_CONST(write_buffer, " HTTP/1.0\r\n");
 	
 	/* request header */
 	for (i = 0; i < con->request.headers->used; i++) {
@@ -398,29 +402,20 @@ static int proxy_create_env(server *srv, handler_ctx *hctx) {
 		if (ds->value->used && ds->key->used) {
 			if (0 == strcmp(ds->key->ptr, "Connection")) continue;
 			
-			buffer_append_string_buffer(hctx->write_buffer, ds->key);
-			BUFFER_APPEND_STRING_CONST(hctx->write_buffer, ": ");
-			buffer_append_string_buffer(hctx->write_buffer, ds->value);
-			BUFFER_APPEND_STRING_CONST(hctx->write_buffer, "\r\n");
+			buffer_append_string_buffer(write_buffer, ds->key);
+			BUFFER_APPEND_STRING_CONST(write_buffer, ": ");
+			buffer_append_string_buffer(write_buffer, ds->value);
+			BUFFER_APPEND_STRING_CONST(write_buffer, "\r\n");
 		}
 	}
 	
-	BUFFER_APPEND_STRING_CONST(hctx->write_buffer, "X-Forwarded-For: ");
-	buffer_append_string(hctx->write_buffer, inet_ntop_cache_get_ip(srv, &(con->dst_addr)));
-	BUFFER_APPEND_STRING_CONST(hctx->write_buffer, "\r\n");
+	BUFFER_APPEND_STRING_CONST(write_buffer, "X-Forwarded-For: ");
+	buffer_append_string(write_buffer, inet_ntop_cache_get_ip(srv, &(con->dst_addr)));
+	BUFFER_APPEND_STRING_CONST(write_buffer, "\r\n");
 	
-	BUFFER_APPEND_STRING_CONST(hctx->write_buffer, "\r\n");
+	BUFFER_APPEND_STRING_CONST(write_buffer, "\r\n");
 	
 	/* body */
-	
-	/* FIXME: streaming interface */
-	if (con->request.http_method_id == HTTP_METHOD_POST &&
-	    con->request.content_length) {
-		/* the buffer-string functions add an extra \0 at the end the memory-function don't */
-		hctx->write_buffer->used--;
-		buffer_append_memory(hctx->write_buffer, con->request.content->ptr, con->request.content_length);
-	}
-	
 	return 0;
 }
 
@@ -697,29 +692,10 @@ static int proxy_write_request(server *srv, handler_ctx *hctx) {
 		proxy_create_env(srv, hctx);
 		
 		proxy_set_state(srv, hctx, PROXY_STATE_WRITE);
-		hctx->write_offset = 0;
 		
 		/* fall through */
 	case PROXY_STATE_WRITE:
 		/* continue with the code after the switch */
-		if (-1 == (r = write(hctx->fd->fd, 
-				     hctx->write_buffer->ptr + hctx->write_offset, 
-				     hctx->write_buffer->used - hctx->write_offset))) {
-			if (errno != EAGAIN) {
-				log_error_write(srv, __FILE__, __LINE__, "ssd", "write failed:", strerror(errno), r);
-				
-				return -1;
-			} else {
-				return 0;
-			}
-		}
-		
-		hctx->write_offset += r;
-		
-		if (hctx->write_offset == hctx->write_buffer->used) {
-			proxy_set_state(srv, hctx, PROXY_STATE_READ);
-		}
-		
 		break;
 	case PROXY_STATE_READ:
 		/* waiting for a response */
@@ -886,14 +862,40 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	}
 	
 	if (revents & FDEVENT_OUT) {
-		if (hctx->state == PROXY_STATE_CONNECT ||
-		    hctx->state == PROXY_STATE_WRITE) {
+		if (hctx->state == PROXY_STATE_CONNECT) {
 			/* we are allowed to send something out
 			 * 
 			 * 1. in a unfinished connect() call
 			 * 2. in a unfinished write() call (long POST request)
 			 */
 			return mod_proxy_handle_subrequest(srv, con, p);
+		} else if (hctx->state == PROXY_STATE_WRITE) {
+			network_t ret;
+			switch(ret = network_write_chunkqueue(srv, hctx->fd, hctx->write_queue)) {
+			case NETWORK_QUEUE_EMPTY:
+				if (con->request.content_finished) {
+					/* wait for input */
+					proxy_set_state(srv, hctx, PROXY_STATE_READ);
+				}
+				break;
+			case NETWORK_OK:
+				/* not finished yet, queue not empty yet, wait for event */
+				break;
+			case NETWORK_ERROR: /* error on our side */
+				log_error_write(srv, __FILE__, __LINE__, "sds",
+						"connection closed: write failed on fd", hctx->fd->fd, strerror(errno));
+				connection_set_state(srv, con, CON_STATE_ERROR);
+				joblist_append(srv, con);
+				break;
+			case NETWORK_REMOTE_CLOSE: /* remote close */
+				connection_set_state(srv, con, CON_STATE_ERROR);
+				joblist_append(srv, con);
+				break;
+			default:
+				log_error_write(srv, __FILE__, __LINE__, "sd",
+						"unknown code:", ret);
+				break;
+			}
 		} else {
 			log_error_write(srv, __FILE__, __LINE__, "sd", "proxy: out", hctx->state);
 		}
@@ -1086,6 +1088,49 @@ static handler_t mod_proxy_connection_close_callback(server *srv, connection *co
 	return proxy_connection_close(srv, con->plugin_ctx[p->id]);
 }
 
+
+SUBREQUEST_FUNC(mod_proxy_fetch_post_data) {
+	plugin_data *p = p_d;
+	handler_ctx *hctx = con->plugin_ctx[p->id];
+	chunkqueue *cq;
+	chunk *c;
+	
+	if (con->mode != p->id) return HANDLER_GO_ON;
+	if (NULL == hctx) return HANDLER_GO_ON;
+
+#if 0
+	fprintf(stderr, "%s.%d: fetching data: %d / %d\n", __FILE__, __LINE__, hctx->post_data_fetched, con->request.content_length);
+#endif
+	cq = con->read_queue;
+
+	for (c = cq->first; c && (hctx->post_data_fetched != con->request.content_length); c = cq->first) {
+		off_t weWant, weHave, toRead;
+			
+		weWant = con->request.content_length - hctx->post_data_fetched;
+		/* without the terminating \0 */
+			
+		weHave = c->data.mem->used - c->offset - 1;
+				
+		toRead = weHave > weWant ? weWant : weHave;
+			
+		chunkqueue_append_mem(hctx->write_queue, c->data.mem->ptr + c->offset, toRead + 1);
+			
+		c->offset += toRead;
+		hctx->post_data_fetched += toRead;
+		
+		chunkqueue_remove_empty_chunks(cq);
+	}
+		
+	/* Content is ready */
+	if (hctx->post_data_fetched == con->request.content_length) {
+		con->request.content_finished = 1;
+	}
+
+	return HANDLER_FINISHED;
+}
+
+
+
 int mod_proxy_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name         = buffer_init_string("proxy");
@@ -1098,6 +1143,8 @@ int mod_proxy_plugin_init(plugin *p) {
 	p->handle_uri_clean        = mod_proxy_check_extension;
 	p->handle_subrequest       = mod_proxy_handle_subrequest;
 	p->handle_joblist          = mod_proxy_handle_joblist;
+	p->handle_fetch_post_data  = mod_proxy_fetch_post_data;
+	
 	
 	p->data         = NULL;
 	

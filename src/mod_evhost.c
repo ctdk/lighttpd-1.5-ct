@@ -45,10 +45,13 @@ FREE_FUNC(mod_evhost_free) {
 		size_t i;
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
+
+			if (!s) continue;
 			
 			if(s->path_pieces) {
-				for (i = 0; i < s->len; i++) {
-					buffer_free(s->path_pieces[i]);
+				size_t j;
+				for (j = 0; j < s->len; j++) {
+					buffer_free(s->path_pieces[j]);
 				}
 				
 				free(s->path_pieces);

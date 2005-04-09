@@ -14,19 +14,6 @@
 
 #include "config.h"
 
-/**
- * this is a indexfile for a lighttpd plugin
- * 
- * just replaces every occurance of 'indexfile' by your plugin name
- * 
- * e.g. in vim:
- * 
- *   :%s/indexfile/myhandler/
- * 
- */
-
-
-
 /* plugin config for all request/connections */
 
 typedef struct {

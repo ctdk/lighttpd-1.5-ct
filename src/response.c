@@ -126,6 +126,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		char *qstr;
 		
 		config_patch_connection(srv, con, CONST_STR_LEN("SERVERsocket")); /* SERVERsocket */
+		config_patch_connection(srv, con, CONST_STR_LEN("HTTPremoteip")); /* Client-IP */
 		
 		/**
 		 * prepare strings

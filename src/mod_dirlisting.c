@@ -511,7 +511,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 				if (tmp->namelen < ct_len)
 					continue;
 
-				if (0 == strncmp(DIRLIST_ENT_NAME(tmp) + tmp->namelen - ct_len, ds->key->ptr, ct_len)) {
+				if (0 == strncasecmp(DIRLIST_ENT_NAME(tmp) + tmp->namelen - ct_len, ds->key->ptr, ct_len)) {
 					content_type = ds->value->ptr;
 					break;
 				}

@@ -304,7 +304,7 @@ handler_t file_cache_add_entry(server *srv, connection *con, buffer *name, file_
 			
 			if (s_len < ct_len) continue;
 			
-			if (0 == strncmp(name->ptr + s_len - ct_len, ds->key->ptr, ct_len)) {
+			if (0 == strncasecmp(name->ptr + s_len - ct_len, ds->key->ptr, ct_len)) {
 				buffer_copy_string_buffer(fce->content_type, ds->value);
 				break;
 			}

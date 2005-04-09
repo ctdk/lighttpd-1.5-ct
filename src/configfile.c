@@ -810,8 +810,10 @@ int config_set_defaults(server *srv) {
 	} 
 	
 	if (-1 == stat(s->document_root->ptr, &st1)) {
-		log_error_write(srv, __FILE__, __LINE__, "s", 
-				"based docroot doesn't exist");
+		log_error_write(srv, __FILE__, __LINE__, "sbs", 
+				"default docroot doesn't exist", 
+				s->document_root,
+				strerror(errno));
 		
 		return -1;
 	}

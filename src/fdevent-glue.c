@@ -62,12 +62,18 @@ int fdevent_event_add(fdevents *ev, file_descr *fd, int events) {
 }
 
 int fdevent_fcntl_set(fdevents *ev, file_descr *fd) {
+#if defined __WIN32
+	u_long i;
+#endif
 #ifdef FD_CLOEXEC
 	/* close fd on exec (cgi) */
 	fcntl(fd->fd, F_SETFD, FD_CLOEXEC);
 #endif
 	if (ev->fcntl_set) return ev->fcntl_set(ev, fd->fd);
-#ifdef O_NONBLOCK	
+#if defined __WIN32
+	i = 1;
+	return ioctlsocket(fd->fd, FIONBIO, &i);
+#elif defined O_NONBLOCK
 	return fcntl(fd->fd, F_SETFL, O_NONBLOCK | O_RDWR);
 #else
 	return 0;

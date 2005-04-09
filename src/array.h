@@ -76,12 +76,11 @@ typedef struct {
 	
 	config_cond_t cond;
 	
-	union {
-		buffer *string;
+	buffer *string;
 #ifdef HAVE_PCRE_H
-		pcre   *regex;
+	pcre   *regex;
+	pcre_extra *regex_study;
 #endif
-	} match;
 } data_config;
 
 data_config *data_config_init(void);

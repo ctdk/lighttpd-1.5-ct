@@ -186,7 +186,7 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			switch(dc->cond) {
 			case CONFIG_COND_NE:
 			case CONFIG_COND_EQ:
-				ck_colon = strchr(dc->match.string->ptr, ':');
+				ck_colon = strchr(dc->string->ptr, ':');
 				val_colon = strchr(con->uri.authority->ptr, ':');
 				
 				if (ck_colon && !val_colon) {
@@ -213,14 +213,14 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 		if ((dc->cond == CONFIG_COND_EQ ||
 		     dc->cond == CONFIG_COND_EQ) &&
 		    (con->dst_addr.plain.sa_family == AF_INET) &&
-		    (NULL != (nm_slash = strchr(dc->match.string->ptr, '/')))) {
+		    (NULL != (nm_slash = strchr(dc->string->ptr, '/')))) {
 			int nm_bits;
 			long nm;
 			char *err;
 			struct in_addr val_inp;
 			
 			if (*(nm_slash+1) == '\0') {
-				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: no number after / ", dc->match.string);
+				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: no number after / ", dc->string);
 					
 				return 0;
 			}
@@ -228,13 +228,13 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			nm_bits = strtol(nm_slash + 1, &err, 10);
 			
 			if (*err) {
-				log_error_write(srv, __FILE__, __LINE__, "sbs", "ERROR: non-digit found in netmask:", dc->match.string, *err);
+				log_error_write(srv, __FILE__, __LINE__, "sbs", "ERROR: non-digit found in netmask:", dc->string, *err);
 				
 				return 0;
 			}
 			
 			/* take IP convert to the native */
-			buffer_copy_string_len(srv->cond_check_buf, dc->match.string->ptr, nm_slash - dc->match.string->ptr);
+			buffer_copy_string_len(srv->cond_check_buf, dc->string->ptr, nm_slash - dc->string->ptr);
 #ifdef __WIN32			
 			if (INADDR_NONE == (val_inp.s_addr = inet_addr(srv->cond_check_buf->ptr))) {
 				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: ip addr is invalid:", srv->cond_check_buf);
@@ -302,7 +302,7 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 	switch(dc->cond) {
 	case CONFIG_COND_NE:
 	case CONFIG_COND_EQ:
-		if (buffer_is_equal(l, dc->match.string)) {
+		if (buffer_is_equal(l, dc->string)) {
 			return (dc->cond == CONFIG_COND_EQ) ? 1 : 0;
 		} else {
 			return (dc->cond == CONFIG_COND_EQ) ? 0 : 1;
@@ -316,7 +316,7 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 		int ovec[N * 3];
 		int n;
 		
-		n = pcre_exec(dc->match.regex, NULL, l->ptr, l->used - 1, 0, 0, ovec, N * 3);
+		n = pcre_exec(dc->regex, dc->regex_study, l->ptr, l->used - 1, 0, 0, ovec, N * 3);
 		
 		if (n > 0) {
 			return (dc->cond == CONFIG_COND_MATCH) ? 1 : 0;

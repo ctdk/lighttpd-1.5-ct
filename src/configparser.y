@@ -136,7 +136,7 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET STRING(C) RBRACKET cond(E) STRING(D). 
     switch(E) {
     case CONFIG_COND_NE:
     case CONFIG_COND_EQ:
-      dc->match.string = buffer_init_string(D->ptr);
+      dc->string = buffer_init_string(D->ptr);
       break;
 #ifdef HAVE_PCRE_H
     case CONFIG_COND_NOMATCH:
@@ -144,10 +144,20 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET STRING(C) RBRACKET cond(E) STRING(D). 
       const char *errptr;
       int erroff;
       
-      if (NULL == (dc->match.regex = 
+      if (NULL == (dc->regex = 
           pcre_compile(D->ptr, 0, &errptr, &erroff, NULL))) {
-	dc->match.string = buffer_init_string(errptr);
+	dc->string = buffer_init_string(errptr);
 	dc->cond = CONFIG_COND_UNSET;
+	
+	fprintf(stderr, "parsing regex failed: %s -> %s at offset %d\n", 
+          D->ptr, errptr, erroff);
+	
+	ctx->ok = 0;
+      } else if (NULL == (dc->regex_study = pcre_study(dc->regex, 0, &errptr)) &&  
+                 errptr != NULL) {
+        fprintf(stderr, "studying regex failed: %s -> %s\n", 
+          D->ptr, errptr);
+	ctx->ok = 0;
       }
       break;
     }

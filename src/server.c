@@ -563,9 +563,13 @@ int main (int argc, char **argv) {
 			setgid(grp->gr_gid);
 			setgroups(0, NULL);
 		}
-		if (srv->srvconf.username->used && srv->srvconf.groupname->used)
-			initgroups(srv->srvconf.username->ptr, grp->gr_gid);
-		if (srv->srvconf.username->used) setuid(pwd->pw_uid);
+		
+		if (srv->srvconf.username->used) {
+			if (srv->srvconf.groupname->used) {
+				initgroups(srv->srvconf.username->ptr, grp->gr_gid);
+			}
+			setuid(pwd->pw_uid);
+		}
 #endif
 	} else {
 #ifdef HAVE_GETRLIMIT
@@ -980,7 +984,6 @@ int main (int argc, char **argv) {
 
 		for (ndx = 0; ndx < srv->joblist->used; ndx++) {
 			connection *con = srv->joblist->ptr[ndx];
-			handler_t r;
 
 			connection_state_machine(srv, con);
 			

@@ -138,9 +138,9 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET STRING(C) RBRACKET cond(E) STRING(D). 
     case CONFIG_COND_EQ:
       dc->string = buffer_init_string(D->ptr);
       break;
-#ifdef HAVE_PCRE_H
     case CONFIG_COND_NOMATCH:
     case CONFIG_COND_MATCH: {
+#ifdef HAVE_PCRE_H
       const char *errptr;
       int erroff;
       
@@ -159,10 +159,19 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET STRING(C) RBRACKET cond(E) STRING(D). 
           D->ptr, errptr);
 	ctx->ok = 0;
       }
+#else
+      fprintf(stderr, "regex conditionals are not allowed as pcre-support" \
+                      "is missing: $%s[%s]\n", 
+                      B->ptr, C->ptr);
+      ctx->ok = 0;
+#endif
       break;
     }
-#endif
+
     default:
+      fprintf(stderr, "unknown condition for $%s[%s]\n", 
+                      B->ptr, C->ptr);
+      ctx->ok = 0;
       break;
     }
     

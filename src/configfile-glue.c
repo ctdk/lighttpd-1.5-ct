@@ -323,9 +323,6 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 		} else {
 			return (dc->cond == CONFIG_COND_MATCH) ? 0 : 1;
 		}
-#else
-		log_error_write(srv, __FILE__, __LINE__, "s", "ERROR: using a condition like =~ or !~ but not compiled with pcre support");
-		return 0;
 #endif		
 		break;
 	}

@@ -518,7 +518,9 @@ SETDEFAULTS_FUNC(log_access_open) {
 			
 			return HANDLER_ERROR;
 		}
+#ifdef FD_CLOEXEC
 		fcntl(s->log_access_fd, F_SETFD, FD_CLOEXEC);
+#endif
 	
 	}
 	

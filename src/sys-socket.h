@@ -7,9 +7,13 @@
 
 #define ECONNRESET WSAECONNRESET
 #define EINPROGRESS WSAEINPROGRESS
+#define ENOTCONN WSAENOTCONN
 #define EALREADY WSAEALREADY
 #define ioctl ioctlsocket
 #define hstrerror(x) ""
+/* getoptsock on win32 needs a char * for socket_error */
+#define GETSOCKOPT_PARAM4_TYPE (char *)
+
 #else
 #include <sys/socket.h>
 #include <sys/ioctl.h>
@@ -19,6 +23,7 @@
 #include <arpa/inet.h>
 
 #include <netdb.h>
+#define GETSOCKOPT_PARAM4_TYPE 
 #endif
 
 #endif

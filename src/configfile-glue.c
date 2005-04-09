@@ -235,12 +235,20 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			
 			/* take IP convert to the native */
 			buffer_copy_string_len(srv->cond_check_buf, dc->match.string->ptr, nm_slash - dc->match.string->ptr);
-			
+#ifdef __WIN32			
+			if (INADDR_NONE == (val_inp.s_addr = inet_addr(srv->cond_check_buf->ptr))) {
+				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: ip addr is invalid:", srv->cond_check_buf);
+				
+				return 0;
+			}
+
+#else
 			if (0 == inet_aton(srv->cond_check_buf->ptr, &val_inp)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: ip addr is invalid:", srv->cond_check_buf);
 				
 				return 0;
 			}
+#endif
 			
 			/* build netmask */
 			nm = htonl(~((1 << (32 - nm_bits)) - 1));

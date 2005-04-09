@@ -2,6 +2,7 @@
 #include <unistd.h>
 
 #include "file_descr_funcs.h"
+#include "sys-socket.h"
 
 file_descr *file_descr_init() {
 	file_descr *fd;
@@ -25,11 +26,14 @@ void file_descr_free(file_descr *fd) {
 void file_descr_reset(file_descr *fd) {
 	if (!fd) return;
 
+	if (fd->fd != -1) {
 #ifdef __WIN32
-	if (fd->fd) closesocket(fd->fd);
+		if (fd->is_socket) closesocket(fd->fd);
+		else close(fd->fd);
 #else 
-	if (fd->fd) close(fd->fd);
+		close(fd->fd);
 #endif
+	}
 
 	fd->fd = -1;
 	fd->fde_ndx = -1;

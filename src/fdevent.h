@@ -31,6 +31,10 @@
 # endif
 #endif
 
+#ifdef __WIN32
+#define HAVE_SELECT
+#endif
+
 #if defined HAVE_SELECT
 # ifdef __WIN32
 #  include <winsock2.h>

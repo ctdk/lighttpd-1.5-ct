@@ -584,7 +584,9 @@ FREE_FUNC(mod_fastcgi_free) {
 					host = ex->hosts[n];
 					
 					for (proc = host->first; proc; proc = proc->next) {
+#ifdef HAVE_KILL
 						if (proc->pid != 0) kill(proc->pid, SIGTERM);
+#endif
 						
 						if (proc->is_local && 
 						    !buffer_is_empty(proc->socket)) {
@@ -593,7 +595,9 @@ FREE_FUNC(mod_fastcgi_free) {
 					}
 					
 					for (proc = host->unused_procs; proc; proc = proc->next) {
+#ifdef HAVE_KILL
 						if (proc->pid != 0) kill(proc->pid, SIGTERM);
+#endif
 						
 						if (proc->is_local && 
 						    !buffer_is_empty(proc->socket)) {
@@ -747,7 +751,7 @@ static int fcgi_spawn_connection(server *srv,
 		}
 		
 		val = 1;
-		if (setsockopt(fcgi_fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
+		if (setsockopt(fcgi_fd, SOL_SOCKET, SO_REUSEADDR, GETSOCKOPT_PARAM4_TYPE &val, sizeof(val)) < 0) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", 
 					"socketsockopt failed:", strerror(errno));
 			return -1;
@@ -1444,6 +1448,16 @@ static int fcgi_establish_connection(server *srv, handler_ctx *hctx) {
 #endif
 	} else {
 		fcgi_addr_in.sin_family = AF_INET;
+#ifdef __WIN32
+		if (INADDR_NONE == (fcgi_addr_in.sin_addr.s_addr = inet_addr(host->host->ptr))) {
+			log_error_write(srv, __FILE__, __LINE__, "sbs", 
+					"converting IP-adress failed for", host->host, 
+					"\nBe sure to specify an IP address here");
+			
+			return -1;
+
+		}
+#else
 		if (0 == inet_aton(host->host->ptr, &(fcgi_addr_in.sin_addr))) {
 			log_error_write(srv, __FILE__, __LINE__, "sbs", 
 					"converting IP-adress failed for", host->host, 
@@ -1451,6 +1465,7 @@ static int fcgi_establish_connection(server *srv, handler_ctx *hctx) {
 			
 			return -1;
 		}
+#endif
 		fcgi_addr_in.sin_port = htons(proc->port);
 		servlen = sizeof(fcgi_addr_in);
 		
@@ -1915,7 +1930,11 @@ static int fcgi_response_parse(server *srv, connection *con, plugin_data *p, buf
 static int fcgi_demux_response(server *srv, handler_ctx *hctx) {
 	ssize_t len;
 	int fin = 0;
+#ifdef __WIN32
+	u_long b;
+#else
 	int b;
+#endif
 	ssize_t r;
 	
 	plugin_data *p    = hctx->plugin_data;
@@ -2339,9 +2358,11 @@ static int fcgi_restart_dead_procs(server *srv, plugin_data *p, fcgi_extension_h
 						host->unixsocket);
 			}
 		} else {
+#ifdef HAVE_FORK
 			/* the child should not terminate at all */
 			int status;
-			
+			/* without fork() no waitpid */	
+
 			if (proc->state == PROC_STATE_DIED_WAIT_FOR_PID) {
 				switch(waitpid(proc->pid, &status, WNOHANG)) {
 				case 0:
@@ -2387,6 +2408,7 @@ static int fcgi_restart_dead_procs(server *srv, plugin_data *p, fcgi_extension_h
 				
 				fcgi_proclist_sort_down(srv, host, proc);
 			}
+#endif
 		}
 	}
 	
@@ -2482,7 +2504,7 @@ static handler_t fcgi_write_request(server *srv, handler_ctx *hctx) {
 			fdevent_event_del(srv->ev, hctx->fd);
 			
 			/* try to finish the connect() */
-			if (0 != getsockopt(hctx->fd->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
+			if (0 != getsockopt(hctx->fd->fd, SOL_SOCKET, SO_ERROR,GETSOCKOPT_PARAM4_TYPE &socket_error, &socket_error_len)) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", 
 						"getsockopt failed:", strerror(errno));
 				
@@ -2709,6 +2731,7 @@ static handler_t fcgi_handle_fdevent(void *s, void *ctx, int revents) {
 			
 			return HANDLER_FINISHED;
 		case -1:
+#ifdef HAVE_FORK
 			if (proc->pid && proc->state != PROC_STATE_DIED) {
 				int status;
 				
@@ -2746,7 +2769,7 @@ static handler_t fcgi_handle_fdevent(void *s, void *ctx, int revents) {
 					break;
 				}
 			}
-
+#endif
 			if (con->file_started == 0) {
 				/* nothing has been send out yet, try to use another child */
 				
@@ -2840,10 +2863,11 @@ static handler_t fcgi_handle_fdevent(void *s, void *ctx, int revents) {
 					 */ 
 					if (hctx->fd->bytes_written == 0 &&
 					    hctx->reconnects < 5) {
+#ifdef HAVE_USLEEP
 						usleep(10000); /* take away the load of the webserver 
 								* to let the php a chance to restart 
 								*/
-						
+#endif						
 						fcgi_reconnect(srv, hctx);
 						
 						return HANDLER_WAIT_FOR_FD;
@@ -3148,7 +3172,7 @@ TRIGGER_FUNC(mod_fastcgi_handle_trigger) {
 	 */
 
 	/* check all childs if they are still up */
-
+#ifdef HAVE_FORK
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *conf;
 		fcgi_exts *exts;
@@ -3320,7 +3344,7 @@ TRIGGER_FUNC(mod_fastcgi_handle_trigger) {
 			}
 		}
 	}
-
+#endif
 	return HANDLER_GO_ON;
 }
 

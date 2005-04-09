@@ -69,18 +69,26 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 
 	switch (sig) {
 	case SIGTERM: srv_shutdown = 1; break;
+#ifdef  SIGALRM
+	/* mingw only provides SIGTERM and a few others */
+
 	case SIGALRM: handle_sig_alarm = 1; break;
 	case SIGHUP:  handle_sig_hup = 1; break;
 	case SIGCHLD: break;
+#endif
 	}
 }
 #elif defined(HAVE_SIGNAL) || defined(HAVE_SIGACTION)
 static void signal_handler(int sig) {
 	switch (sig) {
 	case SIGTERM: srv_shutdown = 1; break;
+#ifdef  SIGALRM
+	/* mingw only provides SIGTERM and a few others */
+
 	case SIGALRM: handle_sig_alarm = 1; break;
 	case SIGHUP:  handle_sig_hup = 1; break;
 	case SIGCHLD:  break;
+#endif
 	}
 }
 #endif
@@ -424,7 +432,10 @@ int main (int argc, char **argv) {
 		
 		return -1;
 	}
-	
+#ifdef __WIN32
+#define S_IRGRP 0
+#define S_IROTH 0
+#endif	
 	/* open pid file BEFORE chroot */
 	if (srv->srvconf.pid_file->used) {
 		if (-1 == (pid_fd = open(srv->srvconf.pid_file->ptr, O_WRONLY | O_CREAT | O_EXCL | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH))) {
@@ -685,13 +696,15 @@ int main (int argc, char **argv) {
 	sigaction(SIGCHLD, &act, NULL);
 	
 #elif defined(HAVE_SIGNAL)
+#ifdef SIGALRM
 	/* ignore the SIGPIPE from sendfile() */
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGUSR1, SIG_IGN);
 	signal(SIGALRM, signal_handler);
-	signal(SIGTERM, signal_handler);
 	signal(SIGHUP,  signal_handler);
 	signal(SIGCHLD,  signal_handler);
+#endif
+	signal(SIGTERM, signal_handler);
 #endif
 	
 #ifdef USE_ALARM

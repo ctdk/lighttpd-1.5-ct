@@ -517,7 +517,11 @@ static int proxy_response_parse(server *srv, connection *con, plugin_data *p, bu
 
 static int proxy_demux_response(server *srv, handler_ctx *hctx) {
 	int fin = 0;
+#ifdef __WIN32
+	u_long b;
+#else
 	int b;
+#endif
 	ssize_t r;
 	
 	plugin_data *p    = hctx->plugin_data;
@@ -670,7 +674,7 @@ static handler_t proxy_write_request(server *srv, handler_ctx *hctx) {
 			fdevent_event_del(srv->ev, hctx->fd);
 			
 			/* try to finish the connect() */
-			if (0 != getsockopt(hctx->fd->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
+			if (0 != getsockopt(hctx->fd->fd, SOL_SOCKET, SO_ERROR, GETSOCKOPT_PARAM4_TYPE &socket_error, &socket_error_len)) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", 
 						"getsockopt failed:", strerror(errno));
 				

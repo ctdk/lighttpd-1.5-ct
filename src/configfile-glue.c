@@ -1,3 +1,4 @@
+#include <string.h>
 
 #include "base.h"
 #include "buffer.h"

@@ -356,9 +356,9 @@ static int cgi_demux_response(server *srv, handler_ctx *hctx) {
 		 */
 		if (ioctl(hctx->read_fd->fd, FIONREAD, &b)) {
 			log_error_write(srv, __FILE__, __LINE__, "sd", 
-					"unexpected end-of-file (perhaps the fastcgi process died):",
+					"unexpected end-of-file (perhaps the cgi process died):",
 					hctx->read_fd->fd);
-			return -1;
+			return FDEVENT_HANDLED_ERROR;
 		}
 		
 		buffer_prepare_copy(hctx->response, b);

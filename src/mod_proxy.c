@@ -389,6 +389,7 @@ static int proxy_create_env(server *srv, handler_ctx *hctx) {
 	
 	/* request line */
 	buffer_copy_string_buffer(write_buffer, con->request.http_method_name);
+	BUFFER_APPEND_STRING_CONST(write_buffer, " ");
 	buffer_append_string_buffer(write_buffer, con->request.uri);
 	BUFFER_APPEND_STRING_CONST(write_buffer, " HTTP/1.0\r\n");
 	

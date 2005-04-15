@@ -181,6 +181,7 @@ typedef struct {
 
 typedef struct {
 	buffer *path;
+	buffer *basedir; /* path = "(basedir)(.*)" */
 	
 	buffer *doc_root; /* path = doc_root + rel_path */
 	buffer *rel_path;

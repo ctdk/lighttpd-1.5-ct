@@ -282,6 +282,11 @@ static handler_t mod_evhost_uri_handler(server *srv, connection *con, void *p_d)
 		mod_evhost_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
 	}
 	
+	/* missing even default(global) conf */
+	if (0 == p->conf.len) {
+		return HANDLER_GO_ON;
+	}
+
 	parsed_host = array_init();
 	
 	mod_evhost_parse_host(con, parsed_host);

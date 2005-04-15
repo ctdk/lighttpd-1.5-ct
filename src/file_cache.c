@@ -244,7 +244,7 @@ handler_t file_cache_check_entry(server *srv, file_cache_entry *fce) {
 			srv->cur_fds--;
 		}
 		
-		if (-1 == (fce->fd = open(fce->name->ptr, O_RDONLY | O_LARGEFILE))) {
+		if (-1 == (fce->fd = open(fce->name->ptr, O_RDONLY | O_LARGEFILE | O_BINARY))) {
 			int oerrno = errno;
 			if (errno == EMFILE || errno == EINTR) {
 				return HANDLER_WAIT_FOR_FD;

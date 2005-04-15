@@ -31,6 +31,10 @@
 # include <openssl/ssl.h> 
 #endif
 
+#ifndef O_BINARY
+# define O_BINARY 0
+#endif
+
 #ifndef O_LARGEFILE
 # define O_LARGEFILE 0
 #endif

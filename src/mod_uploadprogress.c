@@ -223,16 +223,16 @@ SETDEFAULTS_FUNC(mod_uploadprogress_set_defaults) {
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_uploadprogress_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
+static int mod_uploadprogress_patch_connection(server *srv, connection *con, plugin_data *p) {
 	size_t i, j;
+	plugin_config *s = p->config_storage[0];
+	
+	PATCH(progress_url);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		plugin_config *s = p->config_storage[i];
-		
-		/* not our stage */
-		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
+		s = p->config_storage[i];
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -246,16 +246,6 @@ static int mod_uploadprogress_patch_connection(server *srv, connection *con, plu
 			}
 		}
 	}
-	
-	return 0;
-}
-
-static int mod_uploadprogress_setup_connection(server *srv, connection *con, plugin_data *p) {
-	plugin_config *s = p->config_storage[0];
-	UNUSED(srv);
-	UNUSED(con);
-		
-	PATCH(progress_url);
 	
 	return 0;
 }
@@ -290,12 +280,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	
-	mod_uploadprogress_setup_connection(srv, con, p);
-	for (i = 0; i < srv->config_patches->used; i++) {
-		buffer *patch = srv->config_patches->ptr[i];
-		
-		mod_uploadprogress_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
-	}
+	mod_uploadprogress_patch_connection(srv, con, p);
 	
 	/* check if this is a POST request */
 	switch(con->request.http_method_id) {

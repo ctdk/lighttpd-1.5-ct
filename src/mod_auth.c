@@ -91,16 +91,32 @@ FREE_FUNC(mod_auth_free) {
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_auth_patch_connection(server *srv, connection *con, mod_auth_plugin_data *p, const char *stage, size_t stage_len) {
+static int mod_auth_patch_connection(server *srv, connection *con, mod_auth_plugin_data *p) {
 	size_t i, j;
+	mod_auth_plugin_config *s = p->config_storage[0];
+
+	PATCH(auth_backend);
+	PATCH(auth_plain_groupfile);
+	PATCH(auth_plain_userfile);
+	PATCH(auth_htdigest_userfile);
+	PATCH(auth_htpasswd_userfile);
+	PATCH(auth_require);
+	PATCH(auth_debug);
+	PATCH(auth_ldap_hostname);
+	PATCH(auth_ldap_basedn);
+	PATCH(auth_ldap_filter);
+	PATCH(auth_ldap_cafile);
+	PATCH(auth_ldap_starttls);
+#ifdef USE_LDAP
+	PATCH(ldap);
+	PATCH(ldap_filter_pre);
+	PATCH(ldap_filter_post);
+#endif
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		mod_auth_plugin_config *s = p->config_storage[i];
-		
-		/* not our stage */
-		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
+		s = p->config_storage[i];
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -144,32 +160,6 @@ static int mod_auth_patch_connection(server *srv, connection *con, mod_auth_plug
 	
 	return 0;
 }
-
-static int mod_auth_setup_connection(server *srv, connection *con, mod_auth_plugin_data *p) {
-	mod_auth_plugin_config *s = p->config_storage[0];
-	UNUSED(srv);
-	UNUSED(con);
-	
-	PATCH(auth_backend);
-	PATCH(auth_plain_groupfile);
-	PATCH(auth_plain_userfile);
-	PATCH(auth_htdigest_userfile);
-	PATCH(auth_htpasswd_userfile);
-	PATCH(auth_require);
-	PATCH(auth_debug);
-	PATCH(auth_ldap_hostname);
-	PATCH(auth_ldap_basedn);
-	PATCH(auth_ldap_filter);
-	PATCH(auth_ldap_cafile);
-	PATCH(auth_ldap_starttls);
-#ifdef USE_LDAP
-	PATCH(ldap);
-	PATCH(ldap_filter_pre);
-	PATCH(ldap_filter_post);
-#endif
-	
-	return 0;
-}
 #undef PATCH
 
 static handler_t mod_auth_uri_handler(server *srv, connection *con, void *p_d) {
@@ -182,12 +172,7 @@ static handler_t mod_auth_uri_handler(server *srv, connection *con, void *p_d) {
 	size_t i;
 	
 	/* select the right config */
-	mod_auth_setup_connection(srv, con, p);
-	for (i = 0; i < srv->config_patches->used; i++) {
-		buffer *patch = srv->config_patches->ptr[i];
-		
-		mod_auth_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
-	}
+	mod_auth_patch_connection(srv, con, p);
 	
 	if (p->conf.auth_require == NULL) return HANDLER_GO_ON;
 	

@@ -33,7 +33,7 @@ common_src=buffer.c errorlog-glue.c \
       file_cache.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
       data_integer.c md5.c data_fastcgi.c \
-      data_config.c bitset.c  configparser.c \
+      data_config.c bitset.c \
       inet_ntop_cache.c \
       connections-glue.c \
       configfile-glue.c \
@@ -44,7 +44,7 @@ common_src=buffer.c errorlog-glue.c \
       network_solaris_sendfilev.c network_openssl.c \
       network_send.c network-glue.c fdevent-glue.c
 
-src = server.c response.c connections.c configfile.c \
+src = server.c response.c connections.c configfile.c configparser.c \
       request.c network.c log.c fdevent.c \
       fdevent_select.c fdevent_linux_rtsig.c \
       fdevent_poll.c fdevent_linux_sysepoll.c \

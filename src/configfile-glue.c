@@ -4,6 +4,7 @@
 #include "buffer.h"
 #include "array.h"
 #include "log.h"
+#include "plugin.h"
 
 /**
  * like all glue code this file contains functions which
@@ -155,21 +156,42 @@ unsigned short sock_addr_get_port(sock_addr *addr) {
 #endif
 }
 
-int config_check_cond(server *srv, connection *con, data_config *dc) {
+static int config_check_cond_cached(server *srv, connection *con, data_config *dc);
+
+static cond_result_t config_check_cond_nocache(server *srv, connection *con, data_config *dc) {
 	server_socket *srv_sock = con->srv_socket;
 	buffer *l;
 	
-	/* pass the rules */
-	
+	/* check parent first */
+	if (dc->parent) {
+		if (con->conf.log_condition_handling) {
+			log_error_write(srv, __FILE__, __LINE__,  "sb", "go parent", dc->parent->string);
+		}
+		if (!config_check_cond_cached(srv, con, dc->parent)) {
+			return COND_RESULT_FALSE;
+		}
+	}
+
+	if (dc->prev) {
+		if (con->conf.log_condition_handling) {
+			log_error_write(srv, __FILE__, __LINE__,  "sb", "go prev", dc->prev->string);
+		}
+		/* make sure prev is checked first */
+		config_check_cond_cached(srv, con, dc->prev);
+		/* one of prev set me to FALSE */
+		if (con->cond_results_cache[dc->context_ndx] == COND_RESULT_FALSE) {
+			return COND_RESULT_FALSE;
+		}
+	}
+
 	/* 
 	 * OPTIMIZE
 	 * 
 	 * - replace all is_equal be simple == to an enum
-	 * - only check each condition once at the start of the request
-	 *   afterwards they will always evaluate in the same way 
-	 *   as they have the same input data
 	 * 
 	 */
+
+	/* pass the rules */
 	
 	buffer_copy_string(srv->cond_check_buf, "");
 	
@@ -223,7 +245,7 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			if (*(nm_slash+1) == '\0') {
 				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: no number after / ", dc->string);
 					
-				return 0;
+				return COND_RESULT_FALSE;
 			}
 			
 			nm_bits = strtol(nm_slash + 1, &err, 10);
@@ -231,7 +253,7 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			if (*err) {
 				log_error_write(srv, __FILE__, __LINE__, "sbs", "ERROR: non-digit found in netmask:", dc->string, *err);
 				
-				return 0;
+				return COND_RESULT_FALSE;
 			}
 			
 			/* take IP convert to the native */
@@ -240,14 +262,14 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			if (INADDR_NONE == (val_inp.s_addr = inet_addr(srv->cond_check_buf->ptr))) {
 				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: ip addr is invalid:", srv->cond_check_buf);
 				
-				return 0;
+				return COND_RESULT_FALSE;
 			}
 
 #else
 			if (0 == inet_aton(srv->cond_check_buf->ptr, &val_inp)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb", "ERROR: ip addr is invalid:", srv->cond_check_buf);
 				
-				return 0;
+				return COND_RESULT_FALSE;
 			}
 #endif
 			
@@ -255,9 +277,9 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			nm = htonl(~((1 << (32 - nm_bits)) - 1));
 			
 			if ((val_inp.s_addr & nm) == (con->dst_addr.ipv4.sin_addr.s_addr & nm)) {
-				return (dc->cond == CONFIG_COND_EQ) ? 1 : 0;
+				return (dc->cond == CONFIG_COND_EQ) ? COND_RESULT_TRUE : COND_RESULT_FALSE;
 			} else {
-				return (dc->cond == CONFIG_COND_EQ) ? 0 : 1;
+				return (dc->cond == CONFIG_COND_EQ) ? COND_RESULT_FALSE : COND_RESULT_TRUE;
 			}
 		} else {
 			const char *s;
@@ -295,18 +317,21 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
 	} else {
-		return 0;
+		return COND_RESULT_FALSE;
 	}
 	
 	l = srv->cond_check_buf;
 	
+	if (con->conf.log_condition_handling) {
+		log_error_write(srv, __FILE__, __LINE__,  "bsbsb", dc->comp_key, "(", l, ") compare to ", dc->string);
+	}
 	switch(dc->cond) {
 	case CONFIG_COND_NE:
 	case CONFIG_COND_EQ:
 		if (buffer_is_equal(l, dc->string)) {
-			return (dc->cond == CONFIG_COND_EQ) ? 1 : 0;
+			return (dc->cond == CONFIG_COND_EQ) ? COND_RESULT_TRUE : COND_RESULT_FALSE;
 		} else {
-			return (dc->cond == CONFIG_COND_EQ) ? 0 : 1;
+			return (dc->cond == CONFIG_COND_EQ) ? COND_RESULT_FALSE : COND_RESULT_TRUE;
 		}
 		break;
 
@@ -320,9 +345,9 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 		n = pcre_exec(dc->regex, dc->regex_study, l->ptr, l->used - 1, 0, 0, ovec, N * 3);
 		
 		if (n > 0) {
-			return (dc->cond == CONFIG_COND_MATCH) ? 1 : 0;
+			return (dc->cond == CONFIG_COND_MATCH) ? COND_RESULT_TRUE : COND_RESULT_FALSE;
 		} else {
-			return (dc->cond == CONFIG_COND_MATCH) ? 0 : 1;
+			return (dc->cond == CONFIG_COND_MATCH) ? COND_RESULT_FALSE : COND_RESULT_TRUE;
 		}
 #endif		
 		break;
@@ -333,6 +358,39 @@ int config_check_cond(server *srv, connection *con, data_config *dc) {
 		break;
 	}
 	
-	return 0;
+	return COND_RESULT_FALSE;
 }
 
+static int config_check_cond_cached(server *srv, connection *con, data_config *dc) {
+	cond_result_t *cache = con->cond_results_cache;
+
+	if (cache[dc->context_ndx] == COND_RESULT_UNSET) {
+		if (COND_RESULT_TRUE == (cache[dc->context_ndx] = config_check_cond_nocache(srv, con, dc))) {
+			if (dc->next) {
+				data_config *c;
+				if (con->conf.log_condition_handling) {
+					log_error_write(srv, __FILE__, __LINE__, "s", "setting remains of chaining to FALSE");
+				}
+				for (c = dc->next; c; c = c->next) {
+					cache[c->context_ndx] = COND_RESULT_FALSE;
+				}
+			}
+		}
+		if (con->conf.log_condition_handling) {
+			log_error_write(srv, __FILE__, __LINE__, "dsd", dc->context_ndx, "(uncached) result:", cache[dc->context_ndx]);
+		}
+	}
+	else {
+		if (con->conf.log_condition_handling) {
+			log_error_write(srv, __FILE__, __LINE__, "dsd", dc->context_ndx, "(cached) result:", cache[dc->context_ndx]);
+		}
+	}
+	return cache[dc->context_ndx];
+}
+
+int config_check_cond(server *srv, connection *con, data_config *dc) {
+	if (con->conf.log_condition_handling) {
+		log_error_write(srv, __FILE__, __LINE__,  "s",  "=== start of condition block ===");
+	}
+	return config_check_cond_cached(srv, con, dc);
+}

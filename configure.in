@@ -82,6 +82,7 @@ AC_FUNC_STRFTIME
 
 dnl Checks for database.
 MYSQL_INCLUDE=""
+MYSQL_LIBS=""
 
 AC_PATH_PROG(MYSQLCONFIG, mysql_config)
 AC_MSG_CHECKING(for MySQL support)
@@ -96,7 +97,7 @@ AC_ARG_WITH(mysql,
     if test \! -x $withval; then
       echo "--with-mysql=path-to-mysql_config"
     fi
-    MYSQL_INCLUDE="`$withval --cflags | sed s/\'//g`"
+    MYSQL_INCLUDE="`$withval --include | sed s/\'//g`"
     MYSQL_LIBS="`$withval --libs | sed s/\'//g`"
 
     AC_MSG_RESULT(yes)

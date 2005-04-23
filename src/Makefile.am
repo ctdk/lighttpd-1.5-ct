@@ -74,6 +74,7 @@ endif
 lib_LTLIBRARIES += mod_mysql_vhost.la
 mod_mysql_vhost_la_SOURCES = mod_mysql_vhost.c
 mod_mysql_vhost_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_mysql_vhost_la_CPPFLAGS = $(MYSQL_INCLUDE)
 mod_mysql_vhost_la_LIBADD = $(MYSQL_LIBS) $(common_libadd)
 
 lib_LTLIBRARIES += mod_cgi.la
@@ -232,7 +233,6 @@ DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 lighttpd_SOURCES = $(src)
 lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB)
 lighttpd_LDFLAGS = -export-dynamic
-lighttpd_CCPFLAGS = $(MYSQL_INCLUDES)
 
 array_SOURCES = array.c buffer.c data_string.c data_count.c
 array_CPPFLAGS= -DDEBUG_ARRAY

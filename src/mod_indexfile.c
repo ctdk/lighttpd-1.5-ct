@@ -133,7 +133,7 @@ static int mod_indexfile_patch_connection(server *srv, connection *con, plugin_d
 
 URIHANDLER_FUNC(mod_indexfile_subrequest) {
 	plugin_data *p = p_d;
-	size_t k, i;
+	size_t k;
 	file_cache_entry *fce = NULL;
 	
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;

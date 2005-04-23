@@ -303,7 +303,6 @@ CONNECTION_FUNC(mod_mysql_vhost_handle_docroot) {
 	unsigned  cols;
 	MYSQL_ROW row;
 	MYSQL_RES *result = NULL;
-	size_t i;
 	struct stat st;
 
 	/* no host specified? */

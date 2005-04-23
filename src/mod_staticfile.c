@@ -369,7 +369,7 @@ static buffer * strftime_cache_get(server *srv, time_t last_mod) {
 
 URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	plugin_data *p = p_d;
-	size_t i, k;
+	size_t k;
 	int s_len;
 	buffer *mtime;
 	file_cache_entry *fce = NULL;

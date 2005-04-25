@@ -21,7 +21,11 @@ Module: core
 Description
 ===========
 
-lighttpd support SSLv2 and SSLv3 if it compiled against openssl.
+lighttpd support SSLv2 and SSLv3. It is using ((http:/www.openssl.org)(openssl))
+to provide this functionality.$a
+
+If you are compiling lighttpd yourself you have to add ``--with-openssl`` 
+to the options of the ``configure``.
 
 Configuration
 -------------
@@ -44,7 +48,14 @@ SSL-servers with one lighttpd: ::
     server.document-root        = "/www/servers/www.example.org/pages/"
   }
 
+If you are using an intermediate certificate please specify it as: ::
+  
+  ssl.ca-file = "/path/to/intermediate.pem"
 
+If you are migrating from Apache and have seperate files for certificate and key,
+cat them together and build you server.pem that way: ::
+
+  $ cat server.crt server.key >> server.pem
 
 
 Self-Signed Certificates

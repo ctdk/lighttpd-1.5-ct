@@ -21,11 +21,13 @@ Module: core
 Description
 ===========
 
-lighttpd support SSLv2 and SSLv3. It is using ((http://www.openssl.org/)(openssl))
+lighttpd support SSLv2 and SSLv3. It is using openssl_
 to provide this functionality.
 
 If you are compiling lighttpd yourself you have to add ``--with-openssl`` 
 to the options of the ``configure``.
+
+.. _openssl: http://www.openssl.org/
 
 Configuration
 -------------

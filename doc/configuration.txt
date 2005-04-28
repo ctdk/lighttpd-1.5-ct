@@ -70,6 +70,12 @@ Most options can be configured conditionally by using the following syntax.
 
   <field> <operator> <value> {
     ...
+    <field> <operator> <value> {
+      ... nesting: match only when parent match
+    }
+  }
+  | <field> <operator> <value> {
+    ... else if
   }
 
 where <field> is one of one of the following:

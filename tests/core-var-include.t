@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 5;
+use Test::More tests => 14;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -10,7 +10,7 @@ my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
 my $testname;
 my @request;
 my @response;
-my $configfile = $srcdir.'/condition.conf';
+my $configfile = $srcdir.'/var-include.conf';
 my $lighttpd_path = $basedir.'/src/lighttpd';
 my $pidfile = '/tmp/lighttpd/lighttpd.pid';
 my $pidoffile = '/tmp/lighttpd/pidof.pid';
@@ -188,40 +188,33 @@ sub handle_http {
     
 ok(start_proc == 0, "Starting lighttpd") or die();
 
-@request  = ( <<EOF
-GET /index.html HTTP/1.0
-Host: www.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => "/match_1" } );
-
 SKIP: {
-    skip "redirect is not working as expected", 3 if handle_http != 0; 
-
-@request  = ( <<EOF
-GET /index.html HTTP/1.0
-Host: test1.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => "/match_2" } );
-ok(handle_http == 0, '2nd child of chaining');
-
-@request  = ( <<EOF
-GET /index.html HTTP/1.0
-Host: test2.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => "/match_3" } );
-ok(handle_http == 0, '3rd child of chaining');
-
-@request  = ( <<EOF
-GET /index.html HTTP/1.0
-Host: test3.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => "/match_5" } );
-ok(handle_http == 0, 'nesting');
-
+	@request  = ( "GET /index.html HTTP/1.0\r\nHost: www.example.org\r\n" );
+	@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => "/redirect" } );
+    skip "redirect is not working as expected", 12 if handle_http != 0; 
+	my $myvar = "good";
+	my $server_name = "test.example.org";
+	my $mystr = "string";
+	$mystr .= "_append";
+	my $tests = {
+		"include"        => "/good_include",
+		"concat"         => "/good_" . "concat",
+		"servername1"    => "/good_" . $server_name,
+		"servername2"    => $server_name . "/good_",
+		"servername3"    => "/good_" . $server_name . "/",
+		"var.myvar"      => "/good_var_myvar" . $myvar,
+		"myvar"          => "/good_myvar" . $myvar,
+		"number1"        => "/good_number" . "1",
+		"number2"        => "1" . "/good_number",
+		"array_append"   => "/good_array_append",
+		"string_append"  => "/good_" . $mystr,
+		"number_append"  => "/good_" . "2"
+	};
+	foreach my $test (keys %{ $tests }) {
+		my $expect = $tests->{$test};
+		@request  = ( "GET /$test HTTP/1.0\r\nHost: $server_name\r\n" );
+		@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => $expect } );
+		ok(handle_http == 0, $test);
+	}
 }
-
 ok(stop_proc == 0, "Stopping lighttpd");

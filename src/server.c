@@ -637,6 +637,11 @@ int main (int argc, char **argv) {
 	for (i = 0; srv->config && i < srv->config->used; i++) {
 		data_unset *du = srv->config->data[i];
 		
+		/* all var.* is known as user defined variable */
+		if (strncmp(du->key->ptr, CONST_STR_LEN("var.")) == 0) {
+			continue;
+		}
+
 		if (NULL == array_get_element(srv->config_touched, du->key->ptr)) {
 			log_error_write(srv, __FILE__, __LINE__, "sbs", 
 					"WARNING: unknown config-key:",

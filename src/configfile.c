@@ -81,7 +81,7 @@ static int config_insert(server *srv) {
 		{ "server.groupid",              "use server.groupname instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.use-keep-alive",       "use server.max-keep-alive-requests = 0 instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.dir-listing",          "load mod_dirlisting and use dir-listing.activate instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION }, /* 15 */
-		{ "server.indexfiles",           "load mod_indexfile and use index-file.extensions instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },
+		{ "server.indexfiles",           "load mod_indexfile and use index-file.names instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },
 		
 		{ NULL,                          NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};

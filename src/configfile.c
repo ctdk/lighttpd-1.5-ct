@@ -470,7 +470,7 @@ static int config_tokenizer(server *srv, tokenizer_t *t, int *token_id, buffer *
 		case '\r':
 			if (t->in_brace == 0) {
 				int done = 0;
-				while (!done) {
+				while (!done && t->offset < t->size) {
 					switch (t->input[t->offset]) {
 					case '\r':
 					case '\n':

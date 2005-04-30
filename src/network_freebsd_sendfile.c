@@ -134,9 +134,9 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 			size_t toSend;
 			file_cache_entry *fce = c->data.file.fce;
 			
-			if (file_cache_check_entry(srv, fce)) {
+			if (HANDLER_GO_ON != file_cache_check_entry(srv, fce)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->data.file.fce->name);
+						strerror(errno), fce->name);
 				return NETWORK_ERROR;
 			}
 			

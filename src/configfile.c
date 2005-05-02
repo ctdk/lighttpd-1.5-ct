@@ -787,7 +787,7 @@ static void context_init(server *srv, config_t *context) {
 }
 
 static void context_free(config_t *context) {
-	int i;
+	size_t i;
 	array *a = context->configs_stack;
 
 	/* don't free elements */
@@ -834,7 +834,7 @@ int config_read(server *srv, const char *fn) {
 	ret = config_parse_file(srv, &context, fn);
 
 	/* remains nothing if parser is ok */
-	assert(!(0 == ret && ctx.ok && 0 == context.configs_stack->used));
+	assert(!(0 == ret && context.ok && 0 != context.configs_stack->used));
 	context_free(&context);
 
 	if (0 != ret) {

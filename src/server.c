@@ -302,6 +302,8 @@ static void show_help (void) {
 " - a light and fast webserver\n" \
 "usage:\n" \
 " -f <name>  filename of the config-file\n" \
+" -p         print the parsed config-file in internal form, and exit\n" \
+" -t         test the config-file, and exit\n" \
 " -D         don't go to background (default: go to background)\n" \
 TEXT_IPV6 \
 " -v         show version\n" \
@@ -315,6 +317,8 @@ TEXT_IPV6 \
 
 int main (int argc, char **argv) {
 	server *srv = NULL;
+	int print_config = 0;
+	int test_config = 0;
 	int i_am_root;
 	int o;
 	int num_childs = 0;
@@ -355,7 +359,7 @@ int main (int argc, char **argv) {
 #endif
 	srv->srvconf.dont_daemonize = 0;
 	
-	while(-1 != (o = getopt(argc, argv, "f:hvD"))) {
+	while(-1 != (o = getopt(argc, argv, "f:hvDpt"))) {
 		switch(o) {
 		case 'f': 
 			if (config_read(srv, optarg)) { 
@@ -363,6 +367,8 @@ int main (int argc, char **argv) {
 				return -1;
 			}
 			break;
+		case 'p': print_config = 1; break;
+		case 't': test_config = 1; break;
 		case 'D': srv->srvconf.dont_daemonize = 1; break;
 		case 'v': show_version(); return 0;
 		case 'h': show_help(); return 0;
@@ -379,6 +385,26 @@ int main (int argc, char **argv) {
 		
 		server_free(srv);
 		return -1;
+	}
+	
+	if (print_config) {
+		data_unset *dc = srv->config_context->data[0];
+		if (dc) {
+			dc->print(dc, 0);
+			fprintf(stderr, "\n");
+		} else {
+			/* shouldn't happend */
+			fprintf(stderr, "global config not found\n");
+		}
+	}
+
+	if (test_config) {
+		printf("Syntax OK\n");
+	}
+
+	if (test_config || print_config) {
+		server_free(srv);
+		return 0;
 	}
 	
 	/* close stdin and stdout, as they are not needed */

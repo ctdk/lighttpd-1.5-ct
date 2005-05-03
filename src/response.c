@@ -125,8 +125,8 @@ handler_t http_response_prepare(server *srv, connection *con) {
 	if (con->mode == DIRECT && con->physical.path->used == 0) {
 		char *qstr;
 		
-		config_patch_connection(srv, con, CONST_STR_LEN("SERVERsocket")); /* SERVERsocket */
-		config_patch_connection(srv, con, CONST_STR_LEN("HTTPremoteip")); /* Client-IP */
+		config_patch_connection(srv, con, COMP_SERVER_SOCKET); /* SERVERsocket */
+		config_patch_connection(srv, con, COMP_HTTP_REMOTEIP); /* Client-IP */
 		
 		/**
 		 * prepare strings
@@ -154,10 +154,10 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		buffer_copy_string_buffer(con->uri.authority, con->request.http_host);
 		buffer_to_lower(con->uri.authority);
 		
-		config_patch_connection(srv, con, CONST_STR_LEN("HTTPhost"));      /* Host:        */
-		config_patch_connection(srv, con, CONST_STR_LEN("HTTPreferer"));   /* Referer:     */
-		config_patch_connection(srv, con, CONST_STR_LEN("HTTPuseragent")); /* User-Agent:  */
-		config_patch_connection(srv, con, CONST_STR_LEN("HTTPcookie"));    /* Cookie:  */
+		config_patch_connection(srv, con, COMP_HTTP_HOST);      /* Host:        */
+		config_patch_connection(srv, con, COMP_HTTP_REFERER);   /* Referer:     */
+		config_patch_connection(srv, con, COMP_HTTP_USERAGENT); /* User-Agent:  */
+		config_patch_connection(srv, con, COMP_HTTP_COOKIE);    /* Cookie:  */
 		
 		/** extract query string from request.uri */
 		if (NULL != (qstr = strchr(con->request.uri->ptr, '?'))) {
@@ -230,7 +230,7 @@ handler_t http_response_prepare(server *srv, connection *con) {
 		 * 
 		 */
 		
-		config_patch_connection(srv, con, CONST_STR_LEN("HTTPurl")); /* HTTPurl */
+		config_patch_connection(srv, con, COMP_HTTP_URL); /* HTTPurl */
 		
 		switch(r = plugins_call_handle_uri_clean(srv, con)) {
 		case HANDLER_GO_ON:

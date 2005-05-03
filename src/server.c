@@ -68,6 +68,7 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 	UNUSED(context);
 
 	switch (sig) {
+	case SIGINT: srv_shutdown = 1; break;
 	case SIGTERM: srv_shutdown = 1; break;
 #ifdef  SIGALRM
 	/* mingw only provides SIGTERM and a few others */
@@ -81,6 +82,7 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 #elif defined(HAVE_SIGNAL) || defined(HAVE_SIGACTION)
 static void signal_handler(int sig) {
 	switch (sig) {
+	case SIGINT: srv_shutdown = 1; break;
 	case SIGTERM: srv_shutdown = 1; break;
 #ifdef  SIGALRM
 	/* mingw only provides SIGTERM and a few others */
@@ -699,6 +701,7 @@ int main (int argc, char **argv) {
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
 # endif
+	sigaction(SIGINT,  &act, NULL);
 	sigaction(SIGTERM, &act, NULL);
 	sigaction(SIGHUP,  &act, NULL);
 	sigaction(SIGALRM, &act, NULL);
@@ -713,6 +716,7 @@ int main (int argc, char **argv) {
 	signal(SIGHUP,  signal_handler);
 	signal(SIGCHLD,  signal_handler);
 #endif
+	signal(SIGINT,  signal_handler);
 	signal(SIGTERM, signal_handler);
 #endif
 	

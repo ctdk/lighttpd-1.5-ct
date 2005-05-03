@@ -73,7 +73,8 @@ typedef enum {
 } comp_key_t;
 
 /* $HTTP["host"] ==    "incremental.home.kneschke.de" { ... } 
- * comp_key      cond    string
+ * for print:   comp_key      op    string
+ * for compare: comp          cond  string/regex
  */
 
 typedef struct _data_config data_config;
@@ -86,6 +87,8 @@ struct _data_config {
 	comp_key_t comp;
 	
 	config_cond_t cond;
+	buffer *op;
+	
 	int context_ndx; /* more or less like an id */
 	array *childs;
 	/* nested */

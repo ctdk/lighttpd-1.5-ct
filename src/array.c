@@ -231,19 +231,22 @@ int array_insert_unique(array *a, data_unset *str) {
 void array_print_indent(int depth) {
 	int i;
 	for (i = 0; i < depth; i ++) {
-		fprintf(stderr, "  ");
+		fprintf(stderr, "    ");
 	}
 }
 
 int array_print(array *a, int depth) {
 	size_t i;
 	
+	fprintf(stderr, "{\n");
 	for (i = 0; i < a->used; i++) {
-		array_print_indent(depth);
-		fprintf(stderr, "%d: ", i);
+		array_print_indent(depth + 1);
+		fprintf(stderr, "%d:%s: ", i, a->data[i]->key->ptr);
 		a->data[i]->print(a->data[i], depth + 1);
 		fprintf(stderr, "\n");
 	}
+	array_print_indent(depth);
+	fprintf(stderr, "}");
 	
 	return 0;
 }

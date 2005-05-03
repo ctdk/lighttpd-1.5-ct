@@ -35,6 +35,7 @@ typedef struct {
 	size_t unique_ndx;
 	
 	size_t next_power_of_2;
+	int is_weakref; /* data is weakref, don't bother the data */
 } array;
 
 typedef struct {

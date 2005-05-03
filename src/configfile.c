@@ -218,7 +218,7 @@ int config_setup_connection(server *srv, connection *con) {
 	return 0;
 }
 
-int config_patch_connection(server *srv, connection *con, const char *stage, size_t stage_len) {
+int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 	size_t i, j;
 	
 	/* skip the first, the global context */
@@ -227,7 +227,7 @@ int config_patch_connection(server *srv, connection *con, const char *stage, siz
 		specific_config *s = srv->config_storage[i];
 		
 		/* not our stage */
-		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
+		if (comp != dc->comp) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;

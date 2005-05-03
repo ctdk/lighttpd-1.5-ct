@@ -487,8 +487,6 @@ typedef struct {
 	file_cache  *file_cache;
 	buffer      *file_cache_etag;
 	
-	buffer_array *config_patches;
-	
 	fdevent_handler_t event_handler;
 } server;
 

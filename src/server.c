@@ -50,7 +50,6 @@
 #include <sys/resource.h>
 #endif
 
-const char *patches[] = { "SERVERsocket", "HTTPurl", "HTTPhost", "HTTPreferer", "HTTPuseragent", "HTTPcookie", "HTTPremoteip", NULL };
 
 
 #ifndef __sgi
@@ -184,14 +183,6 @@ static server *server_init(void) {
 
 	srv->split_vals = array_init();
 	
-	srv->config_patches = buffer_array_init();
-	for (i = 0; patches[i]; i++) {
-		buffer *b;
-		
-		b = buffer_array_append_get_buffer(srv->config_patches);
-		buffer_copy_string(b, patches[i]);
-	}
-	
 	return srv;
 }
 
@@ -201,8 +192,6 @@ static void server_free(server *srv) {
 	for (i = 0; i < FILE_CACHE_MAX; i++) {
 		buffer_free(srv->mtime_cache[i].str);
 	}
-	
-	buffer_array_free(srv->config_patches);
 	
 #define CLEAN(x) \
 	buffer_free(srv->x);

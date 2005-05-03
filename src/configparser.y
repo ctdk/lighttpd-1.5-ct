@@ -351,13 +351,43 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET STRING(C) RBRACKET cond(E) expression(
   if (NULL != (dc = (data_config *)array_get_element(ctx->all_configs, b->ptr))) {
     configparser_push(ctx, dc, 0);
   } else {
+    struct {
+      comp_key_t comp;
+      char *comp_key;
+      size_t len;
+    } comps[] = {
+      { COMP_SERVER_SOCKET,      CONST_STR_LEN("SERVER[\"socket\"]"   ) },
+      { COMP_HTTP_URL,           CONST_STR_LEN("HTTP[\"url\"]"        ) },
+      { COMP_HTTP_HOST,          CONST_STR_LEN("HTTP[\"host\"]"       ) },
+      { COMP_HTTP_REFERER,       CONST_STR_LEN("HTTP[\"referer\"]"    ) },
+      { COMP_HTTP_USERAGENT,     CONST_STR_LEN("HTTP[\"useragent\"]"  ) },
+      { COMP_HTTP_COOKIE,        CONST_STR_LEN("HTTP[\"cookie\"]"     ) },
+      { COMP_HTTP_REMOTEIP,      CONST_STR_LEN("HTTP[\"remoteip\"]"   ) },
+      { COMP_UNSET, NULL, 0 },
+    };
+    size_t i;
+
     dc = data_config_init();
     
     buffer_copy_string_buffer(dc->key, b);
     buffer_copy_string_buffer(dc->comp_key, B);
+    buffer_append_string_len(dc->comp_key, CONST_STR_LEN("[\""));
     buffer_append_string_buffer(dc->comp_key, C);
+    buffer_append_string_len(dc->comp_key, CONST_STR_LEN("\"]"));
     dc->cond = E;
     
+    for (i = 0; comps[i].comp_key; i ++) {
+      if (buffer_is_equal_string(
+            dc->comp_key, comps[i].comp_key, comps[i].len)) {
+        dc->comp = comps[i].comp;
+        break;
+      }
+    }
+    if (COMP_UNSET == dc->comp) {
+      fprintf(stderr, "error comp_key %s", dc->comp_key->ptr);
+      ctx->ok = 0;
+    }
+
     switch(E) {
     case CONFIG_COND_NE:
     case CONFIG_COND_EQ:

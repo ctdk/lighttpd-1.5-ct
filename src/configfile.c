@@ -781,19 +781,12 @@ static void context_init(server *srv, config_t *context) {
 	context->srv = srv;
 	context->ok = 1;
 	context->configs_stack = array_init();
+	context->configs_stack->is_weakref = 1;
 	context->basedir = buffer_init();
 }
 
 static void context_free(config_t *context) {
-	size_t i;
-	array *a = context->configs_stack;
-
-	/* don't free elements */
-	for (i = 0; i < a->size; i++) {
-		a->data[i] = NULL;
-	}
-	array_free(a);
-
+	array_free(context->configs_stack);
 	buffer_free(context->basedir);
 }
 

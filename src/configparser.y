@@ -64,15 +64,13 @@ data_unset *configparser_merge_data(config_t *ctx, data_unset *op1, const data_u
       data_string *ds = (data_string *)op1;
       buffer_append_long(ds->value, ((data_integer*)op2)->value);
       return op1;
-    }
-    else if (op1->type == TYPE_INTEGER && op2->type == TYPE_STRING) {
+    } else if (op1->type == TYPE_INTEGER && op2->type == TYPE_STRING) {
       data_string *ds = data_string_init();
       buffer_append_long(ds->value, ((data_integer*)op1)->value);
       buffer_append_string_buffer(ds->value, ((data_string*)op2)->value);
       op1->free(op1);
       return (data_unset *)ds;
-    }
-    else {
+    } else {
       fprintf(stderr, "data type mismatch, cannot be merge\n");
       ctx->ok = 0;
       op1->free(op1);
@@ -118,7 +116,7 @@ input ::= metalines.
 metalines ::= metalines metaline.
 metalines ::= .
 metaline ::= varline.
-metaline ::= condlines EOL.
+metaline ::= condlines(A) EOL. { A = NULL; }
 metaline ::= include.
 metaline ::= EOL.
 
@@ -130,7 +128,17 @@ metaline ::= EOL.
 %type       aelements              {array *}
 %type       array                  {array *}
 %type       key                    {buffer *}
+
 %type       cond                   {config_cond_t }
+
+%destructor value                  { $$->free($$); }
+%destructor expression             { $$->free($$); }
+%destructor aelement               { $$->free($$); }
+%destructor condline               { $$->free((data_unset *)$$); }
+%destructor condlines              { $$->free((data_unset *)$$); }
+%destructor aelements              { array_free($$); }
+%destructor array                  { array_free($$); }
+%destructor key                    { buffer_free($$); }
 
 %token_type                        {buffer *}
 %token_destructor                  { buffer_free($$); }
@@ -139,18 +147,20 @@ varline ::= key(A) ASSIGN expression(B). {
   buffer_copy_string_buffer(B->key, A);
   if (NULL == array_get_element(ctx->current->value, B->key->ptr)) {
     array_insert_unique(ctx->current->value, B);
+    B = NULL;
   } else {
     fprintf(stderr, "Duplicate config variable in conditional 1 %s: %s\n", 
             ctx->current->key->ptr, B->key->ptr);
     ctx->ok = 0;
     B->free(B);
+    B = NULL;
   }
   buffer_free(A);
+  A = NULL;
 }
 
 varline ::= key(A) APPEND expression(B). {
   array *vars = ctx->current->value;
-  const data_unset *var;
   data_unset *du;
 
   if (NULL != (du = array_get_element(vars, A->ptr))) {
@@ -178,8 +188,9 @@ key(A) ::= LKEY(B). {
   if (strchr(B->ptr, '.') == NULL) {
     A = buffer_init_string("var.");
     buffer_append_string_buffer(A, B);
-  }
-  else {
+    buffer_free(B);
+    B = NULL;
+  } else {
     A = B;
     B = NULL;
   }
@@ -214,17 +225,20 @@ value(A) ::= STRING(B). {
   A = (data_unset *)data_string_init();
   buffer_copy_string_buffer(((data_string *)(A))->value, B);
   buffer_free(B);
+  B = NULL;
 }
 
 value(A) ::= INTEGER(B). {
   A = (data_unset *)data_integer_init();
   ((data_integer *)(A))->value = strtol(B->ptr, NULL, 10);
   buffer_free(B);
+  B = NULL;
 }
 value(A) ::= array(B). {
   A = (data_unset *)data_array_init();
   array_free(((data_array *)(A))->value);
   ((data_array *)(A))->value = B;
+  B = NULL;
 }
 array(A) ::= LPARAN aelements(B) RPARAN. {
   A = B;
@@ -235,23 +249,28 @@ aelements(A) ::= aelements(C) COMMA aelement(B). {
   if (buffer_is_empty(B->key) ||
       NULL == array_get_element(C, B->key->ptr)) {
     array_insert_unique(C, B);
+    B = NULL;
   } else {
     fprintf(stderr, "Duplicate array-key: %s\n", 
             B->key->ptr);
-    B->free(B);
     ctx->ok = 0;
+    B->free(B);
+    B = NULL;
   }
   
   A = C;
+  C = NULL;
 }
 
 aelements(A) ::= aelements(C) COMMA. {
   A = C;
+  C = NULL;
 }
 
 aelements(A) ::= aelement(B). {
   A = array_init();
   array_insert_unique(A, B);
+  B = NULL;
 }
 
 aelement(A) ::= expression(B). {
@@ -261,6 +280,7 @@ aelement(A) ::= expression(B). {
 aelement(A) ::= STRING(B) ARRAY_ASSIGN expression(C). {
   buffer_copy_string_buffer(C->key, B);
   buffer_free(B);
+  B = NULL;
   
   A = C;
   C = NULL;
@@ -387,6 +407,10 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET STRING(C) RBRACKET cond(E) expression(
   }
 
   buffer_free(b);
+  buffer_free(B);
+  B = NULL;
+  buffer_free(C);
+  C = NULL;
   D->free(D);
   D = NULL;
 }
@@ -408,14 +432,13 @@ include ::= INCLUDE expression(A). {
     if (A->type != TYPE_STRING) {
       fprintf(stderr, "file must be string");
       ctx->ok = 0;
-    }
-    else {
+    } else {
       buffer *file = ((data_string*)A)->value;
       if (0 != config_parse_file(ctx->srv, ctx, file->ptr)) {
         ctx->ok = 0;
       }
     }
-    A->free(A);
   }
+  A->free(A);
   A = NULL;
 }

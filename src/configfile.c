@@ -749,18 +749,16 @@ int config_parse_file(server *srv, config_t *context, const char *fn) {
 		
 		token = buffer_init();
 	}
+	buffer_free(token);
+
 	if (ret != -1 && context->ok) {
 		/* add an EOL at EOF, better than say sorry */
-		buffer_copy_string(token, "(EOL)");
-		configparser(pParser, TK_EOL, token, context);
-		token = buffer_init_string("(END)");
+		configparser(pParser, TK_EOL, buffer_init_string("(EOL)"), context);
 		if (context->ok) {
-			configparser(pParser, 0, token, context);
-			token = buffer_init();
+			configparser(pParser, 0, NULL, context);
 		}
 	}
 	configparserFree(pParser, free);
-	buffer_free(token);
 	
 	if (ret == -1) {
 		log_error_write(srv, __FILE__, __LINE__, "sb", 

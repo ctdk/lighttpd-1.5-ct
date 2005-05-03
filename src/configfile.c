@@ -681,6 +681,7 @@ static int config_tokenizer(server *srv, tokenizer_t *t, int *token_id, buffer *
 				for (i = 0; t->input[t->offset + i] && 
 				     (isalnum((unsigned char)t->input[t->offset + i]) || 
 				      t->input[t->offset + i] == '.' ||
+				      t->input[t->offset + i] == '_' || /* for env.* */
 				      t->input[t->offset + i] == '-'
 				      ); i++);
 				

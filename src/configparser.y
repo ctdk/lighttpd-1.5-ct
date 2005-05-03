@@ -1,5 +1,4 @@
 %token_prefix TK_
-%token_type {buffer *}
 %extra_argument {config_t *ctx}
 %name configparser
 
@@ -123,16 +122,18 @@ metaline ::= condlines EOL.
 metaline ::= include.
 metaline ::= EOL.
 
-%type value {data_unset *}
-%type expression {data_unset *}
-%type context_rvalue {data_unset *}
-%type aelement {data_unset *}
-%type aelements {array *}
-%type array {array *}
-%type condline {data_config *}
-%type condlines {data_config *}
-%type cond {config_cond_t }
-%token_destructor { buffer_free($$); }
+%type       value                  {data_unset *}
+%type       expression             {data_unset *}
+%type       aelement               {data_unset *}
+%type       condline               {data_config *}
+%type       condlines              {data_config *}
+%type       aelements              {array *}
+%type       array                  {array *}
+%type       key                    {buffer *}
+%type       cond                   {config_cond_t }
+
+%token_type                        {buffer *}
+%token_destructor                  { buffer_free($$); }
 
 varline ::= key(A) ASSIGN expression(B). {
   buffer_copy_string_buffer(B->key, A);

@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 14;
+use Test::More tests => 15;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -186,6 +186,8 @@ sub handle_http {
 	return 0;
 }
     
+$ENV{"env_test"} = "good_env";
+
 ok(start_proc == 0, "Starting lighttpd") or die();
 
 SKIP: {
@@ -204,6 +206,8 @@ SKIP: {
 		"servername3"    => "/good_" . $server_name . "/",
 		"var.myvar"      => "/good_var_myvar" . $myvar,
 		"myvar"          => "/good_myvar" . $myvar,
+		"env"            => "/" . $ENV{"env_test"},
+
 		"number1"        => "/good_number" . "1",
 		"number2"        => "1" . "/good_number",
 		"array_append"   => "/good_array_append",

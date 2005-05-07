@@ -37,3 +37,12 @@ You will get a ERROR if you use
 - server.indexfiles or
 - server.dir-listing
 
+Please keep in mind that the order of modules is important. The 
+modules are handled in the way you specify them.
+
+server.modules = ( ...
+                   "mod_indexfile",
+                   "mod_dirlisting",
+                   "mod_staticfile",
+                   ... )
+

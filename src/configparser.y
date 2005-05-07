@@ -31,7 +31,7 @@ static data_config *configparser_pop(config_t *ctx) {
 
 /* return a copied variable */
 static data_unset *configparser_get_variable(config_t *ctx, const buffer *key) {
-  if (strncmp(key->ptr, CONST_STR_LEN("env.")) == 0) {
+  if (strncmp(key->ptr, "env.", sizeof("env.") - 1) == 0) {
     char *env;
 
     if (NULL != (env = getenv(key->ptr + 4))) {

@@ -279,6 +279,7 @@ static int connection_handle_write_prepare(server *srv, connection *con) {
 		/* fall through */
 		
 	case 200: /* class: header + body */
+	case 207:
 		break;
 		
 	case 206: /* write_queue is already prepared */

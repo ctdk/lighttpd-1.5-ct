@@ -188,7 +188,8 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 	
 	buffer_copy_string(srv->cond_check_buf, "");
 	
-	if (COMP_HTTP_HOST == dc->comp) {
+	switch (dc->comp) {
+	case COMP_HTTP_HOST: {
 		char *ck_colon = NULL, *val_colon = NULL;
 		
 		if (!buffer_is_empty(con->uri.authority)) {
@@ -215,7 +216,9 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 				break;
 			}
 		}
-	} else if (COMP_HTTP_REMOTEIP == dc->comp) {
+		break;
+	}
+	case COMP_HTTP_REMOTEIP: {
 		char *nm_slash;
 		/* handle remoteip limitations 
 		 * 
@@ -289,27 +292,40 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 #endif
 			buffer_copy_string(srv->cond_check_buf, s);
 		}
-	} else if (COMP_HTTP_URL == dc->comp) {
+		break;
+	}
+	case COMP_HTTP_URL:
 		buffer_copy_string_buffer(srv->cond_check_buf, con->uri.path);
-	} else if (COMP_SERVER_SOCKET == dc->comp) {
+		break;
+
+	case COMP_SERVER_SOCKET:
 		buffer_copy_string_buffer(srv->cond_check_buf, srv_sock->srv_token);
-	} else if (COMP_HTTP_REFERER == dc->comp) {
+		break;
+
+	case COMP_HTTP_REFERER: {
 		data_string *ds;
 		
 		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Referer"))) {
 			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
-	} else if (COMP_HTTP_COOKIE == dc->comp) {
+		break;
+	}
+	case COMP_HTTP_COOKIE: {
 		data_string *ds;
 		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Cookie"))) {
 			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
-	} else if (COMP_HTTP_USERAGENT == dc->comp) {
+		break;
+	}
+	case COMP_HTTP_USERAGENT: {
 		data_string *ds;
 		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "User-Agent"))) {
 			buffer_copy_string_buffer(srv->cond_check_buf, ds->value);
 		}
-	} else {
+		break;
+	}
+
+	default:
 		return COND_RESULT_FALSE;
 	}
 	

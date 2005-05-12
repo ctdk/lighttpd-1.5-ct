@@ -319,6 +319,7 @@ typedef struct {
 	int http_status;
 	
 	sock_addr dst_addr;
+	buffer *dst_addr_buf;
 
 	/* request */
 	buffer *parse_request;

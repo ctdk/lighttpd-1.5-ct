@@ -26,6 +26,8 @@
 
 #include "plugin.h"
 
+#include "inet_ntop_cache.h"
+
 #ifdef USE_OPENSSL
 # include <openssl/ssl.h> 
 # include <openssl/err.h> 
@@ -465,7 +467,8 @@ connection *connection_init(server *srv) {
 	
 	con->plugin_ctx = calloc(srv->plugins.used + 1, sizeof(void *));
 	
-	con->cond_results_cache = calloc(srv->config_context->used, sizeof(cond_result_t));
+	con->cond_cache = calloc(srv->config_context->used, sizeof(cond_cache_t));
+	con->dst_addr_buf = buffer_init();
 	config_setup_connection(srv, con);
 	
 	return con;
@@ -516,7 +519,7 @@ void connections_free(server *srv) {
 		CLEAN(error_handler);
 #undef CLEAN
 		free(con->plugin_ctx);
-		free(con->cond_results_cache);
+		free(con->cond_cache);
 
 		file_descr_free(con->fd);
 		
@@ -993,6 +996,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 		
 		con->connection_start = srv->cur_ts;
 		con->dst_addr = cnt_addr;
+		buffer_copy_string(con->dst_addr_buf, inet_ntop_cache_get_ip(srv, &(con->dst_addr)));
 		con->srv_socket = srv_socket;
 		
 		if (-1 == (fdevent_fcntl_set(srv->ev, con->fd))) {

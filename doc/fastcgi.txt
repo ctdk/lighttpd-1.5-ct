@@ -143,7 +143,7 @@ fastcgi.server
                 gets terminated
   :"bin-environment": put an entry into the environment of 
                 the started process
-  :"bin-copy-environement": clean up the environment and copy
+  :"bin-copy-environment": clean up the environment and copy
                 only the specified entries into the fresh 
                 environment of the spawn process
 

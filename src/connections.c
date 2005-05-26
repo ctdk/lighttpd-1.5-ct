@@ -1158,7 +1158,7 @@ int connection_state_machine(server *srv, connection *con) {
 				break;
 			}
 			
-			if (con->request.content_finished == 0) {
+			if (con->request.content_finished == 0 && done != -1) {
 				if (-1 == connection_handle_read_state(srv, con)) {
 					connection_set_state(srv, con, CON_STATE_ERROR);
 			

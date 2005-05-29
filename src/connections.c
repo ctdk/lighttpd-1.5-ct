@@ -467,7 +467,7 @@ connection *connection_init(server *srv) {
 	
 	con->plugin_ctx = calloc(srv->plugins.used + 1, sizeof(void *));
 	
-	con->cond_cache = calloc(srv->config_context->used, sizeof(cond_cache_t));
+	con->cond_results_cache = calloc(srv->config_context->used, sizeof(cond_result_t));
 	con->dst_addr_buf = buffer_init();
 	config_setup_connection(srv, con);
 	
@@ -519,7 +519,7 @@ void connections_free(server *srv) {
 		CLEAN(error_handler);
 #undef CLEAN
 		free(con->plugin_ctx);
-		free(con->cond_cache);
+		free(con->cond_results_cache);
 
 		file_descr_free(con->fd);
 		

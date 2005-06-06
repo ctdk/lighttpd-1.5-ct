@@ -14,7 +14,7 @@ Module: mod_auth
   The auth module provides ...
   
 .. meta::
-  :keywords: lighttpd, authentification
+  :keywords: lighttpd, authentication
   
 .. contents:: Table of Contents
 
@@ -24,7 +24,7 @@ Description
 Supported Methods
 -----------------
 
-lighttpd supportes both authentification method described by 
+lighttpd supportes both authentication method described by 
 RFC 2617: 
 
 basic
@@ -40,13 +40,13 @@ digest
 
 The Digest method only transfers a hashed value over the 
 network which performs a lot of work to harden the 
-authentification process in insecure networks.
+authentication process in insecure networks.
 
 Backends
 --------
 
 Depending on the method lighttpd provides various way to store 
-the credentials used for the authentification.
+the credentials used for the authentication.
 
 for basic auth:
 

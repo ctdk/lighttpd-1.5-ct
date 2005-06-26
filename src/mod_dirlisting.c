@@ -361,7 +361,7 @@ static void http_list_directory_footer(server *srv, connection *con, plugin_data
 		
 		if (-1 != stream_open(&s, p->tmp_buf)) {
 			BUFFER_APPEND_STRING_CONST(out, "<pre class=\"readme\">");
-			buffer_append_string_len(out, s.start, s.size);
+			buffer_append_string_html_encoded(out, s.start, s.size);
 			BUFFER_APPEND_STRING_CONST(out, "</pre>");
 		}
 		stream_close(&s);

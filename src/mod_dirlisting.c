@@ -16,6 +16,7 @@
 #include "config.h"
 #include "response.h"
 #include "file_cache_funcs.h"
+#include "stream.h"
 
 /**
  * this is a dirlisting for a lighttpd plugin
@@ -35,11 +36,16 @@
 typedef struct {
 	unsigned short dir_listing;
 	unsigned short hide_dot_files;
+	unsigned short show_readme;
+	
 	buffer *external_css;
+	buffer *encoding;
 } plugin_config;
 
 typedef struct {
 	PLUGIN_DATA;
+	
+	buffer *tmp_buf;
 	
 	plugin_config **config_storage;
 	
@@ -51,6 +57,7 @@ INIT_FUNC(mod_dirlisting_init) {
 	plugin_data *p;
 	
 	p = calloc(1, sizeof(*p));
+	p->tmp_buf = buffer_init();
 	
 	return p;
 }
@@ -68,12 +75,17 @@ FREE_FUNC(mod_dirlisting_free) {
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
 			
+			if (!s) continue;
+			
 			buffer_free(s->external_css);
+			buffer_free(s->encoding);
 			
 			free(s);
 		}
 		free(p->config_storage);
 	}
+	
+	buffer_free(p->tmp_buf);
 	
 	free(p);
 	
@@ -90,6 +102,8 @@ SETDEFAULTS_FUNC(mod_dirlisting_set_defaults) {
 		{ "dir-listing.activate",        NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 0 */
 		{ "dir-listing.hide-dotfiles",   NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 1 */
 		{ "dir-listing.external-css",    NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },  /* 2 */
+		{ "dir-listing.encoding",        NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },  /* 3 */
+		{ "dir-listing.show-readme",     NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 4 */
 		{ NULL,                          NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
@@ -104,10 +118,14 @@ SETDEFAULTS_FUNC(mod_dirlisting_set_defaults) {
 		s->dir_listing = 0;
 		s->external_css = buffer_init();
 		s->hide_dot_files = 0;
+		s->show_readme = 0;
+		s->encoding = buffer_init();
 		
 		cv[0].destination = &(s->dir_listing);
 		cv[1].destination = &(s->hide_dot_files);
 		cv[2].destination = s->external_css;
+		cv[3].destination = s->encoding;
+		cv[4].destination = &(s->show_readme);
 		
 		p->config_storage[i] = s;
 	
@@ -128,6 +146,8 @@ static int mod_dirlisting_patch_connection(server *srv, connection *con, plugin_
 	PATCH(dir_listing);
 	PATCH(external_css);
 	PATCH(hide_dot_files);
+	PATCH(encoding);
+	PATCH(show_readme);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -147,6 +167,10 @@ static int mod_dirlisting_patch_connection(server *srv, connection *con, plugin_
 				PATCH(hide_dot_files);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("dir-listing.external-css"))) {
 				PATCH(external_css);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("dir-listing.encoding"))) {
+				PATCH(encoding);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("dir-listing.show-readme"))) {
+				PATCH(show_readme);
 			}
 		}
 	}
@@ -320,12 +344,30 @@ static void http_list_directory_header(server *srv, connection *con, plugin_data
 
 static void http_list_directory_footer(server *srv, connection *con, plugin_data *p, buffer *out) {
 	UNUSED(srv);
-	UNUSED(p);
 	
 	BUFFER_APPEND_STRING_CONST(out,
 		"</tbody>\n"
 		"</table>\n"
 		"</div>\n"
+	);
+	
+	if (p->conf.show_readme) {
+		stream s;
+		/* if we have a README file, display it in <pre class="readme"></pre> */
+		
+		buffer_copy_string_buffer(p->tmp_buf,  con->physical.path);
+		BUFFER_APPEND_SLASH(p->tmp_buf);
+		BUFFER_APPEND_STRING_CONST(p->tmp_buf, "README.txt");
+		
+		if (-1 != stream_open(&s, p->tmp_buf)) {
+			BUFFER_APPEND_STRING_CONST(out, "<pre class=\"readme\">");
+			buffer_append_string_len(out, s.start, s.size);
+			BUFFER_APPEND_STRING_CONST(out, "</pre>");
+		}
+		stream_close(&s);
+	}
+	
+	BUFFER_APPEND_STRING_CONST(out,
 		"<div class=\"foot\">"
 	);
 
@@ -446,7 +488,13 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	if (files.used) http_dirls_sort(files.ent, files.used);
 
 	out = chunkqueue_get_append_buffer(con->write_queue);
-	BUFFER_COPY_STRING_CONST(out, "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n");
+	BUFFER_COPY_STRING_CONST(out, "<?xml version=\"1.0\" encoding=\"");
+	if (buffer_is_empty(p->conf.encoding)) {
+		BUFFER_APPEND_STRING_CONST(out, "iso-8859-1");
+	} else {
+		buffer_append_string_buffer(out, p->conf.encoding);
+	}
+	BUFFER_APPEND_STRING_CONST(out, "\"?>\n");
 	http_list_directory_header(srv, con, p, out);
 
 	/* directories */

@@ -191,7 +191,7 @@ typedef struct {
 	size_t size;
 } dirls_list_t;
 
-#define DIRLIST_ENT_NAME(ent)	(char*) ent + sizeof(dirls_entry_t)
+#define DIRLIST_ENT_NAME(ent)	((char*)(ent) + sizeof(dirls_entry_t))
 #define DIRLIST_BLOB_SIZE		16
 
 /* simple combsort algorithm */
@@ -507,11 +507,11 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 #else
 		strftime(datebuf, sizeof(datebuf), "%Y-%b-%d %H:%M:%S", localtime(&(tmp->mtime)));
 #endif
-
+		
 		BUFFER_APPEND_STRING_CONST(out, "<tr><td class=\"n\"><a href=\"");
-		buffer_append_string_url_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
+		buffer_append_string_url_encoded(out, DIRLIST_ENT_NAME(tmp), tmp->namelen);
 		BUFFER_APPEND_STRING_CONST(out, "/\">");
-		buffer_append_string_html_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
+		buffer_append_string_html_encoded(out, DIRLIST_ENT_NAME(tmp), tmp->namelen);
 		BUFFER_APPEND_STRING_CONST(out, "</a>/</td><td class=\"m\">");
 		buffer_append_string_len(out, datebuf, sizeof(datebuf) - 1);
 		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"s\">- &nbsp;</td><td class=\"t\">Directory</td></tr>\n");
@@ -523,8 +523,9 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 	for (i = 0; i < files.used; i++) {
 		tmp = files.ent[i];
 
-#ifdef HAVE_XATTR
 		content_type = NULL;
+#ifdef HAVE_XATTR
+		
 		if (con->conf.use_xattr) {
 			memcpy(path_file, DIRLIST_ENT_NAME(tmp), tmp->namelen + 1);
 			attrlen = sizeof(attrval) - 1;
@@ -533,10 +534,9 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 				content_type = attrval;
 			}
 		}
-		if (content_type == NULL) {
-#else
-		if (1) {
 #endif
+		
+		if (content_type == NULL) {
 			content_type = "application/octet-stream";
 			for (k = 0; k < con->conf.mimetypes->used; k++) {
 				data_string *ds = (data_string *)con->conf.mimetypes->data[k];
@@ -555,7 +555,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 				}
 			}
 		}
-
+			
 #ifdef HAVE_LOCALTIME_R
 		localtime_r(&(tmp->mtime), &tm);
 		strftime(datebuf, sizeof(datebuf), "%Y-%b-%d %H:%M:%S", &tm);
@@ -565,9 +565,9 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 		http_list_directory_sizefmt(sizebuf, tmp->size);
 
 		BUFFER_APPEND_STRING_CONST(out, "<tr><td class=\"n\"><a href=\"");
-		buffer_append_string_url_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
+		buffer_append_string_url_encoded(out, DIRLIST_ENT_NAME(tmp), tmp->namelen);
 		BUFFER_APPEND_STRING_CONST(out, "\">");
-		buffer_append_string_html_encoded(out, CONST_STR_LEN(DIRLIST_ENT_NAME(tmp)));
+		buffer_append_string_html_encoded(out, DIRLIST_ENT_NAME(tmp), tmp->namelen);
 		BUFFER_APPEND_STRING_CONST(out, "</a></td><td class=\"m\">");
 		buffer_append_string_len(out, datebuf, sizeof(datebuf) - 1);
 		BUFFER_APPEND_STRING_CONST(out, "</td><td class=\"s\">");

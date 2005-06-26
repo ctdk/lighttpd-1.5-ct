@@ -1,0 +1,57 @@
+==========================
+Virtual Directory Listings
+==========================
+
+----------------------
+Module: mod_dirlisting
+----------------------
+
+:Author: Jan Kneschke
+:Date: $Date: 2005-03-28 10:30:05 +0200 (Mo, 28 Mar 2005) $
+:Revision: $Revision: 226 $
+
+:abstract:
+  display a virtual directory listing if the requested URI is a directory
+  
+.. meta::
+  :keywords: lighttpd, virtual directory listing
+  
+.. contents:: Table of Contents
+
+Description
+===========
+
+...
+
+Options
+=======
+
+dir-listing.activate
+  enables virtual directory listings if a directory is requested no
+  index-file was found 
+  
+  default: disabled
+
+dir-listing.hide-dotfiles
+  if enabled, does not list hidden files in directory listings generated
+  by the dir-listing option.
+
+  default: enabled
+
+dir-listing.external-css
+  path to an external css stylesheet for the directory listing
+  
+  default: use internal css
+  
+dir-listing.show-readme
+  if a README.txt is the requested directory it will be appended to the 
+  output. The README.txt will HTML encoded and is covered by a pre-tag 
+  with the class 'readme'.
+  
+  default: disabled
+  
+dir-listing.encoding
+  content encoding of the filenames (and README.txt)
+  
+  default: iso8859-1
+

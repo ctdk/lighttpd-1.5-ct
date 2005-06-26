@@ -50,9 +50,6 @@ Example
   # selecting modules
   server.modules = ( "mod_access", "mod_rewrite" )
   
-  # enable directory listings
-  server.dir-listing = "enable"
-
   # variables, computed when config is read.
   var.mymodule = "foo"
   server.modules += ( "mod_" + var.mymodule )
@@ -114,9 +111,9 @@ Example
 ::
 
   # disable directory-listings for /download/*
-  server.dir-listing = "enable"
+  dir-listing.activate = "enable"
   $HTTP["url"] =~ "^/download/" {
-    server.dir-listing = "disable"
+    dir-listing.activate = "disable"
   }
   
   # handish virtual hosting
@@ -190,19 +187,6 @@ server.username
 server.groupname
   groupname used to run the server
   NOTE: requires root-permissions
-
-server.dir-listing
-  enables virtual directory listings if a directory is requested no
-  index-file was found 
-
-dir-listing.hide-dotfiles
-  if enabled, does not list hidden files in directory listings generated
-  by the dir-listing option.
-
-  default: enabled
-
-dir-listing.external-css
-  path to an external css stylesheet for the directory listing
 
 server.follow-symlink
   allow to follow-symlinks

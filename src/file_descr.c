@@ -13,6 +13,8 @@ file_descr *file_descr_init() {
 	fd->fde_ndx = -1;
 	
 	fd->is_socket = 1;
+	fd->is_readable = 1;
+	fd->is_writable = 1;
 
 	return fd;
 }
@@ -34,6 +36,9 @@ void file_descr_reset(file_descr *fd) {
 		close(fd->fd);
 #endif
 	}
+	
+	fd->is_readable = 1;
+	fd->is_writable = 1;
 
 	fd->fd = -1;
 	fd->fde_ndx = -1;

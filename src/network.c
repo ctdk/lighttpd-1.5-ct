@@ -167,11 +167,6 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 		return -1;
 	}
 	
-	if (-1 == fdevent_fcntl_set(srv->ev, srv_socket->fd)) {
-		log_error_write(srv, __FILE__, __LINE__, "ss", "fcntl failed:", strerror(errno));
-		return -1;
-	}
-	
 	switch(srv_socket->addr.plain.sa_family) {
 #ifdef HAVE_IPV6
 	case AF_INET6:
@@ -423,6 +418,11 @@ int network_register_fdevents(server *srv) {
 	/* register fdevents after reset */
 	for (i = 0; i < srv->srv_sockets.used; i++) {
 		server_socket *srv_socket = srv->srv_sockets.ptr[i];
+		
+		if (-1 == fdevent_fcntl_set(srv->ev, srv_socket->fd)) {
+			log_error_write(srv, __FILE__, __LINE__, "ss", "fcntl failed:", strerror(errno));
+			return -1;
+		}
 		
 		fdevent_register(srv->ev, srv_socket->fd, network_server_handle_fdevent, srv_socket);
 		fdevent_event_add(srv->ev, srv_socket->fd, FDEVENT_IN);

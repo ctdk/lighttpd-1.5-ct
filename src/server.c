@@ -625,6 +625,13 @@ int main (int argc, char **argv) {
 		
 		return -1;
 	}
+	
+	/* 
+	 * kqueue and rtsig have to be initialized AFTER damonize()
+	 * the pid can only be written after damonize() too
+	 * 
+	 */
+	
 
 #ifdef HAVE_FORK	
 	/* network is up, let's deamonize ourself */
@@ -633,6 +640,7 @@ int main (int argc, char **argv) {
 	
 	/* write pid file */
 	if (pid_fd != -1) {
+		/* AFTER damonize */
 		buffer_copy_long(srv->tmp_buf, getpid());
 		buffer_append_string(srv->tmp_buf, "\n");
 		write(pid_fd, srv->tmp_buf->ptr, srv->tmp_buf->used - 1);
@@ -688,7 +696,9 @@ int main (int argc, char **argv) {
 		return -1;
 	}
 	
-	/* kqueue needs a reset AFTER daemonize() */
+	/* kqueue needs a reset AFTER daemonize()
+	 * same to rtsig
+	 */
 	if (0 != network_register_fdevents(srv)) {
 		plugins_free(srv);
 		network_close(srv);

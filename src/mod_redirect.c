@@ -177,17 +177,20 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 	
 	for (i = 0; i < p->conf.redirect->used; i++) {
 		pcre *match;
+		pcre_extra *extra;
 		const char *pattern;
 		size_t pattern_len;
 		int n;
+		pcre_keyvalue *kv = p->conf.redirect->kv[i];
 # define N 10
 		int ovec[N * 3];
 		
-		match = p->conf.redirect->kv[i]->key;
-		pattern = p->conf.redirect->kv[i]->value;
-		pattern_len = strlen(pattern);
+		match       = kv->key;
+		extra       = kv->key_extra;
+		pattern     = kv->value->ptr;
+		pattern_len = kv->value->used - 1;
 		
-		if ((n = pcre_exec(match, NULL, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
+		if ((n = pcre_exec(match, extra, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
 			if (n != PCRE_ERROR_NOMATCH) {
 				log_error_write(srv, __FILE__, __LINE__, "sd"
 						"execution error while matching: ", n);

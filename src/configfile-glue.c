@@ -186,8 +186,6 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 
 	/* pass the rules */
 	
-	buffer_copy_string(srv->cond_check_buf, "");
-	
 	switch (dc->comp) {
 	case COMP_HTTP_HOST: {
 		char *ck_colon = NULL, *val_colon = NULL;
@@ -206,11 +204,19 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 				ck_colon = strchr(dc->string->ptr, ':');
 				val_colon = strchr(l->ptr, ':');
 				
-				if (ck_colon && !val_colon) {
-					/* colon found */
+				if (ck_colon == val_colon) {
+					/* nothing to do with it */
+					break;
+				}
+				if (ck_colon) {
+					/* condition "host:port" but client send "host" */
 					buffer_copy_string_buffer(srv->cond_check_buf, l);
 					BUFFER_APPEND_STRING_CONST(srv->cond_check_buf, ":");
 					buffer_append_long(srv->cond_check_buf, sock_addr_get_port(&(srv_sock->addr)));
+					l = srv->cond_check_buf;
+				} else if (!ck_colon) {
+					/* condition "host" but client send "host:port" */
+					buffer_copy_string_len(srv->cond_check_buf, l->ptr, val_colon - l->ptr);
 					l = srv->cond_check_buf;
 				}
 				break;

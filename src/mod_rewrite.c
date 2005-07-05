@@ -195,6 +195,7 @@ static int mod_rewrite_patch_connection(server *srv, connection *con, plugin_dat
 	size_t i, j;
 	plugin_config *s = p->config_storage[0];
 	p->conf.rewrite = s->rewrite;
+	p->conf.final   = s->final;
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -212,8 +213,10 @@ static int mod_rewrite_patch_connection(server *srv, connection *con, plugin_dat
 			
 			if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.rewrite"))) {
 				p->conf.rewrite = s->rewrite;
+				p->conf.final   = s->final;
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.rewrite-final"))) {
 				p->conf.rewrite = s->rewrite;
+				p->conf.final   = s->final;
 			}
 		}
 	}

@@ -147,8 +147,6 @@ metaline ::= EOL.
 %destructor value                  { $$->free($$); }
 %destructor expression             { $$->free($$); }
 %destructor aelement               { $$->free($$); }
-%destructor condline               { $$->free((data_unset *)$$); }
-%destructor condlines              { $$->free((data_unset *)$$); }
 %destructor aelements              { array_free($$); }
 %destructor array                  { array_free($$); }
 %destructor key                    { buffer_free($$); }

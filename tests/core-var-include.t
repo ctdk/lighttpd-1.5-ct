@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 15;
+use Test::More tests => 16;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -193,7 +193,7 @@ ok(start_proc == 0, "Starting lighttpd") or die();
 SKIP: {
 	@request  = ( "GET /index.html HTTP/1.0\r\nHost: www.example.org\r\n" );
 	@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => "/redirect" } );
-    skip "redirect is not working as expected", 12 if handle_http != 0; 
+    skip "redirect is not working as expected", 13 if handle_http != 0; 
 	my $myvar = "good";
 	my $server_name = "test.example.org";
 	my $mystr = "string";
@@ -212,7 +212,9 @@ SKIP: {
 		"number2"        => "1" . "/good_number",
 		"array_append"   => "/good_array_append",
 		"string_append"  => "/good_" . $mystr,
-		"number_append"  => "/good_" . "2"
+		"number_append"  => "/good_" . "2",
+
+		"include_shell"  => "/good_include_shell_" . "456"
 	};
 	foreach my $test (keys %{ $tests }) {
 		my $expect = $tests->{$test};

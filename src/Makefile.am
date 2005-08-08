@@ -1,4 +1,4 @@
-noinst_PROGRAMS=array lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
+noinst_PROGRAMS=array proc_open lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
 sbin_PROGRAMS=lighttpd 
 bin_PROGRAMS=spawn-fcgi
 LEMON=$(top_builddir)/src/lemon
@@ -42,7 +42,8 @@ common_src=buffer.c errorlog-glue.c \
       network_write.c network_linux_sendfile.c \
       network_freebsd_sendfile.c network_writev.c \
       network_solaris_sendfilev.c network_openssl.c \
-      network_send.c network-glue.c fdevent-glue.c
+      network_send.c network-glue.c fdevent-glue.c \
+      proc_open.c
 
 src = server.c response.c connections.c configfile.c configparser.c \
       request.c network.c log.c fdevent.c \
@@ -225,7 +226,7 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       configparser.h mod_ssi_exprparser.h \
       sys-mmap.h sys-socket.h file_descr.h \
       file_cache_funcs.h file_descr_funcs.h \
-      chunk_funcs.h
+      chunk_funcs.h proc_open.h
       
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
@@ -236,6 +237,9 @@ lighttpd_LDFLAGS = -export-dynamic
 
 array_SOURCES = array.c buffer.c data_string.c data_count.c
 array_CPPFLAGS= -DDEBUG_ARRAY
+
+proc_open_SOURCES = proc_open.c buffer.c
+proc_open_CPPFLAGS= -DDEBUG_PROC_OPEN
 
 #gen_license_SOURCES = license.c md5.c buffer.c gen_license.c
 

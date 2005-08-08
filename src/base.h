@@ -279,6 +279,14 @@ typedef struct {
 	size_t used;
 } server_socket_array;
 
+typedef enum { COND_RESULT_UNSET, COND_RESULT_FALSE, COND_RESULT_TRUE } cond_result_t;
+typedef struct {
+	cond_result_t result;
+	int patterncount;
+	int matches[3 * 10];
+	buffer *comp_value; /* just a pointer */
+} cond_cache_t;
+
 typedef struct {
 	connection_state_t state;
 	
@@ -345,7 +353,7 @@ typedef struct {
 	void **plugin_ctx;           /* plugin connection specific config */
 	
 	specific_config conf;        /* global connection specific config */
-	cond_result_t *cond_results_cache;
+	cond_cache_t *cond_cache;
 	
 	buffer *server_name;
 	

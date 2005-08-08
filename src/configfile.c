@@ -187,11 +187,6 @@ static int config_insert(server *srv) {
 #define PATCH(x) con->conf.x = s->x
 int config_setup_connection(server *srv, connection *con) {
 	specific_config *s = srv->config_storage[0];
-	int i;
-	
-	for (i = srv->config_context->used - 1; i >= 0; i --) {
-		con->cond_results_cache[i] = COND_RESULT_UNSET;
-	}
 	
 	PATCH(allow_http11);
 	PATCH(mimetypes);

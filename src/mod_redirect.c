@@ -13,6 +13,7 @@
 
 typedef struct {
 	pcre_keyvalue_buffer *redirect;
+	data_config *context; /* to which apply me */
 } plugin_config;
 
 typedef struct {
@@ -152,6 +153,7 @@ static int mod_redirect_patch_connection(server *srv, connection *con, plugin_da
 			
 			if (0 == strcmp(du->key->ptr, "url.redirect")) {
 				p->conf.redirect = s->redirect;
+				p->conf.context = dc;
 			}
 		}
 	}
@@ -192,7 +194,7 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 		
 		if ((n = pcre_exec(match, extra, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
 			if (n != PCRE_ERROR_NOMATCH) {
-				log_error_write(srv, __FILE__, __LINE__, "sd"
+				log_error_write(srv, __FILE__, __LINE__, "sd",
 						"execution error while matching: ", n);
 				return HANDLER_ERROR;
 			}
@@ -200,6 +202,7 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 			const char **list;
 			size_t start, end;
 			size_t k;
+			
 			/* it matched */
 			pcre_get_substring_list(p->match_buf->ptr, ovec, n, &list);
 			
@@ -209,7 +212,7 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 			
 			start = 0; end = pattern_len;
 			for (k = 0; k < pattern_len; k++) {
-				if (pattern[k] == '$' &&
+				if ((pattern[k] == '$' || pattern[k] == '%') &&
 				    isdigit((unsigned char)pattern[k + 1])) {
 					/* got one */
 					
@@ -219,9 +222,13 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 					
 					buffer_append_string_len(p->location, pattern + start, end - start);
 					
-					/* n is always > 0 */
-					if (num < (size_t)n) {
-						buffer_append_string(p->location, list[num]);
+					if (pattern[k] == '$') {
+						/* n is always > 0 */
+						if (num < (size_t)n) {
+							buffer_append_string(p->location, list[num]);
+						}
+					} else {
+						config_append_cond_match_buffer(con, p->conf.context, p->location, num);
 					}
 					
 					k++;

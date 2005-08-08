@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 40;
+use Test::More tests => 41;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -17,12 +17,13 @@ my $pidoffile = '/tmp/lighttpd/pidof.pid';
 
 sub pidof {
 	my $prog = $_[0];
+	my $pid;
 
-	open F, "ps ax  | grep $prog | grep -v grep | awk '{ print \$1 }'|" or
-	open F, "ps -ef | grep $prog | grep -v grep | awk '{ print \$2 }'|" or
+	open F, "ps ax  | grep $prog | grep -v grep | awk '{ print \$1 }'|" and $pid = <F> or
+	close F and
+	open F, "ps -ef | grep $prog | grep -v grep | awk '{ print \$2 }'|" and $pid = <F> or
 	  return -1;
 
-	my $pid = <F>;
 	close F;
 
 	if (defined $pid) { return $pid; }
@@ -201,7 +202,7 @@ sub handle_http {
     
 
 SKIP: {
-	skip "no PHP running on port 1026", 24 if pidof("php") == -1; 
+	skip "no PHP running on port 1026", 25 if pidof("php") == -1; 
 
 	ok(start_proc == 0, "Starting lighttpd") or die();
 
@@ -252,6 +253,14 @@ EOF
  );
 	@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '/phpself.php' } );
 	ok(handle_http == 0, '$_SERVER["PHP_SELF"]');
+
+	@request  = ( <<EOF
+GET /pathinfo.php/foo HTTP/1.0
+Host: www.example.org
+EOF
+ );
+	@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '/foo' } );
+	ok(handle_http == 0, '$_SERVER["PATH_INFO"]');
 
 	@request  = ( <<EOF
 GET /phphost.php HTTP/1.0

@@ -9,10 +9,6 @@
 
 #include "sys-mmap.h"
 
-#ifndef O_BINARY
-#define O_BINARY (0)
-#endif
-
 
 int stream_open(stream *f, buffer *fn) {
 	struct stat st;
@@ -23,7 +19,6 @@ int stream_open(stream *f, buffer *fn) {
 	void *p;
 #endif
 
-	f->start = NULL;
 	
 	if (-1 == stat(fn->ptr, &st)) {
 		return -1;
@@ -32,7 +27,7 @@ int stream_open(stream *f, buffer *fn) {
 	f->size = st.st_size;
 
 #ifdef HAVE_MMAP
-	if (-1 == (fd = open(fn->ptr, O_RDONLY | O_BINARY))) {
+	if (-1 == (fd = open(fn->ptr, O_RDONLY))) {
 		return -1;
 	}
 	

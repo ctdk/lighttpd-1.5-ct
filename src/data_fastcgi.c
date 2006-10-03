@@ -5,15 +5,6 @@
 #include "array.h"
 #include "fastcgi.h"
 
-static data_unset *data_fastcgi_copy(const data_unset *s) {
-	data_fastcgi *src = (data_fastcgi *)s;
-	data_fastcgi *ds = data_fastcgi_init();
-
-	buffer_copy_string_buffer(ds->key, src->key);
-	buffer_copy_string_buffer(ds->host, src->host);
-	return (data_unset *)ds;
-}
-
 static void data_fastcgi_free(data_unset *d) {
 	data_fastcgi *ds = (data_fastcgi *)d;
 	
@@ -39,11 +30,10 @@ static int data_fastcgi_insert_dup(data_unset *dst, data_unset *src) {
 	return 0;
 }
 
-static void data_fastcgi_print(const data_unset *d, int depth) {
+static void data_fastcgi_print(data_unset *d) {
 	data_fastcgi *ds = (data_fastcgi *)d;
-	UNUSED(depth);
 	
-	fprintf(stderr, "fastcgi(%s)", ds->host->ptr);
+	printf("{%s: %s}", ds->key->ptr, ds->host->ptr);
 }
 
 
@@ -56,7 +46,6 @@ data_fastcgi *data_fastcgi_init(void) {
 	ds->host = buffer_init();
 	ds->port = 0;
 	
-	ds->copy = data_fastcgi_copy;
 	ds->free = data_fastcgi_free;
 	ds->reset = data_fastcgi_reset;
 	ds->insert_dup = data_fastcgi_insert_dup;

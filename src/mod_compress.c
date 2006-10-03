@@ -5,25 +5,20 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
-#include <stdio.h>
 
 #include "base.h"
 #include "log.h"
 #include "buffer.h"
 #include "response.h"
-#include "file_cache_funcs.h"
 
 #include "plugin.h"
 
 #include "crc32.h"
 
 #include "config.h"
-
-#include "chunk_funcs.h"
 
 #if defined HAVE_ZLIB_H && defined HAVE_LIBZ
 # define USE_ZLIB
@@ -116,12 +111,12 @@ SETDEFAULTS_FUNC(mod_compress_setdefaults) {
 		{ NULL,                             NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
 		
-		s = calloc(1, sizeof(plugin_config));
+		s = malloc(sizeof(plugin_config));
 		s->compress_cache_dir = buffer_init();
 		s->compress = array_init();
 		s->compress_max_filesize = 0;
@@ -329,7 +324,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 	void *start;
 	const char *filename = fn->ptr;
 	ssize_t r;
-
+	
 	/* overflow */
 	if ((off_t)(fce->st.st_size * 1.1) < fce->st.st_size) return -1;
 	
@@ -387,7 +382,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 	
 	buffer_append_string_buffer(p->ofn, fce->etag);
 	
-	if (-1 == (ofd = open(p->ofn->ptr, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0600))) {
+	if (-1 == (ofd = open(p->ofn->ptr, O_WRONLY | O_CREAT | O_EXCL, 0600))) {
 		if (errno == EEXIST) {
 			/* cache-entry exists */
 #if 0
@@ -405,7 +400,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 #if 0
 	log_error_write(srv, __FILE__, __LINE__, "bs", p->ofn, "compress-cache miss");
 #endif	
-	if (-1 == (ifd = open(filename, O_RDONLY | O_BINARY))) {
+	if (-1 == (ifd = open(filename, O_RDONLY))) {
 		log_error_write(srv, __FILE__, __LINE__, "sbss", "opening plain-file", fn, "failed", strerror(errno));
 		
 		close(ofd);
@@ -477,7 +472,7 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 	if (fce->st.st_size > SIZE_MAX) return -1;
 	
 	
-	if (-1 == (ifd = open(fn->ptr, O_RDONLY | O_BINARY))) {
+	if (-1 == (ifd = open(fn->ptr, O_RDONLY))) {
 		log_error_write(srv, __FILE__, __LINE__, "sbss", "opening plain-file", fn, "failed", strerror(errno));
 		
 		return -1;
@@ -515,11 +510,10 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 	
 	if (ret != 0) return -1;
 	
-	chunkqueue_reset(srv, con->write_queue);
+	chunkqueue_reset(con->write_queue);
 	b = chunkqueue_get_append_buffer(con->write_queue);
 	buffer_copy_memory(b, p->b->ptr, p->b->used);
 	
-	file_cache_release_entry(srv, file_cache_get_entry(srv, con->physical.path));
 	buffer_reset(con->physical.path);
 	
 	con->file_finished = 1;
@@ -531,18 +525,16 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_compress_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_compress_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-
-	PATCH(compress_cache_dir);
-	PATCH(compress);
-	PATCH(compress_max_filesize);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -563,6 +555,18 @@ static int mod_compress_patch_connection(server *srv, connection *con, plugin_da
 	
 	return 0;
 }
+
+static int mod_compress_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(compress_cache_dir);
+	PATCH(compress);
+	PATCH(compress_max_filesize);
+	
+	return 0;
+}
 #undef PATCH
 
 PHYSICALPATH_FUNC(mod_compress_physical) {
@@ -570,27 +574,25 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	data_string *content_ds;
 	size_t m, i;
 	off_t max_fsize;
-	file_cache_entry *fce = NULL;
 	
 	/* only GET and POST can get compressed */
-	if (con->request.http_method_id != HTTP_METHOD_GET && 
-	    con->request.http_method_id != HTTP_METHOD_POST) {
+	if (con->request.http_method != HTTP_METHOD_GET && 
+	    con->request.http_method != HTTP_METHOD_POST) {
 		return HANDLER_GO_ON;
 	}
 	
-	mod_compress_patch_connection(srv, con, p);
+	mod_compress_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_compress_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	
 	max_fsize = p->conf.compress_max_filesize;
-
-	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-		/* */
-		SEGFAULT();
-	}
-
 	
 	/* don't compress files that are too large as we need to much time to handle them */
-	if (max_fsize && (fce->st.st_size >> 10) > max_fsize) return HANDLER_GO_ON;
+	if (max_fsize && (con->fce->st.st_size >> 10) > max_fsize) return HANDLER_GO_ON;
 	
 	if (NULL == (content_ds = (data_string *)array_get_element(con->response.headers, "Content-Type"))) {
 		log_error_write(srv, __FILE__, __LINE__, "sbb", "Content-Type is not set for", con->physical.path, con->uri.path);
@@ -663,14 +665,14 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 					/* deflate it */
 					if (p->conf.compress_cache_dir->used) {
 						if (0 == deflate_file_to_file(srv, con, p,
-									      con->physical.path, fce, compression_type)) {
+									      con->physical.path, con->fce, compression_type)) {
 							struct tm *tm;
 							time_t last_mod;
 							
 							response_header_insert(srv, con, CONST_STR_LEN("Content-Encoding"), compression_name, strlen(compression_name));
 							
 							/* Set Last-Modified of ORIGINAL file */
-							last_mod = fce->st.st_mtime;
+							last_mod = con->fce->st.st_mtime;
 							
 							for (i = 0; i < FILE_CACHE_MAX; i++) {
 								if (srv->mtime_cache[i].mtime == last_mod) break;
@@ -704,14 +706,10 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 							
 							response_header_insert(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(srv->mtime_cache[i].str));
 							
-							/* we modified physical.path, update fce */
-							file_cache_release_entry(srv, fce);
-							file_cache_add_entry(srv, con, con->physical.path, &fce);
-							
 							return HANDLER_FINISHED;
 						}
 					} else if (0 == deflate_file_to_buffer(srv, con, p,
-									       con->physical.path, fce, compression_type)) {
+									       con->physical.path, con->fce, compression_type)) {
 							
 						response_header_insert(srv, con, CONST_STR_LEN("Content-Encoding"), compression_name, strlen(compression_name));
 						
@@ -732,10 +730,7 @@ int mod_compress_plugin_init(plugin *p) {
 	
 	p->init        = mod_compress_init;
 	p->set_defaults = mod_compress_setdefaults;
-#if 0
-	/* will be replaced by the filter interface */
 	p->handle_physical_path  = mod_compress_physical;
-#endif
 	p->cleanup     = mod_compress_free;
 	
 	p->data        = NULL;

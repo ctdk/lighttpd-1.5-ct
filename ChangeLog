@@ -2285,7 +2285,7 @@ Feature Requests:
   the syntax should look familar to all who worked with Perl or PHP.
   
   config-file handling has been seperated into a parser and a lexer. Both
-  are currently written by hand and will propably be rewritten into bison +
+  are currently written by hand and will propably be rewritten into bison
   flex if time permits. But that would be a cosmetical change.
 
 05.12.2003 03:07
@@ -3216,7 +3216,7 @@ For -c 100 4k and 100k sig-io gives a small increasment.
   
 - unneccesary slashes
 
-  when building pathes from different portions of a string (e.g. docroot +
+  when building pathes from different portions of a string (e.g. docroot
   virt-server-docroot + request-uri) slashes where added for security and
   simplicity. This resulted in up to 5 adjacent slashes which caused no harm
   but looked strange. (fixed)
@@ -3915,7 +3915,7 @@ Speed:
 
 Let's assume that <a
 href="http://www.acme.com/software/thttpd/">thttpd</a> is (one of) the
-fastest webservers out there. 
+fasted webservers out there. 
 
 all httpds were started with:
 

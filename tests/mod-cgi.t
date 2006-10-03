@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 10;
+use Test::More tests => 6;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -217,40 +217,6 @@ EOF
  );
 @response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } );
 ok(handle_http == 0, 'NPH + perl, Bug #14');
-
-@request  = ( <<EOF
-GET /get-header.pl?QUERY_STRING HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'QUERY_STRING' } );
-ok(handle_http == 0, 'cgi-env: QUERY_STRING');
-
-@request  = ( <<EOF
-GET /get-header.pl?GATEWAY_INTERFACE HTTP/1.0
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'CGI/1.1' } );
-ok(handle_http == 0, 'cgi-env: GATEWAY_INTERFACE');
-
-@request  = ( <<EOF
-GET /get-header.pl?HTTP_XX_YY123 HTTP/1.0
-xx-yy123: foo
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'foo' } );
-ok(handle_http == 0, 'cgi-env: quoting headers with numbers');
-
-@request  = ( <<EOF
-GET /get-header.pl?HTTP_HOST HTTP/1.0
-Host: www.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'www.example.org' } );
-ok(handle_http == 0, 'cgi-env: HTTP_HOST');
-
-
-
-
 
 ok(stop_proc == 0, "Stopping lighttpd");
 

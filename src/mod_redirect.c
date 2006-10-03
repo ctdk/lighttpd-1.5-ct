@@ -9,11 +9,12 @@
 #include "plugin.h"
 #include "response.h"
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 typedef struct {
 	pcre_keyvalue_buffer *redirect;
-	data_config *context; /* to which apply me */
 } plugin_config;
 
 typedef struct {
@@ -46,17 +47,6 @@ FREE_FUNC(mod_redirect_free) {
 	
 	buffer_free(p->match_buf);
 	buffer_free(p->location);
-
-	if (p->config_storage) {
-		size_t i;
-		for (i = 0; i < srv->config_context->used; i++) {
-			plugin_config *s = p->config_storage[i];
-
-			pcre_keyvalue_buffer_free(s->redirect);
-			free(s);
-		}
-		free(p->config_storage);
-	}
 	
 	free(p);
 	
@@ -76,7 +66,7 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 	if (!p) return HANDLER_ERROR;
 	
 	/* 0 */
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
@@ -84,7 +74,7 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 		array *ca;
 		data_array *da = (data_array *)du;
 		
-		s = calloc(1, sizeof(plugin_config));
+		s = malloc(sizeof(plugin_config));
 		s->redirect   = pcre_keyvalue_buffer_init();
 		
 		cv[0].destination = s->redirect;
@@ -133,16 +123,16 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 	return HANDLER_GO_ON;
 }
 #ifdef HAVE_PCRE_H
-static int mod_redirect_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_redirect_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	p->conf.redirect = s->redirect;
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -153,10 +143,20 @@ static int mod_redirect_patch_connection(server *srv, connection *con, plugin_da
 			
 			if (0 == strcmp(du->key->ptr, "url.redirect")) {
 				p->conf.redirect = s->redirect;
-				p->conf.context = dc;
 			}
 		}
 	}
+	
+	return 0;
+}
+
+static int mod_redirect_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	
+	UNUSED(srv);
+	UNUSED(con);
+		
+	p->conf.redirect = s->redirect;
 	
 	return 0;
 }
@@ -173,28 +173,30 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 	 * 
 	 */
 	
-	mod_redirect_patch_connection(srv, con, p);
+	mod_redirect_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_redirect_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	buffer_copy_string_buffer(p->match_buf, con->request.uri);
 	
 	for (i = 0; i < p->conf.redirect->used; i++) {
 		pcre *match;
-		pcre_extra *extra;
 		const char *pattern;
 		size_t pattern_len;
 		int n;
-		pcre_keyvalue *kv = p->conf.redirect->kv[i];
 # define N 10
 		int ovec[N * 3];
 		
-		match       = kv->key;
-		extra       = kv->key_extra;
-		pattern     = kv->value->ptr;
-		pattern_len = kv->value->used - 1;
+		match = p->conf.redirect->kv[i]->key;
+		pattern = p->conf.redirect->kv[i]->value;
+		pattern_len = strlen(pattern);
 		
-		if ((n = pcre_exec(match, extra, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
+		if ((n = pcre_exec(match, NULL, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
 			if (n != PCRE_ERROR_NOMATCH) {
-				log_error_write(srv, __FILE__, __LINE__, "sd",
+				log_error_write(srv, __FILE__, __LINE__, "sd"
 						"execution error while matching: ", n);
 				return HANDLER_ERROR;
 			}
@@ -202,7 +204,6 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 			const char **list;
 			size_t start, end;
 			size_t k;
-			
 			/* it matched */
 			pcre_get_substring_list(p->match_buf->ptr, ovec, n, &list);
 			
@@ -212,7 +213,7 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 			
 			start = 0; end = pattern_len;
 			for (k = 0; k < pattern_len; k++) {
-				if ((pattern[k] == '$' || pattern[k] == '%') &&
+				if (pattern[k] == '$' &&
 				    isdigit((unsigned char)pattern[k + 1])) {
 					/* got one */
 					
@@ -222,13 +223,9 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 					
 					buffer_append_string_len(p->location, pattern + start, end - start);
 					
-					if (pattern[k] == '$') {
-						/* n is always > 0 */
-						if (num < (size_t)n) {
-							buffer_append_string(p->location, list[num]);
-						}
-					} else {
-						config_append_cond_match_buffer(con, p->conf.context, p->location, num);
+					/* n is always > 0 */
+					if (num < (size_t)n) {
+						buffer_append_string(p->location, list[num]);
 					}
 					
 					k++;

@@ -21,7 +21,7 @@
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
-#include "file_cache_funcs.h"
+#include "file_cache.h"
 
 
 #ifndef UIO_MAXIOV
@@ -31,10 +31,12 @@
 # endif
 #endif
 
-network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *write_fd, chunkqueue *cq) {
+int network_write_chunkqueue_freebsdsendfile(server *srv, connection *con, chunkqueue *cq) {
+	const int fd = con->fd;
 	chunk *c;
+	size_t chunks_written = 0;
 	
-	for(c = cq->first; c; c = c->next) {
+	for(c = cq->first; c; c = c->next, chunks_written++) {
 		int chunk_finished = 0;
 		
 		switch(c->type) {
@@ -82,7 +84,7 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 				}
 			}
 			
-			if ((r = writev(write_fd->fd, chunks, num_chunks)) < 0) {
+			if ((r = writev(fd, chunks, num_chunks)) < 0) {
 				switch (errno) {
 				case EAGAIN:
 				case EINTR:
@@ -90,12 +92,12 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 					break;
 				case EPIPE:
 				case ECONNRESET:
-					return NETWORK_REMOTE_CLOSE;
+					return -2;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd", 
-							"writev failed:", strerror(errno), write_fd->fd);
+							"writev failed:", strerror(errno), fd);
 					
-					return NETWORK_ERROR;
+					return -1;
 				}
 
 				r = 0;
@@ -108,19 +110,21 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 					/* written */
 					r -= chunks[i].iov_len;
 					tc->offset += chunks[i].iov_len;
-					write_fd->bytes_written += chunks[i].iov_len;
+					con->bytes_written += chunks[i].iov_len;
 					
 					if (chunk_finished) {
 						/* skip the chunks from further touches */
+						chunks_written++;
 						c = c->next;
 					} else {
+						/* chunks_written + c = c->next is done in the for()*/
 						chunk_finished++;
 					}
 				} else {
 					/* partially written */
 					
 					tc->offset += r;
-					write_fd->bytes_written += r;
+					con->bytes_written += r;
 					chunk_finished = 0;
 					
 					break;
@@ -132,41 +136,40 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 		case FILE_CHUNK: {
 			off_t offset, r;
 			size_t toSend;
-			file_cache_entry *fce = c->data.file.fce;
 			
-			if (HANDLER_GO_ON != file_cache_check_entry(srv, fce)) {
+			if (HANDLER_GO_ON != file_cache_get_entry(srv, con, c->data.file.name, &(con->fce))) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), fce->name);
-				return NETWORK_ERROR;
+						strerror(errno), c->data.file.name);
+				return -1;
 			}
 			
 			offset = c->data.file.offset + c->offset;
 			toSend = c->data.file.length - c->offset;
 			
-			if (offset > fce->st.st_size) {
-				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.fce->name);
+			if (offset > con->fce->st.st_size) {
+				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.name);
 				
-				return NETWORK_ERROR;
+				return -1;
 			}
 
 			r = 0;
 			
 			/* FreeBSD sendfile() */
-			if (-1 == sendfile(fce->fd, write_fd->fd, offset, toSend, NULL, &r, 0)) {
+			if (-1 == sendfile(con->fce->fd, fd, offset, toSend, NULL, &r, 0)) {
 				switch(errno) {
 				case EAGAIN:
 					break;
 				case ENOTCONN:
-					return NETWORK_REMOTE_CLOSE;
+					return -2;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile: ", strerror(errno), errno);
 					
-					return NETWORK_ERROR;
+					return -1;
 				}
 			}
 
 			c->offset += r;
-			write_fd->bytes_written += r;
+			con->bytes_written += r;
 			
 			if (c->offset == c->data.file.length) {
 				chunk_finished = 1;
@@ -178,7 +181,7 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 			
 			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
 			
-			return NETWORK_ERROR;
+			return -1;
 		}
 		
 		if (!chunk_finished) {
@@ -188,7 +191,7 @@ network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *writ
 		}
 	}
 
-	return NETWORK_OK;
+	return chunks_written;
 }
 
 #endif

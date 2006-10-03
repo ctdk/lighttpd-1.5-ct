@@ -5,7 +5,7 @@
 #include "plugin.h"
 #include "log.h"
 #include "response.h"
-#include "file_cache_funcs.h"
+#include "file_cache.h"
 
 typedef struct {
 	/* unparsed pieces */
@@ -45,13 +45,10 @@ FREE_FUNC(mod_evhost_free) {
 		size_t i;
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
-
-			if (!s) continue;
 			
 			if(s->path_pieces) {
-				size_t j;
-				for (j = 0; j < s->len; j++) {
-					buffer_free(s->path_pieces[j]);
+				for (i = 0; i < s->len; i++) {
+					buffer_free(s->path_pieces[i]);
 				}
 				
 				free(s->path_pieces);
@@ -127,7 +124,7 @@ SETDEFAULTS_FUNC(mod_evhost_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
@@ -223,17 +220,16 @@ static int mod_evhost_parse_host(connection *con,array *host) {
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_evhost_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_evhost_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(path_pieces);
-	PATCH(len);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -251,6 +247,17 @@ static int mod_evhost_patch_connection(server *srv, connection *con, plugin_data
 	
 	return 0;
 }
+
+static int mod_evhost_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(path_pieces);
+	PATCH(len);
+	
+	return 0;
+}
 #undef PATCH
 
 
@@ -260,18 +267,17 @@ static handler_t mod_evhost_uri_handler(server *srv, connection *con, void *p_d)
 	array *parsed_host;
 	register char *ptr;
 	int not_good = 0;
-	struct stat st;
 	
 	/* not authority set */
 	if (con->uri.authority->used == 0) return HANDLER_GO_ON;
 	
-	mod_evhost_patch_connection(srv, con, p);
-	
-	/* missing even default(global) conf */
-	if (0 == p->conf.len) {
-		return HANDLER_GO_ON;
+	mod_evhost_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_evhost_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
 	}
-
+	
 	parsed_host = array_init();
 	
 	mod_evhost_parse_host(con, parsed_host);
@@ -303,10 +309,10 @@ static handler_t mod_evhost_uri_handler(server *srv, connection *con, void *p_d)
 	
 	array_free(parsed_host);
 	
-	if (-1 == stat(p->tmp_buf->ptr, &(st))) {
+	if (HANDLER_GO_ON != file_cache_get_entry(srv, con, p->tmp_buf, &(con->fce))) {
 		log_error_write(srv, __FILE__, __LINE__, "sb", strerror(errno), p->tmp_buf);
 		not_good = 1;
-	} else if(!S_ISDIR(st.st_mode)) {
+	} else if(!S_ISDIR(con->fce->st.st_mode)) {
 		log_error_write(srv, __FILE__, __LINE__, "sb", "not a directory:", p->tmp_buf);
 		not_good = 1;
 	}

@@ -107,12 +107,12 @@ SETDEFAULTS_FUNC(mod_skeleton_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
 		
-		s = calloc(1, sizeof(plugin_config));
+		s = malloc(sizeof(plugin_config));
 		s->match    = array_init();
 		
 		cv[0].destination = s->match;
@@ -129,16 +129,16 @@ SETDEFAULTS_FUNC(mod_skeleton_set_defaults) {
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_skeleton_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_skeleton_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(match);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -155,6 +155,16 @@ static int mod_skeleton_patch_connection(server *srv, connection *con, plugin_da
 	
 	return 0;
 }
+
+static int mod_skeleton_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(match);
+	
+	return 0;
+}
 #undef PATCH
 
 URIHANDLER_FUNC(mod_skeleton_uri_handler) {
@@ -166,7 +176,12 @@ URIHANDLER_FUNC(mod_skeleton_uri_handler) {
 
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	
-	mod_skeleton_patch_connection(srv, con, p);
+	mod_skeleton_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_skeleton_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 
 	s_len = con->uri.path->used - 1;
 	

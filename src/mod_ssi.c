@@ -2,7 +2,6 @@
 
 #include <ctype.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
@@ -18,7 +17,6 @@
 #include "response.h"
 
 #include "mod_ssi.h"
-#include "file_cache_funcs.h"
 
 #include "inet_ntop_cache.h"
 
@@ -95,12 +93,12 @@ SETDEFAULTS_FUNC(mod_ssi_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
 		
-		s = calloc(1, sizeof(plugin_config));
+		s = malloc(sizeof(plugin_config));
 		s->ssi_extension  = array_init();
 		
 		cv[0].destination = s->ssi_extension;
@@ -173,15 +171,9 @@ static int ssi_env_add_request_headers(server *srv, connection *con, plugin_data
 			
 			buffer_prepare_append(srv->tmp_buf, ds->key->used + 2);
 			for (j = 0; j < ds->key->used - 1; j++) {
-				char c = '_';
-				if (light_isalpha(ds->key->ptr[j])) {
-					/* upper-case */
-					c = ds->key->ptr[j] & ~32;
-				} else if (light_isdigit(ds->key->ptr[j])) {
-					/* copy */
-					c = ds->key->ptr[j];
-				}
-				srv->tmp_buf->ptr[srv->tmp_buf->used++] = c;
+				srv->tmp_buf->ptr[srv->tmp_buf->used++] = 
+					isalpha((unsigned char)ds->key->ptr[j]) ? 
+					toupper((unsigned char)ds->key->ptr[j]) : '_';
 			}
 			srv->tmp_buf->ptr[srv->tmp_buf->used] = '\0';
 			
@@ -272,7 +264,7 @@ static int build_ssi_cgi_vars(server *srv, connection *con, plugin_data *p) {
 	
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REQUEST_URI"), con->request.uri->ptr);
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("QUERY_STRING"), con->uri.query->used ? con->uri.query->ptr : "");
-	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REQUEST_METHOD"), con->request.http_method_name->ptr);
+	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REQUEST_METHOD"), get_http_method_name(con->request.http_method));
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("REDIRECT_STATUS"), "200");
 	ssi_env_add(p->ssi_cgi_env, CONST_STRING("SERVER_PROTOCOL"), get_http_version_name(con->request.http_version));
 	
@@ -388,34 +380,21 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 		switch(var) {
 		case SSI_ECHO_USER_NAME: {
 			struct passwd *pw;
-			file_cache_entry *fce = NULL;
 			
 			b = chunkqueue_get_append_buffer(con->write_queue);
-
-			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-				/* */
-				SEGFAULT();
-			}
 #ifdef HAVE_PWD_H
-			if (NULL == (pw = getpwuid(fce->st.st_uid))) {
-				buffer_copy_long(b, fce->st.st_uid);
+			if (NULL == (pw = getpwuid(con->fce->st.st_uid))) {
+				buffer_copy_long(b, con->fce->st.st_uid);
 			} else {
 				buffer_copy_string(b, pw->pw_name);
 			}
 #else
-			buffer_copy_long(b, fce->st.st_uid);
+			buffer_copy_long(b, con->fce->st.st_uid);
 #endif
 			break;
 		}
 		case SSI_ECHO_LAST_MODIFIED:	{
-			time_t t;
-			file_cache_entry *fce = NULL;
-		       
-			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-				/* */
-				SEGFAULT();
-			}
-			t = fce->st.st_mtime;
+			time_t t = con->fce->st.st_mtime;
 			
 			b = chunkqueue_get_append_buffer(con->write_queue);
 			if (0 == strftime(buf, sizeof(buf), p->timefmt->ptr, localtime(&t))) {
@@ -554,7 +533,6 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 		
 		if (0 == stat(p->stat_fn->ptr, &st)) {
 			time_t t = st.st_mtime;
-			file_cache_entry *fce = NULL;
 			
 			switch (ssicmd) {
 			case SSI_FSIZE:
@@ -581,12 +559,8 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 					buffer_copy_string(b, buf);
 				}
 				break;
-			case SSI_INCLUDE: 
-				if (NULL == (fce = file_cache_get_entry(srv, p->stat_fn))) {
-					SEGFAULT();
-				}
-
-				chunkqueue_append_file(con->write_queue, fce, 0, st.st_size);
+			case SSI_INCLUDE:
+				chunkqueue_append_file(con->write_queue, p->stat_fn, 0, st.st_size);
 				break;
 			}
 		} else {
@@ -886,7 +860,6 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	stream s;
 #ifdef  HAVE_PCRE_H
 	int i, n;
-	file_cache_entry *fce = NULL;
 	
 #define N 10
 	int ovec[N * 3];
@@ -966,18 +939,12 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	 *   Contains the owner of the file which included it.
 	 * 
 	 */
-#ifdef HAVE_PCRE_H
-	if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-		file_cache_add_entry(srv, con, con->physical.path, &fce);
-	}
-		
+#ifdef HAVE_PCRE_H	
 	for (i = 0; (n = pcre_exec(p->ssi_regex, NULL, s.start, s.size, i, 0, ovec, N * 3)) > 0; i = ovec[1]) {
 		const char **l;
 		/* take every think from last offset to current match pos */
 		
-		if (!p->if_is_false) {
-			chunkqueue_append_file(con->write_queue, fce, i, ovec[0] - i);
-		}
+		if (!p->if_is_false) chunkqueue_append_file(con->write_queue, con->physical.path, i, ovec[0] - i);
 		
 		pcre_get_substring_list(s.start, ovec, n, &l);
 		process_ssi_stmt(srv, con, p, l, n);
@@ -987,7 +954,7 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	switch(n) {
 	case PCRE_ERROR_NOMATCH:
 		/* copy everything/the rest */
-		chunkqueue_append_file(con->write_queue, fce, i, s.size - i);
+		chunkqueue_append_file(con->write_queue, con->physical.path, i, s.size - i);
 		
 		break;
 	default:
@@ -996,6 +963,7 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 		break;
 	}
 #endif	
+	
 	
 	stream_close(&s);
 	
@@ -1012,16 +980,16 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_ssi_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_ssi_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(ssi_extension);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -1038,15 +1006,30 @@ static int mod_ssi_patch_connection(server *srv, connection *con, plugin_data *p
 	
 	return 0;
 }
+
+static int mod_ssi_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(ssi_extension);
+	
+	return 0;
+}
 #undef PATCH
 
 URIHANDLER_FUNC(mod_ssi_physical_path) {
 	plugin_data *p = p_d;
-	size_t k;
+	size_t k, i;
 	
 	if (con->physical.path->used == 0) return HANDLER_GO_ON;
 	
-	mod_ssi_patch_connection(srv, con, p);
+	mod_ssi_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_ssi_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	for (k = 0; k < p->conf.ssi_extension->used; k++) {
 		data_string *ds = (data_string *)p->conf.ssi_extension->data[k];
@@ -1076,7 +1059,7 @@ int mod_ssi_plugin_init(plugin *p) {
 	p->name        = buffer_init_string("ssi");
 	
 	p->init        = mod_ssi_init;
-	p->handle_subrequest_start = mod_ssi_physical_path;
+	p->handle_physical_path = mod_ssi_physical_path;
 	p->set_defaults  = mod_ssi_set_defaults;
 	p->cleanup     = mod_ssi_free;
 	

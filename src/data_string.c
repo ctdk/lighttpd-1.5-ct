@@ -5,15 +5,6 @@
 
 #include "array.h"
 
-static data_unset *data_string_copy(const data_unset *s) {
-	data_string *src = (data_string *)s;
-	data_string *ds = data_string_init();
-
-	buffer_copy_string_buffer(ds->key, src->key);
-	buffer_copy_string_buffer(ds->value, src->value);
-	return (data_unset *)ds;
-}
-
 static void data_string_free(data_unset *d) {
 	data_string *ds = (data_string *)d;
 	
@@ -66,11 +57,10 @@ static int data_response_insert_dup(data_unset *dst, data_unset *src) {
 }
 
 
-static void data_string_print(const data_unset *d, int depth) {
+static void data_string_print(data_unset *d) {
 	data_string *ds = (data_string *)d;
-	UNUSED(depth);
-
-	fprintf(stderr, "\"%s\"", ds->value->used ? ds->value->ptr : "");
+	
+	fprintf(stderr, "{%s: %s}", ds->key->ptr, ds->value->used ? ds->value->ptr : "");
 }
 
 
@@ -83,7 +73,6 @@ data_string *data_string_init(void) {
 	ds->key = buffer_init();
 	ds->value = buffer_init();
 	
-	ds->copy = data_string_copy;
 	ds->free = data_string_free;
 	ds->reset = data_string_reset;
 	ds->insert_dup = data_string_insert_dup;

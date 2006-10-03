@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.57)
-AC_INIT(lighttpd, 1.4.0, jan@kneschke.de)
+AC_INIT(lighttpd, 1.3.13, jan@kneschke.de)
 AC_CONFIG_SRCDIR([src/server.c])
 
 AC_CANONICAL_TARGET
@@ -82,7 +82,6 @@ AC_FUNC_STRFTIME
 
 dnl Checks for database.
 MYSQL_INCLUDE=""
-MYSQL_LIBS=""
 
 AC_PATH_PROG(MYSQLCONFIG, mysql_config)
 AC_MSG_CHECKING(for MySQL support)
@@ -97,11 +96,7 @@ AC_ARG_WITH(mysql,
     if test \! -x $withval; then
       echo "--with-mysql=path-to-mysql_config"
     fi
-    if $withval | grep -- '--include' ; then
-      MYSQL_INCLUDE="`$withval --include | sed s/\'//g`"
-    else
-      MYSQL_INCLUDE="`$withval --cflags | sed s/\'//g`"
-    fi
+    MYSQL_INCLUDE="`$withval --cflags | sed s/\'//g`"
     MYSQL_LIBS="`$withval --libs | sed s/\'//g`"
 
     AC_MSG_RESULT(yes)
@@ -134,7 +129,7 @@ AC_ARG_WITH(ldap, AC_HELP_STRING([--with-ldap],[enable LDAP support]),
   AC_CHECK_HEADERS([ldap.h],[
     LDAP_LIB=-lldap
     AC_DEFINE([HAVE_LIBLDAP], [1], [libldap])
-    AC_DEFINE([HAVE_LDAP_H], [1], [ldap.h])
+    AC_DEFINE([HAVE_LDAP_H], [1])
   ])
  ])
  AC_SUBST(LDAP_LIB)
@@ -142,7 +137,7 @@ AC_ARG_WITH(ldap, AC_HELP_STRING([--with-ldap],[enable LDAP support]),
   AC_CHECK_HEADERS([lber.h],[
     LBER_LIB=-llber
     AC_DEFINE([HAVE_LIBLBER], [1], [liblber])
-    AC_DEFINE([HAVE_LBER_H], [1], [lber.h])
+    AC_DEFINE([HAVE_LBER_H], [1])
   ])
  ])
  AC_SUBST(LBER_LIB)
@@ -156,24 +151,11 @@ AC_ARG_WITH(attr, AC_HELP_STRING([--with-attr],[enable extended attribute suppor
 	AC_CHECK_HEADERS([attr/attributes.h],[
 		ATTR_LIB=-lattr
 		AC_DEFINE([HAVE_XATTR], [1], [libattr])
-		AC_DEFINE([HAVE_ATTR_ATTRIBUTES_H], [1], [attributes.h])
+		AC_DEFINE([HAVE_ATTR_ATTRIBUTES_H], [1])
 	])
  ])
 ],[AC_MSG_RESULT(no)])
 AC_SUBST(ATTR_LIB)
-
-AC_MSG_CHECKING(for gdbm)
-AC_ARG_WITH(gdbm, AC_HELP_STRING([--with-gdbm],[gdbm storage for mod_trigger_b4_dl]),
-[AC_MSG_RESULT(yes)
- AC_CHECK_LIB(gdbm, gdbm_open, [
-	AC_CHECK_HEADERS([gdbm.h],[
-		GDBM_LIB=-lgdbm
-		AC_DEFINE([HAVE_GDBM], [1], [libgdbm])
-		AC_DEFINE([HAVE_GDBM_H], [1], [gdbm.h])
-	])
- ])
-],[AC_MSG_RESULT(no)])
-AC_SUBST(GDBM_LIB)
 
 AC_MSG_CHECKING(for valgrind)
 AC_ARG_WITH(valgrind, AC_HELP_STRING([--with-valgrind],[enable internal
@@ -313,23 +295,14 @@ esac
 AC_CHECK_FUNCS([dup2 getcwd inet_ntoa inet_ntop memset mmap munmap strchr \
 		  strdup strerror strstr strtol sendfile  getopt socket \
 		  gethostbyname poll sigtimedwait epoll_ctl getrlimit chroot \
-		  getuid select signal pathconf \
+		  getuid select signal\
 		  writev sigaction sendfile64 send_file kqueue port_create localtime_r])
-
-AC_SYS_LARGEFILE
-
-if test x$ac_cv_sys_file_offset_bits \!= x; then
-  CPPFLAGS="$CPPFLAGS -D_FILE_OFFSET_BITS=$ac_cv_sys_file_offset_bits"
-fi
 
 if test "x$ac_cv_func_sendfile" = xyes; then
 	# check if sendfile works
         AC_MSG_CHECKING(if sendfile works)
 	if test "x$cross_compiling" = xno; then
 	AC_TRY_RUN([
-		    #ifdef HAVE_SYS_SENDFILE_H
-		    #include <sys/sendfile.h>
-		    #endif /* HAVE_SYS_SENDFILE_H */
 		    #include <errno.h>
 		    int main() {
 		      int o = 0;
@@ -368,6 +341,16 @@ if test x$ipv6 = xtrue; then
 fi
 
 
+AC_MSG_CHECKING(for Large File System support)
+AC_ARG_ENABLE(lfs,
+ AC_HELP_STRING([--enable-lfs],[Turn on Large File System (default)]),
+ [case "${enableval}" in
+   yes) CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES" ;;
+    no) ;;
+     *) AC_MSG_ERROR(bad value ${enableval} for --enable-lfs) ;;
+  esac],[CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES"])
+AC_MSG_RESULT($enableval)
+
 AC_CHECK_SIZEOF(long)
 AC_CHECK_SIZEOF(off_t)
 
@@ -384,7 +367,7 @@ AC_CHECK_LIB(fcgi, FCGI_Accept, [
 AM_CONDITIONAL(CHECK_WITH_FASTCGI, test "x$fastcgi_found" = xyes)
 
 if test "${GCC}" = "yes"; then
-       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic -Wcast-align"
+       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic"
 fi
 
 dnl build version-id
@@ -402,124 +385,51 @@ AC_CONFIG_FILES([Makefile debian/Makefile src/Makefile doc/Makefile tests/Makefi
 		 openwrt/Makefile openwrt/control openwrt/lighttpd.mk])
 AC_OUTPUT
 
-
-do_build="mod_cgi mod_fastcgi mod_proxy mod_evhost mod_simple_vhost mod_access mod_alias mod_setenv mod_usertrack mod_auth mod_status mod_accesslog mod_rrdtool mod_secdownload mod_expire mod_compress mod_dirlisting mod_indexfiles mod_userdir" 
-
-plugins="mod_rewrite mod_redirect mod_ssi"
-features="regex-conditionals"
-if test ! "x$PCRE_LIB" = x; then
-	do_build="$do_build $plugins"
-	enable_feature="$features"
-else
-	no_build="$no_build $plugins"
-	disable_feature="$features"
-fi
-
-plugins="mod_mysql_vhost"
-if test ! "x$MYSQL_LIBS" = x; then
-	do_build="$do_build $plugins"
-else
-	no_build="$no_build $plugins"
-fi
-
-plugins="mod_trigger_b4_dl"
-if test ! "x$GDBM_LIB" = x; then
-	do_build="$do_build $plugins"
-else
-	no_build="$no_build $plugins"
-fi
-
-
-features="compress-gzip compress-deflate"
-if test ! "x$Z_LIB" = x; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-
-features="compress-bzip2"
-if test ! "x$BZ_LIB" = x; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-
-features="auth-ldap"
-if test ! "x$LDAP_LIB" = x; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-
-features="network-openssl"
-if test ! "x$SSL_LIB" = x; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-
-# no crypt call
-features="auth-crypt"
-if test "$ac_cv_search_crypt" = no; then
-	disable_feature="$disable_feature $features"
-else
-	enable_feature="$enable_feature $features"
-fi
-
-features="network-ipv6"
-if test "$ac_cv_ipv6_support" = yes; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-
-features="large-files"
-if test "$enable_lfs" = yes; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-
-## post processing
-do_build=`for i in $do_build; do echo $i; done | sort`
-no_build=`for i in $no_build; do echo $i; done | sort`
-enable_feature=`for i in $enable_feature; do echo $i; done | sort`
-disable_feature=`for i in $disable_feature; do echo $i; done | sort`
-
-## output
-
 $ECHO
 $ECHO "Plugins:"
 $ECHO
+if test ! "x$PCRE_LIB" = x; then
+  $ECHO "mod_rewrite     : enabled"
+  $ECHO "mod_redirect    : enabled"
+  $ECHO "mod_ssi         : enabled"
+else
+  $ECHO "mod_rewrite     : disabled (libpcre missing)"
+  $ECHO "mod_redirect    : disabled (libpcre missing)"
+  $ECHO "mod_ssi         : disabled (libpcre missing)"
+fi
 
-$ECHO "enabled: "
-i=0
-for p in $do_build; do
-	$ECHO "  $p"
-done
+$ECHO "mod_cgi         : enabled"
+$ECHO "mod_fastcgi     : enabled"
+$ECHO "mod_proxy       : enabled"
+$ECHO "mod_evhost      : enabled"
+$ECHO "mod_simple_vhost: enabled"
 
-$ECHO "disabled: "
-for p in $no_build; do
-	$ECHO "  $p"
-done
+if test "x$MYSQL_LIBS" = x; then
+  $ECHO "mod_mysql_vhost : disabled (libmysqlclient missing or mysql support disabled)"
+else
+  $ECHO "mod_mysql_vhost : enabled"
+fi
+
+$ECHO "mod_access      : enabled"
+$ECHO "mod_alias       : enabled"
+$ECHO "mod_setenv      : enabled"
+$ECHO "mod_usertrack   : enabled"
+if test "x$Z_LIB" = x; then
+  $ECHO "mod_compress    : disabled (libz missing)"
+else
+  $ECHO "mod_compress    : enabled"
+fi
+
+# no crypt call
+if test "$ac_cv_search_crypt" = no; then
+  $ECHO "mod_auth        : enabled, crypt() support disabled"
+else
+  $ECHO "mod_auth        : enabled"
+fi
+$ECHO "mod_status      : enabled"
+$ECHO "mod_accesslog   : enabled"
+$ECHO "mod_rrdtool     : enabled"
+$ECHO "mod_secdownload : enabled"
+$ECHO "mod_expire      : enabled"
 
 $ECHO
-$ECHO "Features:"
-$ECHO
-
-$ECHO "enabled: "
-i=0
-p=""
-for p in $enable_feature; do
-	$ECHO "  $p"
-done
-
-$ECHO "disabled: "
-for p in $disable_feature; do
-	$ECHO "  $p"
-done
-
-$ECHO
-
-
-$ECHO "Be sure to read UPGRADING-1.4.0.txt if you are upgrading from 1.3.13 and below"

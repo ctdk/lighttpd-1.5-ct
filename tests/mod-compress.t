@@ -185,43 +185,39 @@ sub handle_http {
 
 	return 0;
 }
-
-SKIP: {
-    skip "mod-compress is broken for a while", 6 if 1; 
     
-    ok(start_proc == 0, "Starting lighttpd") or die();
+ok(start_proc == 0, "Starting lighttpd") or die();
 
-    @request  = ( <<EOF
+@request  = ( <<EOF
 GET /index.html HTTP/1.0
 Accept-Encoding: deflate
 EOF
  );
-    @response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '' } );
-    ok(handle_http == 0, 'Vary is set');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '' } );
+ok(handle_http == 0, 'Vary is set');
 
-    @request  = ( <<EOF
+@request  = ( <<EOF
 GET /index.html HTTP/1.0
 Accept-Encoding: deflate
 EOF
  );
-    @response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '', 'Content-Length' => '1288', '+Content-Encoding' => '' } );
-    ok(handle_http == 0, 'deflate - Content-Length and Content-Encoding is set');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '', 'Content-Length' => '1288', '+Content-Encoding' => '' } );
+ok(handle_http == 0, 'deflate - Content-Length and Content-Encoding is set');
 
-    @request  = ( <<EOF
+@request  = ( <<EOF
 GET /index.html HTTP/1.0
 Accept-Encoding: gzip
 EOF
  );
-    @response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '', '+Content-Encoding' => '' } );
-    ok(handle_http == 0, 'gzip - Content-Length and Content-Encoding is set');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '', '+Content-Encoding' => '' } );
+ok(handle_http == 0, 'gzip - Content-Length and Content-Encoding is set');
 
-    @request  = ( <<EOF
+@request  = ( <<EOF
 GET /index.txt HTTP/1.0
 Accept-Encoding: gzip, deflate
 EOF
  );
-    @response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '', '+Content-Encoding' => '' } );
-    ok(handle_http == 0, 'gzip, deflate - Content-Length and Content-Encoding is set');
+@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Vary' => '', '+Content-Encoding' => '' } );
+ok(handle_http == 0, 'gzip, deflate - Content-Length and Content-Encoding is set');
 
-    ok(stop_proc == 0, "Stopping lighttpd");
-}
+ok(stop_proc == 0, "Stopping lighttpd");

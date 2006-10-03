@@ -1,6 +1,6 @@
-==================
-Configuration File
-==================
+=================
+Configuation File
+=================
 
 ------------
 Module: core
@@ -26,16 +26,13 @@ Basic Syntax
 
 A BNF like notation: ::
 
-  option   : NAME = VALUE
-  merge    : NAME += VALUE
+  option   : NAME = VARIABLE
   NAME     : modulename.key
-  VALUE    : ( <string> | <integer> | <boolean> | <array> | VALUE [ + VALUE ]*)
+  VARIABLE : ( <string> | <integer> | <boolean> | <array> )
   <string> : "text"
   <integer>: digit*
   <boolean>: ( "enable" | "disable" )
-  <array>  : "(" [ <string> "=>" ] <value> [, [ <string> "=>" ] <value> ]* ")"
-  INCLUDE  : "include" VALUE
-  INCLUDE_SHELL : "include_shell" STRING_VALUE
+  <array>  : "(" [ <string> "=>" ] <variable> [, [ <string> "=>" ] <variable> ]* ")"
   
 Example
 -------
@@ -51,32 +48,21 @@ Example
   # selecting modules
   server.modules = ( "mod_access", "mod_rewrite" )
   
-  # variables, computed when config is read.
-  var.mymodule = "foo"
-  server.modules += ( "mod_" + var.mymodule )
-
-  # include, relative to dirname of main config file
-  include "mime.types.conf"
-
-  # read configuration from output of a command
-  include_shell "/usr/local/bin/confmimetype /etc/mime.types"
+  # enable directory listings
+  server.dir-listing = "enable"
+ 
 
 
 Conditional Configuration
 =========================
 
-Most options can be configured conditionally by using the following syntax.
+Most options can be configured conditionally by using the following syntax
+(including nesting).
 
 ::
 
   <field> <operator> <value> {
     ...
-    <field> <operator> <value> {
-      ... nesting: match only when parent match
-    }
-  }
-  else <field> <operator> <value> {
-    ... the "else if" block
   }
 
 where <field> is one of one of the following:
@@ -115,9 +101,9 @@ Example
 ::
 
   # disable directory-listings for /download/*
-  dir-listing.activate = "enable"
+  server.dir-listing = "enable"
   $HTTP["url"] =~ "^/download/" {
-    dir-listing.activate = "disable"
+    server.dir-listing = "disable"
   }
   
   # handish virtual hosting
@@ -191,6 +177,19 @@ server.username
 server.groupname
   groupname used to run the server
   NOTE: requires root-permissions
+
+server.dir-listing
+  enables virtual directory listings if a directory is requested no
+  index-file was found 
+
+dir-listing.hide-dotfiles
+  if enabled, does not list hidden files in directory listings generated
+  by the dir-listing option.
+
+  default: enabled
+
+dir-listing.external-css
+  path to an external css stylesheet for the directory listing
 
 server.follow-symlink
   allow to follow-symlinks

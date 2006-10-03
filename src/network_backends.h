@@ -43,13 +43,12 @@
 
 #include "base.h"
 
-network_t network_write_chunkqueue_write(server *srv, file_descr *write_fd, chunkqueue *cq);
-network_t network_read_chunkqueue_write(server *srv, file_descr *read_fd, chunkqueue *cq);
-network_t network_write_chunkqueue_writev(server *srv, file_descr *write_fd, chunkqueue *cq);
-network_t network_write_chunkqueue_linuxsendfile(server *srv, file_descr *write_fd, chunkqueue *cq);
-network_t network_write_chunkqueue_freebsdsendfile(server *srv, file_descr *write_fd, chunkqueue *cq);
-network_t network_write_chunkqueue_solarissendfilev(server *srv, file_descr *write_fd, chunkqueue *cq);
-network_t network_write_chunkqueue_openssl(server *srv, file_descr *write_fd, chunkqueue *cq);
-network_t network_read_chunkqueue_openssl(server *srv, file_descr *read_fd, chunkqueue *cq);
+
+int network_write_chunkqueue_write(server *srv, connection *con, chunkqueue *cq);
+int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq);
+int network_write_chunkqueue_linuxsendfile(server *srv, connection *con, chunkqueue *cq);
+int network_write_chunkqueue_freebsdsendfile(server *srv, connection *con, chunkqueue *cq);
+int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chunkqueue *cq);
+int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *cq);
 
 #endif

@@ -29,12 +29,6 @@ buffer* buffer_init(void) {
 	return b;
 }
 
-buffer *buffer_init_buffer(buffer *src) {
-	buffer *b = buffer_init();
-	buffer_copy_string_buffer(b, src);
-	return b;
-}
-
 /**
  * free the buffer 
  * 
@@ -641,7 +635,7 @@ int buffer_append_string_hex(buffer *b, const char *in, size_t in_len) {
 	return 0;
 }
 
-int buffer_append_string_url_encoded(buffer *b, const char *s, size_t s_len) {
+int buffer_append_string_url_encoded(buffer *b, const char *s) {
 	unsigned char *ds, *d;
 	size_t d_len;
 	
@@ -651,7 +645,6 @@ int buffer_append_string_url_encoded(buffer *b, const char *s, size_t s_len) {
 		SEGFAULT();
 	}
 	
-	if (s_len == 0) return 0;
 	
 	/* count to-be-encoded-characters */
 	for (ds = (unsigned char *)s, d_len = 0; *ds; ds++) {
@@ -729,9 +722,9 @@ int buffer_append_string_url_encoded(buffer *b, const char *s, size_t s_len) {
 	return 0;
 }
 
-int buffer_append_string_html_encoded(buffer *b, const char *s, size_t s_len) {
+int buffer_append_string_html_encoded(buffer *b, const char *s) {
 	unsigned char *ds, *d;
-	size_t d_len, i;
+	size_t d_len;
 	
 	if (!s || !b) return -1;
 	
@@ -739,25 +732,19 @@ int buffer_append_string_html_encoded(buffer *b, const char *s, size_t s_len) {
 		SEGFAULT();
 	}
 	
-	/* nothing to append */
-	if (s_len == 0) return 0;
 	
 	/* count to-be-encoded-characters */
-	for (ds = (unsigned char *)s, d_len = 0, i = 0; i < s_len && *ds; ds++, i++) {
+	for (ds = (unsigned char *)s, d_len = 0; *ds; ds++) {
 		d_len++;
-		if (*ds == '<' || *ds == '>') {
+		if (*ds == '<' || *ds == '>')
 			d_len += 4 - 1;
-		} else if (*ds == '&') {
+		else if (*ds == '&')
 			d_len += 5 - 1;
-		}
 	}
 
 	buffer_prepare_append(b, d_len);
 	
-	for (ds = (unsigned char *)s, 
-	     d = (unsigned char *)b->ptr + b->used - 1, 
-	     d_len = 0,
-	     i = 0; i < s_len && *ds; ds++, i++) {
+	for (ds = (unsigned char *)s, d = (unsigned char *)b->ptr + b->used - 1, d_len = 0; *ds; ds++) {
 		switch (*ds) {
 		case '>':
 			d[d_len++] = '&';
@@ -945,33 +932,4 @@ int light_isalpha(int c) {
 
 int light_isalnum(int c) {
 	return light_isdigit(c) || light_isalpha(c);
-}
-
-int buffer_to_lower(buffer *b) {
-	char *c;
-	
-	if (b->used == 0) return 0;
-	
-	for (c = b->ptr; *c; c++) {
-		if (*c >= 'A' && *c <= 'Z') {
-			*c |= 32;
-		}
-	}
-	
-	return 0;
-}
-
-
-int buffer_to_upper(buffer *b) {
-	char *c;
-	
-	if (b->used == 0) return 0;
-	
-	for (c = b->ptr; *c; c++) {
-		if (*c >= 'a' && *c <= 'z') {
-			*c &= ~32;
-		}
-	}
-	
-	return 0;
 }

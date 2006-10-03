@@ -6,7 +6,7 @@
 #include "base.h"
 #include "log.h"
 #include "buffer.h"
-#include "file_cache_funcs.h"
+#include "file_cache.h"
 
 #include "plugin.h"
 
@@ -89,7 +89,7 @@ SETDEFAULTS_FUNC(mod_simple_vhost_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
@@ -119,7 +119,6 @@ SETDEFAULTS_FUNC(mod_simple_vhost_set_defaults) {
 }
 
 static int build_doc_root(server *srv, connection *con, plugin_data *p, buffer *out, buffer *host) {
-	struct stat st;
 	buffer_prepare_copy(out, 128);
 
 	if (p->conf.server_root->used) {
@@ -151,12 +150,14 @@ static int build_doc_root(server *srv, connection *con, plugin_data *p, buffer *
 		buffer_copy_string_buffer(out, con->conf.document_root);
 		BUFFER_APPEND_SLASH(out);
 	}
-
-	if (-1 == stat(out->ptr, &(st))) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", strerror(errno), out);
+	
+	if (HANDLER_GO_ON != file_cache_get_entry(srv, con, out, &(con->fce))) {
+		log_error_write(srv, __FILE__, __LINE__, "sb",
+				strerror(errno), out);
 		return -1;
-	} else if(!S_ISDIR(st.st_mode)) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", "not a directory:", out);
+	}
+	
+	if (!S_ISDIR(con->fce->st.st_mode)) {
 		return -1;
 	}
 	
@@ -166,22 +167,16 @@ static int build_doc_root(server *srv, connection *con, plugin_data *p, buffer *
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_simple_vhost_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_simple_vhost_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(server_root);
-	PATCH(default_host);
-	PATCH(document_root);
-	
-	PATCH(docroot_cache_key);
-	PATCH(docroot_cache_value);
-	PATCH(docroot_cache_servername);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -205,10 +200,27 @@ static int mod_simple_vhost_patch_connection(server *srv, connection *con, plugi
 	
 	return 0;
 }
+
+static int mod_simple_vhost_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(server_root);
+	PATCH(default_host);
+	PATCH(document_root);
+	
+	PATCH(docroot_cache_key);
+	PATCH(docroot_cache_value);
+	PATCH(docroot_cache_servername);
+	
+	return 0;
+}
 #undef PATCH
 
 static handler_t mod_simple_vhost_docroot(server *srv, connection *con, void *p_data) {
 	plugin_data *p = p_data;
+	size_t i;
 
 	/*
 	 * cache the last successfull translation from hostname (authority) to docroot
@@ -216,7 +228,12 @@ static handler_t mod_simple_vhost_docroot(server *srv, connection *con, void *p_
 	 * 
 	 */
 	
-	mod_simple_vhost_patch_connection(srv, con, p);
+	mod_simple_vhost_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_simple_vhost_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	if (p->conf.docroot_cache_key->used && 
 	    con->uri.authority->used &&

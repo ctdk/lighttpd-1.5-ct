@@ -107,12 +107,12 @@ SETDEFAULTS_FUNC(mod_status_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
 		
-		s = calloc(1, sizeof(plugin_config));
+		s = malloc(sizeof(plugin_config));
 		s->config_url    = buffer_init();
 		s->status_url    = buffer_init();
 		
@@ -397,16 +397,11 @@ static handler_t mod_status_handle_server_status(server *srv, connection *con, v
 		
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"string\">");
 		
-		if (buffer_is_empty(c->server_name)) {
-			buffer_append_string_buffer(b, c->uri.authority);
-		}
-		else {
-			buffer_append_string_buffer(b, c->server_name);
-		}
+		buffer_append_string_buffer(b, c->server_name);
 		
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"string\">");
 		
-		buffer_append_string_html_encoded(b, CONST_BUF_LEN(c->uri.path));
+		buffer_append_string_html_encoded(b, c->uri.path->ptr);
 		
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"string\">");
 		
@@ -500,6 +495,7 @@ static handler_t mod_status_handle_server_config(server *srv, connection *con, v
 	}
 	
 	mod_status_header_append(b, "Config-File-Settings");
+	mod_status_row_append(b, "Directory Listings", con->conf.dir_listing ? "enabled" : "disabled");
 	
 	for (i = 0; i < srv->plugins.used; i++) {
 		plugin **ps = srv->plugins.ptr;
@@ -533,17 +529,16 @@ static handler_t mod_status_handle_server_config(server *srv, connection *con, v
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_skeleton_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_skeleton_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(status_url);
-	PATCH(config_url);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -562,12 +557,29 @@ static int mod_skeleton_patch_connection(server *srv, connection *con, plugin_da
 	
 	return 0;
 }
+
+static int mod_skeleton_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+
+	PATCH(status_url);
+	PATCH(config_url);
+	
+	return 0;
+}
 #undef PATCH
 
 static handler_t mod_status_handler(server *srv, connection *con, void *p_d) {
 	plugin_data *p = p_d;
+	size_t i;
 	
-	mod_skeleton_patch_connection(srv, con, p);
+	mod_skeleton_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_skeleton_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	if (!buffer_is_empty(p->conf.status_url) && 
 	    buffer_is_equal(p->conf.status_url, con->uri.path)) {

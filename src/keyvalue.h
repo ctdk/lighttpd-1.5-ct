@@ -7,7 +7,7 @@
 # include <pcre.h>
 #endif
 
-typedef enum { HTTP_METHOD_UNSET = -1, HTTP_METHOD_GET, HTTP_METHOD_POST, HTTP_METHOD_HEAD, HTTP_METHOD_PROPFIND, HTTP_METHOD_OPTIONS, HTTP_METHOD_MKCOL, HTTP_METHOD_PUT, HTTP_METHOD_DELETE } http_method_t;
+typedef enum { HTTP_METHOD_UNSET = -1, HTTP_METHOD_GET, HTTP_METHOD_POST, HTTP_METHOD_HEAD } http_method_t;
 typedef enum { HTTP_VERSION_UNSET = -1, HTTP_VERSION_1_0, HTTP_VERSION_1_1 } http_version_t;
 
 typedef struct {
@@ -25,10 +25,9 @@ typedef struct {
 typedef struct {
 #ifdef HAVE_PCRE_H
 	pcre *key;
-	pcre_extra *key_extra;
 #endif
 	
-	buffer *value;
+	char *value;
 } pcre_keyvalue;
 
 typedef enum { HTTP_AUTH_BASIC, HTTP_AUTH_DIGEST } httpauth_type;

@@ -13,9 +13,24 @@
 #endif
 
 typedef struct {
-	pcre_keyvalue_buffer *rewrite;
-	buffer *final;
-	data_config *context; /* to which apply me */
+#ifdef HAVE_PCRE_H
+	pcre *key;
+#endif
+	
+	buffer *value;
+	
+	int final;
+} rewrite_rule;
+
+typedef struct {
+	rewrite_rule **ptr;
+	
+	size_t used;
+	size_t size;
+} rewrite_rule_buffer;
+
+typedef struct {
+	rewrite_rule_buffer *rewrite;
 } plugin_config;
 
 typedef struct {
@@ -45,6 +60,80 @@ static void handler_ctx_free(handler_ctx *hctx) {
 	free(hctx);
 }
 
+rewrite_rule_buffer *rewrite_rule_buffer_init(void) {
+	rewrite_rule_buffer *kvb;
+	
+	kvb = calloc(1, sizeof(*kvb));
+	
+	return kvb;
+}
+
+int rewrite_rule_buffer_append(rewrite_rule_buffer *kvb, buffer *key, buffer *value, int final) {
+#ifdef HAVE_PCRE_H
+	size_t i;
+	const char *errptr;
+	int erroff;
+	
+	if (!key) return -1;
+
+	if (kvb->size == 0) {
+		kvb->size = 4;
+		kvb->used = 0;
+		
+		kvb->ptr = malloc(kvb->size * sizeof(*kvb->ptr));
+		
+		for(i = 0; i < kvb->size; i++) {
+			kvb->ptr[i] = calloc(1, sizeof(**kvb->ptr));
+		}
+	} else if (kvb->used == kvb->size) {
+		kvb->size += 4;
+		
+		kvb->ptr = realloc(kvb->ptr, kvb->size * sizeof(*kvb->ptr));
+		
+		for(i = kvb->used; i < kvb->size; i++) {
+			kvb->ptr[i] = calloc(1, sizeof(**kvb->ptr));
+		}
+	}
+	
+	if (NULL == (kvb->ptr[kvb->used]->key = pcre_compile(key->ptr,
+							    0, &errptr, &erroff, NULL))) {
+		
+		return -1;
+	}
+	
+	kvb->ptr[kvb->used]->value = buffer_init();
+	buffer_copy_string_buffer(kvb->ptr[kvb->used]->value, value);
+	kvb->ptr[kvb->used]->final = final;
+	
+	kvb->used++;
+	
+	return 0;
+#else
+	UNUSED(kvb);
+	UNUSED(value);
+	UNUSED(final);
+	UNUSED(key);
+
+	return -1;
+#endif
+}
+
+void rewrite_rule_buffer_free(rewrite_rule_buffer *kvb) {
+#ifdef HAVE_PCRE_H
+	size_t i;
+
+	for (i = 0; i < kvb->size; i++) {
+		if (kvb->ptr[i]->key) pcre_free(kvb->ptr[i]->key);
+		if (kvb->ptr[i]->value) buffer_free(kvb->ptr[i]->value);
+		free(kvb->ptr[i]);
+	}
+	
+	if (kvb->ptr) free(kvb->ptr);
+#endif
+	
+	free(kvb);
+}
+
 
 INIT_FUNC(mod_rewrite_init) {
 	plugin_data *p;
@@ -68,8 +157,7 @@ FREE_FUNC(mod_rewrite_free) {
 		size_t i;
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
-			pcre_keyvalue_buffer_free(s->rewrite);
-			buffer_free(s->final);
+			rewrite_rule_buffer_free(s->rewrite);
 			
 			free(s);
 		}
@@ -95,7 +183,7 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 	if (!p) return HANDLER_ERROR;
 	
 	/* 0 */
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
@@ -103,9 +191,8 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 		array *ca;
 		data_array *da = (data_array *)du;
 		
-		s = calloc(1, sizeof(plugin_config));
-		s->rewrite   = pcre_keyvalue_buffer_init();
-		s->final     = buffer_init();
+		s = malloc(sizeof(plugin_config));
+		s->rewrite   = rewrite_rule_buffer_init();
 		
 		cv[0].destination = s->rewrite;
 		cv[1].destination = s->rewrite;
@@ -137,9 +224,10 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 					return HANDLER_ERROR;
 				}
 				
-				if (0 != pcre_keyvalue_buffer_append(s->rewrite, 
-								    ((data_string *)(da->value->data[j]))->key->ptr,
-								    ((data_string *)(da->value->data[j]))->value->ptr)) {
+				if (0 != rewrite_rule_buffer_append(s->rewrite, 
+								    ((data_string *)(da->value->data[j]))->key,
+								    ((data_string *)(da->value->data[j]))->value,
+								    0)) {
 #ifdef HAVE_PCRE_H
 					log_error_write(srv, __FILE__, __LINE__, "sb", 
 							"pcre-compile failed for", da->value->data[j]->key);
@@ -148,7 +236,6 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 							"pcre support is missing, please install libpcre and the headers");
 #endif
 				}
-				buffer_append_string_len(s->final, CONST_STR_LEN("0"));
 			}
 		}
 		
@@ -172,9 +259,10 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 					return HANDLER_ERROR;
 				}
 				
-				if (0 != pcre_keyvalue_buffer_append(s->rewrite, 
-								    ((data_string *)(da->value->data[j]))->key->ptr,
-								    ((data_string *)(da->value->data[j]))->value->ptr)) {
+				if (0 != rewrite_rule_buffer_append(s->rewrite, 
+								    ((data_string *)(da->value->data[j]))->key,
+								    ((data_string *)(da->value->data[j]))->value, 
+								    1)) {
 					
 #ifdef HAVE_PCRE_H
 					log_error_write(srv, __FILE__, __LINE__, "sb", 
@@ -184,7 +272,6 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 							"pcre support is missing, please install libpcre and the headers");
 #endif
 				}
-				buffer_append_string_len(s->final, CONST_STR_LEN("1"));
 			}
 		}
 	}
@@ -192,18 +279,16 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 	return HANDLER_GO_ON;
 }
 #ifdef HAVE_PCRE_H
-static int mod_rewrite_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_rewrite_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	p->conf.rewrite = s->rewrite;
-	p->conf.final   = s->final;
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
 		
-		if (COMP_HTTP_URL == dc->comp) continue;
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -214,13 +299,22 @@ static int mod_rewrite_patch_connection(server *srv, connection *con, plugin_dat
 			
 			if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.rewrite"))) {
 				p->conf.rewrite = s->rewrite;
-				p->conf.final   = s->final;
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.rewrite-final"))) {
 				p->conf.rewrite = s->rewrite;
-				p->conf.final   = s->final;
 			}
 		}
 	}
+	
+	return 0;
+}
+
+static int mod_rewrite_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	
+	UNUSED(srv);
+	UNUSED(con);
+		
+	p->conf.rewrite = s->rewrite;
 	
 	return 0;
 }
@@ -257,28 +351,29 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 		if (hctx->state == REWRITE_STATE_FINISHED) return HANDLER_GO_ON;
 	}
 	
-	mod_rewrite_patch_connection(srv, con, p);
-
-	if (!p->conf.rewrite) return HANDLER_GO_ON;
+	mod_rewrite_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_rewrite_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	buffer_copy_string_buffer(p->match_buf, con->request.uri);
 	
 	for (i = 0; i < p->conf.rewrite->used; i++) {
 		pcre *match;
-		pcre_extra *extra;
 		const char *pattern;
 		size_t pattern_len;
 		int n;
-		pcre_keyvalue *kv = p->conf.rewrite->kv[i];
+		rewrite_rule *rule = p->conf.rewrite->ptr[i];
 # define N 10
 		int ovec[N * 3];
 		
-		match       = kv->key;
-		extra       = kv->key_extra;
-		pattern     = kv->value->ptr;
-		pattern_len = kv->value->used - 1;
+		match       = rule->key;
+		pattern     = rule->value->ptr;
+		pattern_len = rule->value->used - 1;
 		
-		if ((n = pcre_exec(match, extra, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
+		if ((n = pcre_exec(match, NULL, p->match_buf->ptr, p->match_buf->used - 1, 0, 0, ovec, 3 * N)) < 0) {
 			if (n != PCRE_ERROR_NOMATCH) {
 				log_error_write(srv, __FILE__, __LINE__, "sd",
 						"execution error while matching: ", n);
@@ -298,7 +393,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 			
 			start = 0; end = pattern_len;
 			for (k = 0; k < pattern_len; k++) {
-				if ((pattern[k] == '$' || pattern[k] == '%') &&
+				if (pattern[k] == '$' &&
 				    isdigit((unsigned char)pattern[k + 1])) {
 					/* got one */
 					
@@ -308,13 +403,9 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 					
 					buffer_append_string_len(con->request.uri, pattern + start, end - start);
 					
-					if (pattern[k] == '$') {
-						/* n is always > 0 */
-						if (num < (size_t)n) {
-							buffer_append_string(con->request.uri, list[num]);
-						}
-					} else {
-						config_append_cond_match_buffer(con, p->conf.context, con->request.uri, num);
+					/* n is always larger than 0 */
+					if (num < (size_t)n) {
+						buffer_append_string(con->request.uri, list[num]);
 					}
 					
 					k++;
@@ -330,8 +421,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 				
 			con->plugin_ctx[p->id] = hctx;
 			
-			if (p->conf.final->ptr[i] == '1')
-				hctx->state = REWRITE_STATE_FINISHED;
+			if (rule->final) hctx->state = REWRITE_STATE_FINISHED;
 			
 			return HANDLER_COMEBACK;
 		}

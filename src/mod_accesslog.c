@@ -328,8 +328,6 @@ FREE_FUNC(mod_accesslog_free) {
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
 			
-			if (!s) continue;
-			
 			if (s->access_logbuffer->used) {
 				if (s->use_syslog) {
 # ifdef HAVE_SYSLOG_H
@@ -381,7 +379,7 @@ SETDEFAULTS_FUNC(log_access_open) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
@@ -418,10 +416,7 @@ SETDEFAULTS_FUNC(log_access_open) {
 			s->parsed_format = calloc(1, sizeof(*(s->parsed_format)));
 			
 			if (-1 == accesslog_parse_format(srv, s->parsed_format, s->format)) {
-
-				log_error_write(srv, __FILE__, __LINE__, "sb", 
-						"parsing accesslog-definition failed:", s->format);
-
+				log_error_write(srv, __FILE__, __LINE__, "s", "config: ", "failed");
 				return HANDLER_ERROR;
 			}
 #if 0
@@ -446,7 +441,7 @@ SETDEFAULTS_FUNC(log_access_open) {
 		
 		if (s->use_syslog) {
 			if (srv->log_using_syslog == 0) {
-				log_error_write(srv, __FILE__, __LINE__, "s", 
+				log_error_write(srv, __FILE__, __LINE__, "ssbs", 
 						"accesslog can only be written to syslog if errorlog is also sent to syslog. ABORTING.");
 				
 				return HANDLER_ERROR;
@@ -521,9 +516,7 @@ SETDEFAULTS_FUNC(log_access_open) {
 			
 			return HANDLER_ERROR;
 		}
-#ifdef FD_CLOEXEC
 		fcntl(s->log_access_fd, F_SETFD, FD_CLOEXEC);
-#endif
 	
 	}
 	
@@ -572,23 +565,16 @@ SIGHUP_FUNC(log_access_cycle) {
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_accesslog_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_accesslog_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(access_logfile);
-	PATCH(format);
-	PATCH(log_access_fd);
-	PATCH(last_generated_accesslog_ts_ptr);
-	PATCH(access_logbuffer);
-	PATCH(ts_accesslog_str);
-	PATCH(parsed_format);
-	PATCH(use_syslog);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -614,16 +600,38 @@ static int mod_accesslog_patch_connection(server *srv, connection *con, plugin_d
 	
 	return 0;
 }
+
+static int mod_accesslog_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(access_logfile);
+	PATCH(format);
+	PATCH(log_access_fd);
+	PATCH(last_generated_accesslog_ts_ptr);
+	PATCH(access_logbuffer);
+	PATCH(ts_accesslog_str);
+	PATCH(parsed_format);
+	PATCH(use_syslog);
+	
+	return 0;
+}
 #undef PATCH
 
 REQUESTDONE_FUNC(log_access_write) {
 	plugin_data *p = p_d;
-	size_t j;
+	size_t j, i;
 	
 	int newts = 0;
 	data_string *ds;
 	
-	mod_accesslog_patch_connection(srv, con, p);
+	mod_accesslog_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_accesslog_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	if (p->conf.access_logbuffer->used == 0) {
 		buffer_copy_string(p->conf.access_logbuffer, "");
@@ -640,10 +648,8 @@ REQUESTDONE_FUNC(log_access_write) {
 				
 				/* cache the generated timestamp */
 				if (srv->cur_ts != *(p->conf.last_generated_accesslog_ts_ptr)) {
-#if defined(HAVE_STRUCT_TM_GMTOFF)
-# ifdef HAVE_LOCALTIME_R
 					struct tm tm;
-# endif
+#if defined(HAVE_STRUCT_TM_GMTOFF)
 					long scd, hrs, min;
 #endif
 		
@@ -761,7 +767,12 @@ REQUESTDONE_FUNC(log_access_write) {
 						     con->request.http_version == HTTP_VERSION_1_1 ? "HTTP/1.1" : "HTTP/1.0");
 				break;
 			case FORMAT_REQUEST_METHOD:
-				buffer_append_string_buffer(p->conf.access_logbuffer, con->request.http_method_name);
+				switch(con->request.http_method) {
+				case HTTP_METHOD_GET: buffer_append_string(p->conf.access_logbuffer, "GET"); break;
+				case HTTP_METHOD_POST: buffer_append_string(p->conf.access_logbuffer, "POST"); break;
+				case HTTP_METHOD_HEAD: buffer_append_string(p->conf.access_logbuffer, "HEAD"); break;
+				default: break;
+				}
 				break;
 			case FORMAT_SERVER_PORT:
 				buffer_append_long(p->conf.access_logbuffer, srv->srvconf.port);

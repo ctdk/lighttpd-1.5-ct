@@ -20,34 +20,12 @@ array *array_init(void) {
 	return a;
 }
 
-array *array_init_array(array *src) {
-	size_t i;
-	array *a = array_init();
-
-	a->used = src->used;
-	a->size = src->size;
-	a->next_power_of_2 = src->next_power_of_2;
-	a->unique_ndx = src->unique_ndx;
-
-	a->data = malloc(sizeof(*src->data) * src->size);
-	for (i = 0; i < src->size; i++) {
-		if (src->data[i]) a->data[i] = src->data[i]->copy(src->data[i]);
-		else a->data[i] = NULL;
-	}
-
-	a->sorted = malloc(sizeof(*src->sorted)   * src->size);
-	memcpy(a->sorted, src->sorted, sizeof(*src->sorted)   * src->size);
-	return a;
-}
-
 void array_free(array *a) {
 	size_t i;
 	if (!a) return;
 	
-	if (!a->is_weakref) {
-		for (i = 0; i < a->size; i++) {
-			if (a->data[i]) a->data[i]->free(a->data[i]);
-		}
+	for (i = 0; i < a->size; i++) {
+		if (a->data[i]) a->data[i]->free(a->data[i]);
 	}
 	
 	if (a->data) free(a->data);
@@ -60,25 +38,11 @@ void array_reset(array *a) {
 	size_t i;
 	if (!a) return;
 	
-	if (!a->is_weakref) {
-		for (i = 0; i < a->used; i++) {
-			a->data[i]->reset(a->data[i]);
-		}
+	for (i = 0; i < a->used; i++) {
+		a->data[i]->reset(a->data[i]);
 	}
 	
 	a->used = 0;
-}
-
-data_unset *array_pop(array *a) {
-	data_unset *du;
-
-	assert(a->used != 0);
-
-	a->used --;
-	du = a->data[a->used];
-	a->data[a->used] = NULL;
-
-	return du;
 }
 
 static int array_get_index(array *a, const char *key, size_t keylen, int *rndx) {
@@ -144,20 +108,6 @@ data_unset *array_get_unused_element(array *a, data_type_t t) {
 	}
 	
 	return ds;
-}
-
-/* replace or insert data, return the old one with the same key */
-data_unset *array_replace(array *a, data_unset *du) {
-	int ndx;
-	if (-1 == (ndx = array_get_index(a, du->key->ptr, du->key->used, NULL))) {
-		array_insert_unique(a, du);
-		return NULL;
-	}
-	else {
-		data_unset *old = a->data[ndx];
-		a->data[ndx] = du;
-		return old;
-	}
 }
 
 int array_insert_unique(array *a, data_unset *str) {
@@ -228,25 +178,14 @@ int array_insert_unique(array *a, data_unset *str) {
 	return 0;
 }
 
-void array_print_indent(int depth) {
-	int i;
-	for (i = 0; i < depth; i ++) {
-		fprintf(stderr, "    ");
-	}
-}
-
-int array_print(array *a, int depth) {
+int array_print(array *a) {
 	size_t i;
 	
-	fprintf(stderr, "{\n");
 	for (i = 0; i < a->used; i++) {
-		array_print_indent(depth + 1);
-		fprintf(stderr, "%d:%s: ", i, a->data[i]->key->ptr);
-		a->data[i]->print(a->data[i], depth + 1);
+		fprintf(stderr, "%d: ", i);
+		a->data[i]->print(a->data[i]);
 		fprintf(stderr, "\n");
 	}
-	array_print_indent(depth);
-	fprintf(stderr, "}");
 	
 	return 0;
 }
@@ -290,7 +229,7 @@ int main (int argc, char **argv) {
 	
 	array_insert_unique(a, (data_unset *)dc);
 	
-	array_print(a, 0);
+	array_print(a);
 	
 	array_free(a);
 	

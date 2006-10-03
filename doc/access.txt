@@ -7,8 +7,8 @@ Module: mod_access
 ------------------
 
 :Author: Allan Wind
-:Date: $Date$
-:Revision: $Revision$
+:Date: $Date: 2005-03-28T08:30:05.699628Z $
+:Revision: $Revision: 227 $
 
 :abstract:
   The access module is used to deny access to files with given trailing path names.

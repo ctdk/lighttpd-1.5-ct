@@ -22,14 +22,8 @@ CONFS=fastcgi-10.conf \
       fastcgi-13.conf \
       bug-06.conf \
       bug-12.conf \
-      core-var-include.t \
-      var-include.conf \
-      var-include-sub.conf \
-      condition.conf \
-      core-condition.t \
       core-request.t \
       core-response.t \
-      core-keepalive.t \
       core.t \
       mod-access.t \
       mod-auth.t \
@@ -39,7 +33,6 @@ CONFS=fastcgi-10.conf \
       mod-redirect.t \
       mod-userdir.t \
       mod-rewrite.t \
-      mod-setenv.t \
       request.t 
 
 

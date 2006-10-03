@@ -7,8 +7,8 @@ Module: core
 ------------
 
 :Author: Jan Kneschke
-:Date: $Date$
-:Revision: $Revision$
+:Date: $Date: 2005-04-25T23:00:48.654439Z $
+:Revision: $Revision: 305 $
 
 :abstract:
   How to setup SSL in lighttpd
@@ -21,13 +21,7 @@ Module: core
 Description
 ===========
 
-lighttpd support SSLv2 and SSLv3. It is using openssl_
-to provide this functionality.
-
-If you are compiling lighttpd yourself you have to add ``--with-openssl`` 
-to the options of the ``configure``.
-
-.. _openssl: http://www.openssl.org/
+lighttpd support SSLv2 and SSLv3 if it compiled against openssl.
 
 Configuration
 -------------
@@ -50,14 +44,7 @@ SSL-servers with one lighttpd: ::
     server.document-root        = "/www/servers/www.example.org/pages/"
   }
 
-If you are using an intermediate certificate please specify it as: ::
-  
-  ssl.ca-file = "/path/to/intermediate.pem"
 
-If you are migrating from Apache and have seperate files for certificate and key,
-cat them together and build you server.pem that way: ::
-
-  $ cat server.crt server.key >> server.pem
 
 
 Self-Signed Certificates

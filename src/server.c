@@ -25,7 +25,7 @@
 #include "http_chunk.h"
 #include "fdevent.h"
 #include "connections.h"
-#include "file_cache_funcs.h"
+#include "file_cache.h"
 #include "plugin.h"
 #include "joblist.h"
 
@@ -50,6 +50,7 @@
 #include <sys/resource.h>
 #endif
 
+const char *patches[] = { "SERVERsocket", "HTTPurl", "HTTPhost", "HTTPreferer", "HTTPuseragent", "HTTPcookie", NULL };
 
 
 #ifndef __sgi
@@ -57,9 +58,9 @@
 /* #define USE_ALARM */
 #endif
 
-static volatile sig_atomic_t srv_shutdown = 0;
-static volatile sig_atomic_t handle_sig_alarm = 1;
-static volatile sig_atomic_t handle_sig_hup = 0;
+static sig_atomic_t srv_shutdown = 0;
+static sig_atomic_t handle_sig_alarm = 1;
+static sig_atomic_t handle_sig_hup = 0;
 
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
 static void sigaction_handler(int sig, siginfo_t *si, void *context) {
@@ -67,29 +68,19 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 	UNUSED(context);
 
 	switch (sig) {
-	case SIGINT: srv_shutdown = 1; break;
 	case SIGTERM: srv_shutdown = 1; break;
-#ifdef  SIGALRM
-	/* mingw only provides SIGTERM and a few others */
-
 	case SIGALRM: handle_sig_alarm = 1; break;
 	case SIGHUP:  handle_sig_hup = 1; break;
 	case SIGCHLD: break;
-#endif
 	}
 }
 #elif defined(HAVE_SIGNAL) || defined(HAVE_SIGACTION)
 static void signal_handler(int sig) {
 	switch (sig) {
-	case SIGINT: srv_shutdown = 1; break;
 	case SIGTERM: srv_shutdown = 1; break;
-#ifdef  SIGALRM
-	/* mingw only provides SIGTERM and a few others */
-
 	case SIGALRM: handle_sig_alarm = 1; break;
 	case SIGHUP:  handle_sig_hup = 1; break;
 	case SIGCHLD:  break;
-#endif
 	}
 }
 #endif
@@ -135,7 +126,10 @@ static server *server_init(void) {
 	CLEAN(response_range);
 	CLEAN(tmp_buf);
 	CLEAN(file_cache_etag);
-	CLEAN(cond_check_buf);
+	CLEAN(range_buf);
+	CLEAN(empty_string);
+	
+	buffer_copy_string(srv->empty_string, "");
 	
 	CLEAN(srvconf.error_logfile);
 	CLEAN(srvconf.groupname);
@@ -183,6 +177,14 @@ static server *server_init(void) {
 
 	srv->split_vals = array_init();
 	
+	srv->config_patches = buffer_array_init();
+	for (i = 0; patches[i]; i++) {
+		buffer *b;
+		
+		b = buffer_array_append_get_buffer(srv->config_patches);
+		buffer_copy_string(b, patches[i]);
+	}
+	
 	return srv;
 }
 
@@ -192,6 +194,8 @@ static void server_free(server *srv) {
 	for (i = 0; i < FILE_CACHE_MAX; i++) {
 		buffer_free(srv->mtime_cache[i].str);
 	}
+	
+	buffer_array_free(srv->config_patches);
 	
 #define CLEAN(x) \
 	buffer_free(srv->x);
@@ -204,7 +208,8 @@ static void server_free(server *srv) {
 	CLEAN(response_range);
 	CLEAN(tmp_buf);
 	CLEAN(file_cache_etag);
-	CLEAN(cond_check_buf);
+	CLEAN(range_buf);
+	CLEAN(empty_string);
 	
 	CLEAN(srvconf.error_logfile);
 	CLEAN(srvconf.groupname);
@@ -236,6 +241,8 @@ static void server_free(server *srv) {
 			buffer_free(s->ssl_pemfile);
 			buffer_free(s->ssl_ca_file);
 			buffer_free(s->error_handler);
+			buffer_free(s->dirlist_css);
+			array_free(s->indexfiles);
 			array_free(s->mimetypes);
 			
 			free(s);
@@ -291,8 +298,6 @@ static void show_help (void) {
 " - a light and fast webserver\n" \
 "usage:\n" \
 " -f <name>  filename of the config-file\n" \
-" -p         print the parsed config-file in internal form, and exit\n" \
-" -t         test the config-file, and exit\n" \
 " -D         don't go to background (default: go to background)\n" \
 TEXT_IPV6 \
 " -v         show version\n" \
@@ -306,8 +311,6 @@ TEXT_IPV6 \
 
 int main (int argc, char **argv) {
 	server *srv = NULL;
-	int print_config = 0;
-	int test_config = 0;
 	int i_am_root;
 	int o;
 	int num_childs = 0;
@@ -348,7 +351,7 @@ int main (int argc, char **argv) {
 #endif
 	srv->srvconf.dont_daemonize = 0;
 	
-	while(-1 != (o = getopt(argc, argv, "f:hvDpt"))) {
+	while(-1 != (o = getopt(argc, argv, "f:hvD"))) {
 		switch(o) {
 		case 'f': 
 			if (config_read(srv, optarg)) { 
@@ -356,8 +359,6 @@ int main (int argc, char **argv) {
 				return -1;
 			}
 			break;
-		case 'p': print_config = 1; break;
-		case 't': test_config = 1; break;
 		case 'D': srv->srvconf.dont_daemonize = 1; break;
 		case 'v': show_version(); return 0;
 		case 'h': show_help(); return 0;
@@ -376,26 +377,6 @@ int main (int argc, char **argv) {
 		return -1;
 	}
 	
-	if (print_config) {
-		data_unset *dc = srv->config_context->data[0];
-		if (dc) {
-			dc->print(dc, 0);
-			fprintf(stderr, "\n");
-		} else {
-			/* shouldn't happend */
-			fprintf(stderr, "global config not found\n");
-		}
-	}
-
-	if (test_config) {
-		printf("Syntax OK\n");
-	}
-
-	if (test_config || print_config) {
-		server_free(srv);
-		return 0;
-	}
-	
 	/* close stdin and stdout, as they are not needed */
 	/* move stdin to /dev/null */
 	if (-1 != (fd = open("/dev/null", O_RDONLY))) {
@@ -410,6 +391,7 @@ int main (int argc, char **argv) {
 		dup2(fd, STDOUT_FILENO);
 		close(fd);
 	}
+	
 	if (0 != config_set_defaults(srv)) {
 		log_error_write(srv, __FILE__, __LINE__, "s", 
 				"setting default values failed");
@@ -449,10 +431,7 @@ int main (int argc, char **argv) {
 		
 		return -1;
 	}
-#ifdef __WIN32
-#define S_IRGRP 0
-#define S_IROTH 0
-#endif	
+	
 	/* open pid file BEFORE chroot */
 	if (srv->srvconf.pid_file->used) {
 		if (-1 == (pid_fd = open(srv->srvconf.pid_file->ptr, O_WRONLY | O_CREAT | O_EXCL | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH))) {
@@ -580,13 +559,7 @@ int main (int argc, char **argv) {
 			setgid(grp->gr_gid);
 			setgroups(0, NULL);
 		}
-		
-		if (srv->srvconf.username->used) {
-			if (srv->srvconf.groupname->used) {
-				initgroups(srv->srvconf.username->ptr, grp->gr_gid);
-			}
-			setuid(pwd->pw_uid);
-		}
+		if (srv->srvconf.username->used) setuid(pwd->pw_uid);
 #endif
 	} else {
 #ifdef HAVE_GETRLIMIT
@@ -625,13 +598,6 @@ int main (int argc, char **argv) {
 		
 		return -1;
 	}
-	
-	/* 
-	 * kqueue and rtsig have to be initialized AFTER damonize()
-	 * the pid can only be written after damonize() too
-	 * 
-	 */
-	
 
 #ifdef HAVE_FORK	
 	/* network is up, let's deamonize ourself */
@@ -640,7 +606,6 @@ int main (int argc, char **argv) {
 	
 	/* write pid file */
 	if (pid_fd != -1) {
-		/* AFTER damonize */
 		buffer_copy_long(srv->tmp_buf, getpid());
 		buffer_append_string(srv->tmp_buf, "\n");
 		write(pid_fd, srv->tmp_buf->ptr, srv->tmp_buf->used - 1);
@@ -662,11 +627,6 @@ int main (int argc, char **argv) {
 	for (i = 0; srv->config && i < srv->config->used; i++) {
 		data_unset *du = srv->config->data[i];
 		
-		/* all var.* is known as user defined variable */
-		if (strncmp(du->key->ptr, "var.", sizeof("var.") - 1) == 0) {
-			continue;
-		}
-
 		if (NULL == array_get_element(srv->config_touched, du->key->ptr)) {
 			log_error_write(srv, __FILE__, __LINE__, "sbs", 
 					"WARNING: unknown config-key:",
@@ -696,9 +656,7 @@ int main (int argc, char **argv) {
 		return -1;
 	}
 	
-	/* kqueue needs a reset AFTER daemonize()
-	 * same to rtsig
-	 */
+	/* kqueue needs a reset AFTER daemonize() */
 	if (0 != network_register_fdevents(srv)) {
 		plugins_free(srv);
 		network_close(srv);
@@ -726,23 +684,19 @@ int main (int argc, char **argv) {
 	sigemptyset(&act.sa_mask);
 	act.sa_flags = 0;
 # endif
-	sigaction(SIGINT,  &act, NULL);
 	sigaction(SIGTERM, &act, NULL);
 	sigaction(SIGHUP,  &act, NULL);
 	sigaction(SIGALRM, &act, NULL);
 	sigaction(SIGCHLD, &act, NULL);
 	
 #elif defined(HAVE_SIGNAL)
-#ifdef SIGALRM
 	/* ignore the SIGPIPE from sendfile() */
 	signal(SIGPIPE, SIG_IGN);
 	signal(SIGUSR1, SIG_IGN);
 	signal(SIGALRM, signal_handler);
+	signal(SIGTERM, signal_handler);
 	signal(SIGHUP,  signal_handler);
 	signal(SIGCHLD,  signal_handler);
-#endif
-	signal(SIGINT,  signal_handler);
-	signal(SIGTERM, signal_handler);
 #endif
 	
 #ifdef USE_ALARM
@@ -789,7 +743,7 @@ int main (int argc, char **argv) {
 		int n;
 		size_t ndx;
 		time_t min_ts;
-
+		
 		if (handle_sig_hup) {
 			handler_t r;
 			
@@ -856,13 +810,13 @@ int main (int argc, char **argv) {
 					con = conns->ptr[ndx];
 
 					if (con->state == CON_STATE_READ ||
-					    (con->state == CON_STATE_HANDLE_REQUEST && con->request.content_finished == 0)) {
+					    con->state == CON_STATE_READ_POST) {
 						if (con->request_count == 1) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_read_idle) {
 								/* time - out */
 #if 0
 								log_error_write(srv, __FILE__, __LINE__, "sd", 
-										"connection closed - read-timeout:", con->fd->fd);
+										"connection closed - read-timeout:", con->fd);
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
@@ -872,7 +826,7 @@ int main (int argc, char **argv) {
 								/* time - out */
 #if 0
 								log_error_write(srv, __FILE__, __LINE__, "sd", 
-										"connection closed - read-timeout:", con->fd->fd);
+										"connection closed - read-timeout:", con->fd);
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
@@ -885,7 +839,7 @@ int main (int argc, char **argv) {
 #if 0
 						if (srv->cur_ts - con->write_request_ts > 60) {
 							log_error_write(srv, __FILE__, __LINE__, "sdd", 
-									"connection closed - pre-write-request-timeout:", con->fd->fd, srv->cur_ts - con->write_request_ts);
+									"connection closed - pre-write-request-timeout:", con->fd, srv->cur_ts - con->write_request_ts);
 						}
 #endif
 						
@@ -893,7 +847,7 @@ int main (int argc, char **argv) {
 							/* time - out */
 #if 1
 							log_error_write(srv, __FILE__, __LINE__, "sd", 
-									"connection closed - write-request-timeout:", con->fd->fd);
+									"connection closed - write-request-timeout:", con->fd);
 #endif
 							connection_set_state(srv, con, CON_STATE_ERROR);
 							changed = 1;
@@ -921,6 +875,11 @@ int main (int argc, char **argv) {
 						fprintf(stderr, "connection-state: ");
 						cs = 1;
 					}
+					
+					fprintf(stderr, "c[%d,%d]: %s ",
+						con->fd,
+						con->fcgi.fd,
+						connection_get_state(con->state));
 #endif
 				}
 				
@@ -936,7 +895,7 @@ int main (int argc, char **argv) {
 			
 			for (i = 0; i < srv->srv_sockets.used; i++) {
 				server_socket *srv_socket = srv->srv_sockets.ptr[i];
-				fdevent_event_del(srv->ev, srv_socket->fd);
+				fdevent_event_del(srv->ev, &(srv_socket->fde_ndx), srv_socket->fd);
 			}
 			
 			log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, out-of-fds");
@@ -947,7 +906,7 @@ int main (int argc, char **argv) {
 			
 			for (i = 0; i < srv->srv_sockets.used; i++) {
 				server_socket *srv_socket = srv->srv_sockets.ptr[i];
-				fdevent_event_add(srv->ev, srv_socket->fd, FDEVENT_IN);
+				fdevent_event_add(srv->ev, &(srv_socket->fde_ndx), srv_socket->fd, FDEVENT_IN);
 			}
 			
 			log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets enabled, out-of-fds");
@@ -1015,18 +974,28 @@ int main (int argc, char **argv) {
 					"fdevent_poll failed:", 
 					strerror(errno));
 		}
-
+		
 		for (ndx = 0; ndx < srv->joblist->used; ndx++) {
 			connection *con = srv->joblist->ptr[ndx];
-
+			handler_t r;
+			
 			connection_state_machine(srv, con);
+			
+			switch(r = plugins_call_handle_joblist(srv, con)) {
+			case HANDLER_FINISHED:
+			case HANDLER_GO_ON:
+				break;
+			default:
+				log_error_write(srv, __FILE__, __LINE__, "d", r);
+				break;
+			}
 			
 			con->in_joblist = 0;
 		}
 		
 		srv->joblist->used = 0;
 	}
-
+	
 	if (srv->srvconf.pid_file->used &&
 	    srv->srvconf.changeroot->used == 0) {
 		if (0 != unlink(srv->srvconf.pid_file->ptr)) {

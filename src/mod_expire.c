@@ -1,6 +1,5 @@
 #include <ctype.h>
 #include <stdlib.h>
-#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
@@ -8,7 +7,6 @@
 #include "log.h"
 #include "buffer.h"
 #include "response.h"
-#include "file_cache_funcs.h"
 
 #include "plugin.h"
 
@@ -218,12 +216,12 @@ SETDEFAULTS_FUNC(mod_expire_set_defaults) {
 	
 	if (!p) return HANDLER_ERROR;
 	
-	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
+	p->config_storage = malloc(srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
 		
-		s = calloc(1, sizeof(plugin_config));
+		s = malloc(sizeof(plugin_config));
 		s->expire_url    = array_init();
 		
 		cv[0].destination = s->expire_url;
@@ -252,16 +250,16 @@ SETDEFAULTS_FUNC(mod_expire_set_defaults) {
 
 #define PATCH(x) \
 	p->conf.x = s->x;
-static int mod_expire_patch_connection(server *srv, connection *con, plugin_data *p) {
+static int mod_expire_patch_connection(server *srv, connection *con, plugin_data *p, const char *stage, size_t stage_len) {
 	size_t i, j;
-	plugin_config *s = p->config_storage[0];
-	
-	PATCH(expire_url);
 	
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
 		data_config *dc = (data_config *)srv->config_context->data[i];
-		s = p->config_storage[i];
+		plugin_config *s = p->config_storage[i];
+		
+		/* not our stage */
+		if (!buffer_is_equal_string(dc->comp_key, stage, stage_len)) continue;
 		
 		/* condition didn't match */
 		if (!config_check_cond(srv, con, dc)) continue;
@@ -278,16 +276,31 @@ static int mod_expire_patch_connection(server *srv, connection *con, plugin_data
 	
 	return 0;
 }
+
+static int mod_expire_setup_connection(server *srv, connection *con, plugin_data *p) {
+	plugin_config *s = p->config_storage[0];
+	UNUSED(srv);
+	UNUSED(con);
+		
+	PATCH(expire_url);
+	
+	return 0;
+}
 #undef PATCH
 
 URIHANDLER_FUNC(mod_expire_path_handler) {
 	plugin_data *p = p_d;
 	int s_len;
-	size_t k;
+	size_t k, i;
 	
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
 	
-	mod_expire_patch_connection(srv, con, p);
+	mod_expire_setup_connection(srv, con, p);
+	for (i = 0; i < srv->config_patches->used; i++) {
+		buffer *patch = srv->config_patches->ptr[i];
+		
+		mod_expire_patch_connection(srv, con, p, CONST_BUF_LEN(patch));
+	}
 	
 	s_len = con->uri.path->used - 1;
 	
@@ -302,12 +315,7 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 			int ts;
 			time_t t;
 			size_t len;
-			file_cache_entry *fce = NULL;
 			
-			if (NULL == (fce = file_cache_get_entry(srv, con->physical.path))) {
-				/* someone else should have generated a fce for us */
-				SEGFAULT();
-			}
 			switch(mod_expire_get_offset(srv, p, ds->value, &ts)) {
 			case 0:
 				/* access */
@@ -316,7 +324,7 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 			case 1:
 				/* modification */
 				
-				t = (ts += fce->st.st_mtime);
+				t = (ts += con->fce->st.st_mtime);
 				break;
 			default:
 				/* -1 is handled at parse-time */
@@ -351,7 +359,7 @@ int mod_expire_plugin_init(plugin *p) {
 	p->name        = buffer_init_string("expire");
 	
 	p->init        = mod_expire_init;
-	p->handle_subrequest_start = mod_expire_path_handler;
+	p->handle_physical_path = mod_expire_path_handler;
 	p->set_defaults  = mod_expire_set_defaults;
 	p->cleanup     = mod_expire_free;
 	

@@ -4,15 +4,6 @@
 
 #include "array.h"
 
-static data_unset *data_count_copy(const data_unset *s) {
-	data_count *src = (data_count *)s;
-	data_count *ds = data_count_init();
-
-	buffer_copy_string_buffer(ds->key, src->key);
-	ds->count = src->count;
-	return (data_unset *)ds;
-}
-
 static void data_count_free(data_unset *d) {
 	data_count *ds = (data_count *)d;
 	
@@ -40,11 +31,10 @@ static int data_count_insert_dup(data_unset *dst, data_unset *src) {
 	return 0;
 }
 
-static void data_count_print(const data_unset *d, int depth) {
+static void data_count_print(data_unset *d) {
 	data_count *ds = (data_count *)d;
-	UNUSED(depth);
 	
-	fprintf(stderr, "count(%d)", ds->count);
+	printf("{%s: %d}", ds->key->ptr, ds->count);
 }
 
 
@@ -56,7 +46,6 @@ data_count *data_count_init(void) {
 	ds->key = buffer_init();
 	ds->count = 1;
 	
-	ds->copy = data_count_copy;
 	ds->free = data_count_free;
 	ds->reset = data_count_reset;
 	ds->insert_dup = data_count_insert_dup;

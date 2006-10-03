@@ -1,4 +1,4 @@
-noinst_PROGRAMS=array proc_open lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
+noinst_PROGRAMS=array chunk lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
 sbin_PROGRAMS=lighttpd 
 bin_PROGRAMS=spawn-fcgi
 LEMON=$(top_builddir)/src/lemon
@@ -24,33 +24,29 @@ mod_ssi_exprparser.c mod_ssi_exprparser.h: mod_ssi_exprparser.y
 	$(LEMON) -q $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
 endif
 
-configfile.c: configparser.h
+config.c: configparser.h
 mod_ssi_expr.c: mod_ssi_exprparser.h
 
-common_src=buffer.c errorlog-glue.c \
+common_src=buffer.c log.c \
       keyvalue.c chunk.c  \
-      http_chunk.c stream.c \
-      file_cache.c joblist.c etag.c array.c \
+      http_chunk.c stream.c fdevent.c \
+      file_cache.c plugin.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
       data_integer.c md5.c data_fastcgi.c \
-      data_config.c bitset.c \
+      fdevent_select.c fdevent_linux_rtsig.c \
+      fdevent_poll.c fdevent_linux_sysepoll.c \
+      fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c \
+      data_config.c bitset.c  configparser.c \
       inet_ntop_cache.c \
       connections-glue.c \
       configfile-glue.c \
-      http-header-glue.c \
-      file_descr.c \
+      http-header-glue.c
+      
+src = server.c response.c connections.c network.c \
       network_write.c network_linux_sendfile.c \
       network_freebsd_sendfile.c network_writev.c \
       network_solaris_sendfilev.c network_openssl.c \
-      network_send.c network-glue.c fdevent-glue.c \
-      proc_open.c
-
-src = server.c response.c connections.c configfile.c configparser.c \
-      request.c network.c log.c fdevent.c \
-      fdevent_select.c fdevent_linux_rtsig.c \
-      fdevent_poll.c fdevent_linux_sysepoll.c \
-      fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c  \
-      plugin.c
+      config.c request.c
 
 
 spawn_fcgi_SOURCES=spawn-fcgi.c
@@ -75,43 +71,12 @@ endif
 lib_LTLIBRARIES += mod_mysql_vhost.la
 mod_mysql_vhost_la_SOURCES = mod_mysql_vhost.c
 mod_mysql_vhost_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_mysql_vhost_la_CPPFLAGS = $(MYSQL_INCLUDE)
 mod_mysql_vhost_la_LIBADD = $(MYSQL_LIBS) $(common_libadd)
 
 lib_LTLIBRARIES += mod_cgi.la
 mod_cgi_la_SOURCES = mod_cgi.c 
 mod_cgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_cgi_la_LIBADD = $(common_libadd)
-
-lib_LTLIBRARIES += mod_staticfile.la
-mod_staticfile_la_SOURCES = mod_staticfile.c 
-mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_staticfile_la_LIBADD = $(common_libadd)
-
-lib_LTLIBRARIES += mod_negotiation.la
-mod_negotiation_la_SOURCES = mod_negotiation.c 
-mod_negotiation_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_negotiation_la_LIBADD = $(common_libadd)
-
-lib_LTLIBRARIES += mod_uploadprogress.la
-mod_uploadprogress_la_SOURCES = mod_uploadprogress.c 
-mod_uploadprogress_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_uploadprogress_la_LIBADD = $(common_libadd)
-
-lib_LTLIBRARIES += mod_dirlisting.la
-mod_dirlisting_la_SOURCES = mod_dirlisting.c 
-mod_dirlisting_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_dirlisting_la_LIBADD = $(common_libadd)
-
-lib_LTLIBRARIES += mod_trigger_b4_dl.la
-mod_trigger_b4_dl_la_SOURCES = mod_trigger_b4_dl.c 
-mod_trigger_b4_dl_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_trigger_b4_dl_la_LIBADD = $(common_libadd) $(GDBM_LIB) $(PCRE_LIB)
-
-lib_LTLIBRARIES += mod_indexfile.la
-mod_indexfile_la_SOURCES = mod_indexfile.c 
-mod_indexfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_indexfile_la_LIBADD = $(common_libadd)
 
 lib_LTLIBRARIES += mod_setenv.la
 mod_setenv_la_SOURCES = mod_setenv.c 
@@ -224,22 +189,24 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       network_backends.h configfile.h bitset.h \
       mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
       configparser.h mod_ssi_exprparser.h \
-      sys-mmap.h sys-socket.h file_descr.h \
-      file_cache_funcs.h file_descr_funcs.h \
-      chunk_funcs.h proc_open.h
+      sys-mmap.h sys-socket.h
+      # license.h
       
+#hdr += chat.h chat_misc.h chat_endec.h chat_user.h \
+#       chat_channel.h
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 
 lighttpd_SOURCES = $(src)
 lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB)
 lighttpd_LDFLAGS = -export-dynamic
+lighttpd_CCPFLAGS = $(MYSQL_INCLUDES)
 
 array_SOURCES = array.c buffer.c data_string.c data_count.c
 array_CPPFLAGS= -DDEBUG_ARRAY
 
-proc_open_SOURCES = proc_open.c buffer.c
-proc_open_CPPFLAGS= -DDEBUG_PROC_OPEN
+chunk_SOURCES = buffer.c chunk.c
+chunk_CPPFLAGS= -DDEBUG_CHUNK
 
 #gen_license_SOURCES = license.c md5.c buffer.c gen_license.c
 

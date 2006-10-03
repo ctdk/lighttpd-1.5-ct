@@ -2,7 +2,7 @@
 
 use strict;
 use IO::Socket;
-use Test::More tests => 6;
+use Test::More tests => 3;
 
 my $basedir = (defined $ENV{'top_builddir'} ? $ENV{'top_builddir'} : '..');
 my $srcdir = (defined $ENV{'srcdir'} ? $ENV{'srcdir'} : '.');
@@ -190,35 +190,11 @@ ok(start_proc == 0, "Starting lighttpd") or die();
 
 @request  = ( <<EOF
 GET /redirect/ HTTP/1.0
-Host: vvv.example.org
 EOF
  );
 @response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => 'http://localhost:2048/' } );
 ok(handle_http == 0, 'external redirect');
 
-@request  = ( <<EOF
-GET /redirect/ HTTP/1.0
-Host: zzz.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => 'http://localhost:2048/zzz' } );
-ok(handle_http == 0, 'external redirect with cond regsub');
-
-@request  = ( <<EOF
-GET /redirect/ HTTP/1.0
-Host: remoteip.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => 'http://localhost:2048/127.0.0.1' } );
-ok(handle_http == 0, 'external redirect with cond regsub on remoteip');
-
-@request  = ( <<EOF
-GET /redirect/ HTTP/1.0
-Host: remoteip2.example.org
-EOF
- );
-@response = ( { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 301, 'Location' => 'http://localhost:2048/remoteip2' } );
-ok(handle_http == 0, 'external redirect with cond regsub on remoteip2');
 
 ok(stop_proc == 0, "Stopping lighttpd");
 

@@ -7,8 +7,8 @@ Module: mod_secdownload
 -----------------------
 
 :Author: Jan Kneschke
-:Date: $Date$
-:Revision: $Revision$
+:Date: $Date: 2005-06-06T21:19:25.993967Z $
+:Revision: $Revision: 374 $
 
 :abstract:
   authenticated file requests and a counter measurement against 
@@ -34,7 +34,7 @@ Description
 
 there are multiple way to handle secured download mechanisms:
 
-1. use the webserver and the internal HTTP-authentication 
+1. use the webserver and the internal HTTP-authentification 
 2. use the application to authenticate and send the file 
    through the application
      
@@ -44,7 +44,7 @@ webserver:
 
 - ``+`` fast download 
 - ``+`` no additional system load 
-- ``-`` unflexible authentication handling
+- ``-`` unflexible authentification handling
   
 application:
 

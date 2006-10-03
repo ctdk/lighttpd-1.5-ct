@@ -41,10 +41,10 @@ typedef struct {
 	handler_t (* handle_uri_raw)         (server *srv, connection *con, void *p_d);    /* after uri_raw is set */
 	handler_t (* handle_uri_clean)       (server *srv, connection *con, void *p_d);    /* after uri is set */
 	handler_t (* handle_docroot)         (server *srv, connection *con, void *p_d);    /* getting the document-root */
-	handler_t (* handle_physical)        (server *srv, connection *con, void *p_d);    /* mapping url to physical path */
+	handler_t (* handle_physical_path)   (server *srv, connection *con, void *p_d);    /* after the physical path is set */
 	handler_t (* handle_request_done)    (server *srv, connection *con, void *p_d);    /* at the end of a request */
 	handler_t (* handle_connection_close)(server *srv, connection *con, void *p_d);    /* at the end of a connection */
-	handler_t (* handle_fetch_post_data) (server *srv, connection *con, void *p_d);    /* handle post data internally */
+	handler_t (* handle_joblist)         (server *srv, connection *con, void *p_d);    /* after all events are handled */
 	
 	
 	
@@ -70,9 +70,9 @@ handler_t plugins_call_handle_subrequest_start(server *srv, connection *con);
 handler_t plugins_call_handle_subrequest(server *srv, connection *con);
 handler_t plugins_call_handle_request_done(server *srv, connection *con);
 handler_t plugins_call_handle_docroot(server *srv, connection *con);
-handler_t plugins_call_handle_physical(server *srv, connection *con);
 handler_t plugins_call_handle_connection_close(server *srv, connection *con);
-handler_t plugins_call_handle_fetch_post_data(server *srv, connection *con);
+handler_t plugins_call_handle_joblist(server *srv, connection *con);
+handler_t plugins_call_handle_physical_path(server *srv, connection *con);
 handler_t plugins_call_connection_reset(server *srv, connection *con);
 
 handler_t plugins_call_handle_trigger(server *srv);
@@ -85,8 +85,7 @@ handler_t plugins_call_cleanup(server *srv);
 int config_insert_values_global(server *srv, array *ca, const config_values_t *cv);
 int config_insert_values_internal(server *srv, array *ca, const config_values_t *cv);
 int config_setup_connection(server *srv, connection *con);
-int config_patch_connection(server *srv, connection *con, comp_key_t comp);
+int config_patch_connection(server *srv, connection *con, const char *stage, size_t stage_len);
 int config_check_cond(server *srv, connection *con, data_config *dc);
-int config_append_cond_match_buffer(connection *con, data_config *dc, buffer *buf, int n);
 
 #endif

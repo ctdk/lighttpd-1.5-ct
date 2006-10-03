@@ -15,11 +15,6 @@ static keyvalue http_methods[] = {
 	{ HTTP_METHOD_GET,  "GET" },
 	{ HTTP_METHOD_POST, "POST" },
 	{ HTTP_METHOD_HEAD, "HEAD" },
-	{ HTTP_METHOD_PROPFIND, "PROPFIND" },
-	{ HTTP_METHOD_OPTIONS, "OPTIONS" },
-	{ HTTP_METHOD_MKCOL, "MKCOL" },
-	{ HTTP_METHOD_PUT, "PUT" },
-	{ HTTP_METHOD_DELETE, "DELETE" },
 	{ HTTP_METHOD_UNSET, NULL }
 };
 
@@ -33,7 +28,6 @@ static keyvalue http_status[] = {
 	{ 204, "No Content" },
 	{ 205, "Reset Content" },
 	{ 206, "Partial Content" },
-	{ 207, "Multi-status" },
 	{ 300, "Multiple Choices" },
 	{ 301, "Moved Permanently" },
 	{ 302, "Found" },
@@ -297,7 +291,6 @@ int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, cons
 	size_t i;
 	const char *errptr;
 	int erroff;
-	pcre_keyvalue *kv;
 #endif
 	
 	if (!key) return -1;
@@ -322,20 +315,14 @@ int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, cons
 		}
 	}
 	
-	kv = kvb->kv[kvb->used];
-	if (NULL == (kv->key = pcre_compile(key,
+	if (NULL == (kvb->kv[kvb->used]->key = pcre_compile(key,
 					  0, &errptr, &erroff, NULL))) {
 		
 		fprintf(stderr, "%s.%d: rexexp compilation error at %s\n", __FILE__, __LINE__, errptr);
 		return -1;
 	}
-
-	if (NULL == (kv->key_extra = pcre_study(kv->key, 0, &errptr)) &&  
-			errptr != NULL) {
-		return -1;
-	}
 	
-	kv->value = buffer_init_string(value);
+	kvb->kv[kvb->used]->value = strdup(value);
 	
 	kvb->used++;
 	
@@ -351,14 +338,11 @@ int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, cons
 void pcre_keyvalue_buffer_free(pcre_keyvalue_buffer *kvb) {
 #ifdef HAVE_PCRE_H
 	size_t i;
-	pcre_keyvalue *kv;
 
 	for (i = 0; i < kvb->size; i++) {
-		kv = kvb->kv[i];
-		if (kv->key) pcre_free(kv->key);
-		if (kv->key_extra) pcre_free(kv->key_extra);
-		if (kv->value) buffer_free(kv->value);
-		free(kv);
+		if (kvb->kv[i]->key) pcre_free(kvb->kv[i]->key);
+		if (kvb->kv[i]->value) free(kvb->kv[i]->value);
+		free(kvb->kv[i]);
 	}
 	
 	if (kvb->kv) free(kvb->kv);

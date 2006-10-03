@@ -22,17 +22,11 @@
 #include "settings.h"
 #include "fdevent.h"
 #include "sys-socket.h"
-#include "file_cache.h"
-#include "file_descr.h"
 
 
 #if defined HAVE_LIBSSL && defined HAVE_OPENSSL_SSL_H
 # define USE_OPENSSL
 # include <openssl/ssl.h> 
-#endif
-
-#ifndef O_BINARY
-# define O_BINARY 0
 #endif
 
 #ifndef O_LARGEFILE
@@ -137,14 +131,13 @@ typedef struct {
 	
 	buffer *orig_uri;
 	
-	http_method_t http_method_id;
-	buffer       *http_method_name;
+	http_method_t  http_method;
 	http_version_t http_version;
 	
-	buffer       *request_line;
+	buffer *request_line;
 	
 	/* strings to the header */
-	buffer       *http_host; /* not alloced */
+	buffer *http_host; /* not alloced */
 	const char   *http_range;
 	const char   *http_content_type;
 	const char   *http_if_modified_since;
@@ -155,7 +148,6 @@ typedef struct {
 	/* CONTENT */
 	buffer *content;
 	size_t content_length; /* returned by strtoul() */
-	int content_finished;
 	
 	/* internal representation */
 	int     accept_encoding;
@@ -176,6 +168,26 @@ typedef struct {
 } response;
 
 typedef struct {
+	buffer *name;
+	buffer *etag;
+	
+	struct stat st;
+	
+	int    fd;
+	int    fde_ndx;
+	
+	char   *mmap_p;
+	size_t mmap_length;
+	off_t  mmap_offset;
+	
+	size_t in_use;
+	size_t is_dirty;
+	
+	time_t stat_ts;
+	buffer *content_type;
+} file_cache_entry;
+
+typedef struct {
 	buffer *scheme;
 	buffer *authority;
 	buffer *path;
@@ -185,7 +197,6 @@ typedef struct {
 
 typedef struct {
 	buffer *path;
-	buffer *basedir; /* path = "(basedir)(.*)" */
 	
 	buffer *doc_root; /* path = doc_root + rel_path */
 	buffer *rel_path;
@@ -194,6 +205,16 @@ typedef struct {
 } physical;
 
 typedef struct {
+	file_cache_entry **ptr;
+	
+	size_t size;
+	size_t used;
+	
+	buffer *dir_name;
+} file_cache;
+
+typedef struct {
+	array *indexfiles;
 	array *mimetypes;
 	
 	/* virtual-servers */
@@ -201,7 +222,10 @@ typedef struct {
 	buffer *server_name;
 	buffer *error_handler;
 	buffer *server_tag;
+	buffer *dirlist_css;
 	
+	unsigned short dir_listing;
+	unsigned short hide_dotfiles;
 	unsigned short max_keep_alive_requests;
 	unsigned short max_keep_alive_idle;
 	unsigned short max_read_idle;
@@ -215,7 +239,6 @@ typedef struct {
 	unsigned short log_request_header;
 	unsigned short log_request_handling;
 	unsigned short log_response_header;
-	unsigned short log_condition_handling;
 	
 	
 	/* server wide */
@@ -224,7 +247,6 @@ typedef struct {
 	unsigned short use_ipv6;
 	unsigned short is_ssl;
 	unsigned short allow_http11;
-	unsigned short force_lower_case; /* if the FS is case-insensitive, force all files to lower-case */
 	unsigned short max_request_size;
 
 	unsigned short kbytes_per_second; /* connection kb/s limit */
@@ -253,39 +275,7 @@ typedef struct {
 #endif
 } specific_config;
 
-typedef enum { CON_STATE_CONNECT, CON_STATE_REQUEST_START, CON_STATE_READ, CON_STATE_REQUEST_END, CON_STATE_HANDLE_REQUEST, CON_STATE_RESPONSE_START, CON_STATE_WRITE, CON_STATE_RESPONSE_END, CON_STATE_ERROR, CON_STATE_CLOSE } connection_state_t;
-
-typedef struct {
-	sock_addr addr;
-	file_descr *fd;
-	
-	buffer *ssl_pemfile;
-	buffer *ssl_ca_file;
-	unsigned short use_ipv6;
-	unsigned short is_ssl;
-	unsigned short max_request_size;
-	
-	buffer *srv_token;
-	
-#ifdef USE_OPENSSL
-	SSL_CTX *ssl_ctx;
-#endif
-} server_socket;
-
-typedef struct {
-	server_socket **ptr;
-	
-	size_t size;
-	size_t used;
-} server_socket_array;
-
-typedef enum { COND_RESULT_UNSET, COND_RESULT_FALSE, COND_RESULT_TRUE } cond_result_t;
-typedef struct {
-	cond_result_t result;
-	int patterncount;
-	int matches[3 * 10];
-	buffer *comp_value; /* just a pointer */
-} cond_cache_t;
+typedef enum { CON_STATE_CONNECT, CON_STATE_REQUEST_START, CON_STATE_READ, CON_STATE_REQUEST_END, CON_STATE_READ_POST, CON_STATE_HANDLE_REQUEST, CON_STATE_RESPONSE_START, CON_STATE_WRITE, CON_STATE_RESPONSE_END, CON_STATE_ERROR, CON_STATE_CLOSE } connection_state_t;
 
 typedef struct {
 	connection_state_t state;
@@ -301,13 +291,16 @@ typedef struct {
 	struct timeval start_tv;
 	
 	size_t request_count;        /* number of requests handled in this connection */
-
-	file_descr *fd;
 	
+	int fd;                      /* the FD for this connection */
+	int fde_ndx;                 /* index for the fdevent-handler */
 	int ndx;                     /* reverse mapping to server->connection[ndx] */
 	
 	/* fd states */
-	int keep_alive;              /* only request.c can enable it, all other just disable */
+	int is_readable;
+	int is_writable;
+	
+	int     keep_alive;           /* only request.c can enable it, all other just disable */
 	
 	int file_started;
 	int file_finished;
@@ -322,12 +315,9 @@ typedef struct {
 	off_t bytes_read;             /* used by mod_accesslog, mod_rrd */
 	off_t bytes_header;
 	
-	ssize_t post_data_fetched;
-	
 	int http_status;
 	
 	sock_addr dst_addr;
-	buffer *dst_addr_buf;
 
 	/* request */
 	buffer *parse_request;
@@ -350,10 +340,11 @@ typedef struct {
 	
 	connection_type mode;
 	
+	file_cache_entry *fce;       /* filecache entry for the selected file */
+	
 	void **plugin_ctx;           /* plugin connection specific config */
 	
 	specific_config conf;        /* global connection specific config */
-	cond_cache_t *cond_cache;
 	
 	buffer *server_name;
 	
@@ -362,7 +353,11 @@ typedef struct {
 	int error_handler_saved_status;
 	int in_error_handler;
 	
-	server_socket *srv_socket;   /* reference to the server-socket */
+	void *srv_socket;   /* reference to the server-socket (typecast to server_socket) */
+	
+#ifdef USE_OPENSSL
+	SSL *ssl;
+#endif
 } connection;
 
 typedef struct {
@@ -424,9 +419,32 @@ typedef struct {
 	
 	unsigned short log_request_header_on_error;
 	unsigned short log_state_handling;
-	
-	unsigned short close_stderr;
 } server_config;
+
+typedef struct {
+	sock_addr addr;
+	int       fd;
+	int       fde_ndx;
+	
+	buffer *ssl_pemfile;
+	buffer *ssl_ca_file;
+	unsigned short use_ipv6;
+	unsigned short is_ssl;
+	unsigned short max_request_size;
+	
+	buffer *srv_token;
+	
+#ifdef USE_OPENSSL
+	SSL_CTX *ssl_ctx;
+#endif
+} server_socket;
+
+typedef struct {
+	server_socket **ptr;
+	
+	size_t size;
+	size_t used;
+} server_socket_array;
 
 typedef struct {
 	server_socket_array srv_sockets;
@@ -459,7 +477,9 @@ typedef struct {
 	
 	buffer *tmp_chunk_len;
 	
-	buffer *cond_check_buf;
+	buffer *range_buf;
+	
+	buffer *empty_string; /* is necessary for cond_match */
 	
 	/* caches */
 #ifdef HAVE_IPV6
@@ -495,6 +515,8 @@ typedef struct {
 	
 	file_cache  *file_cache;
 	buffer      *file_cache_etag;
+	
+	buffer_array *config_patches;
 	
 	fdevent_handler_t event_handler;
 } server;

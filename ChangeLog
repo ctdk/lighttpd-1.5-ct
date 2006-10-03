@@ -1,33 +1,98 @@
 CVS-Version: $Id: ChangeLog,v 1.18 2004/04/09 22:08:19 weigon Exp $
 
-Feature Requests:
-* complex
-- limit read-queue to 64k and use traffic-shaping cap
-  - if fastcgi/cgi are not ready ignore incoming FDEVENT_IN for a while
-  -> reduce memory usage
-- userdir + suphp
-  -> internal config-hash
-- don't strip // from PATHINFO
-- TLS
+** NOTE **
 
-* moderate
-- errorlog piping 
-- gracefull restart
-- mod_accesslog_mysql
-- mod_auth_mysql
-- IPv6 for FastCGI
-- man-page for spawn-fcgi
-- server.base-directory
+This file is abondend in favour of the NEWS file
 
-* simple
-- file-mapping for alias 
-- hostnames for remote-FastCGI
-- fix remote-fastcgi on freebsd + kqueue
-  - crash FDEVENT_OUT on FreeBSD
-- cgi exec via shell
-- crash in read-post
-- same config option twice -> aaa, aaa
-- remove default port from Host:
+** NOTE **
+
+
+15.06.2005 20:10 - 1.3.15
+- mod_cml, mod_trigger_b4_dl
+
+  added both plugins
+
+  check http://trac.lighttpd.net/trac/log/branches/lighttpd-1.3.x/ for the
+  rest
+
+15.06.2005 13:59 - 1.3.14
+- documentation
+
+  more fix-ups for mod_fastcgi, configuration and mysql-vhost
+
+- tests
+
+  unified test-scripts to use the same framework
+
+14.06.2005 23:38 
+- documentation
+
+  updated docs for mod_proxy and mod_scgi
+
+12.06.2005 12:55 - pre-release
+- mod_fastcgi
+  
+  fixed event handling after delayed connect
+
+  make retry timeout configurable
+
+  removed unused events if we switch to FCGI_STATE_READ
+
+  disabled adaptive spawning
+
+- mod_proxy
+
+  added hash-based and round-robin balancing
+
+  use port 80 is default
+
+  fixed errorhandling on connection refused
+
+  fixed usage of dead hosts [285]
+
+- mod_cgi
+
+  send 500 if the CGI died before we received any data
+
+  redirect the stderr of CGI to our errorlog
+
+  cleanup cgi-env after we finished our request
+
+- uri-handling
+
+  don't replace + to space before the ?query part
+
+  accept characters > 127 again
+
+- mod_auth
+
+  fixed segfault if debugging is enabled [371]
+
+- mod_scgi
+
+  added SCGI support for python + WSGI [381], [382]
+
+- mod_setenv
+
+  fixed conditionals for setenv.add-environment [109]
+
+- generic
+
+  report an error on duplicate config-keys in configfile [267]
+
+  call initgroups to join the groups of the users [239]
+
+  fixed automatic redirects if SSL is used
+
+  fixed compilation on Solaris [283]
+  
+  disable accept-filtering on FreeBSD if ssl is used [320]
+
+  fixed handling of range-request larger than 2Gb
+  
+  fixed comparisions of mime-types to case-insensitive [266]
+
+  added quotation of ETags [376], [378]
 
 06.03.2005 12:22 - 1.3.13
 - mod_accesslog
@@ -3915,7 +3980,7 @@ Speed:
 
 Let's assume that <a
 href="http://www.acme.com/software/thttpd/">thttpd</a> is (one of) the
-fasted webservers out there. 
+fastest webservers out there. 
 
 all httpds were started with:
 

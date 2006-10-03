@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 AC_PREREQ(2.57)
-AC_INIT(lighttpd, 1.3.13, jan@kneschke.de)
+AC_INIT(lighttpd, 1.5.0, jan@kneschke.de)
 AC_CONFIG_SRCDIR([src/server.c])
 
 AC_CANONICAL_TARGET
@@ -46,8 +46,8 @@ AC_ENABLE_SHARED
 AC_LIBTOOL_DLOPEN
 AC_PROG_LIBTOOL
 
-dnl for solaris and localtime_r
-CPPFLAGS="${CPPFLAGS} -D_REENTRANT"
+dnl for solaris 
+CPPFLAGS="${CPPFLAGS} -D_REENTRANT -D__EXTENSIONS__"
 
 # Checks for header files.
 AC_HEADER_STDC
@@ -55,8 +55,8 @@ AC_HEADER_SYS_WAIT
 AC_CHECK_HEADERS([arpa/inet.h fcntl.h netinet/in.h stdlib.h string.h \
 sys/socket.h sys/time.h unistd.h sys/sendfile.h sys/uio.h \
 getopt.h sys/epoll.h sys/select.h poll.h sys/poll.h sys/devpoll.h sys/filio.h \
-sys/mman.h sys/event.h sys/port.h winsock2.h pwd.h sys/syslimits.h \
-sys/resource.h sys/un.h syslog.h])
+sys/mman.h sys/event.h sys/port.h pwd.h sys/syslimits.h \
+sys/resource.h sys/un.h syslog.h sys/prctl.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -66,7 +66,7 @@ AC_TYPE_OFF_T
 AC_TYPE_PID_T
 AC_TYPE_SIZE_T
 
-AC_CHECK_MEMBER(struct tm.tm_gmtoff,AC_DEFINE([HAVE_STRUCT_TM_GMTOFF],[1],[gmtoff in struct tm]),,[#include <time.h>])
+AC_CHECK_MEMBER(struct tm.tm_gmtoff,[AC_DEFINE([HAVE_STRUCT_TM_GMTOFF],[1],[gmtoff in struct tm])],,[#include <time.h>])
 AC_CHECK_TYPES(struct sockaddr_storage,,,[#include <sys/socket.h>])
 AC_CHECK_TYPES(socklen_t,,,[#include <sys/types.h>
 #include <sys/socket.h>])
@@ -82,49 +82,60 @@ AC_FUNC_STRFTIME
 
 dnl Checks for database.
 MYSQL_INCLUDE=""
+MYSQL_LIBS=""
 
-AC_PATH_PROG(MYSQLCONFIG, mysql_config)
 AC_MSG_CHECKING(for MySQL support)
 AC_ARG_WITH(mysql,
     AC_HELP_STRING([--with-mysql@<:@=PATH@:>@],[Include MySQL support. PATH is the path to 'mysql_config']),
-    [
-  if test "$withval" != "no"; then
-    if test "$withval" = "yes"; then
-       withval=$MYSQLCONFIG
-    fi
+    [WITH_MYSQL=$withval],[WITH_MYSQL=no])
 
-    if test \! -x $withval; then
-      echo "--with-mysql=path-to-mysql_config"
-    fi
-    MYSQL_INCLUDE="`$withval --cflags | sed s/\'//g`"
-    MYSQL_LIBS="`$withval --libs | sed s/\'//g`"
-
-    AC_MSG_RESULT(yes)
-
-    AC_MSG_CHECKING(for MySQL includes at)
-    AC_MSG_RESULT($MYSQL_INCLUDE)
-
-    AC_MSG_CHECKING(for MySQL libraries at)
-    AC_MSG_RESULT($MYSQL_LIBS)
-  dnl check for errmsg.h, which isn't installed by some versions of 3.21
-    old_CPPFLAGS="$CPPFLAGS"
-    CPPFLAGS="$CPPFLAGS $MYSQL_INCLUDE"
-    AC_CHECK_HEADERS(errmsg.h mysql.h)
-    CPPFLAGS="$old_CPPFLAGS"
-
-    AC_DEFINE([HAVE_MYSQL], [1], [mysql support])
+if test "$WITH_MYSQL" != "no"; then
+  AC_MSG_RESULT(yes)  
+  if test "$WITH_MYSQL" = "yes"; then
+    AC_PATH_PROG(MYSQL_CONFIG, mysql_config)
   else
-    AC_MSG_RESULT(no)
+    MYSQL_CONFIG=$WITH_MYSQL
   fi
-],[AC_MSG_RESULT(no)])
+
+  if test "$MYSQL_CONFIG" = ""; then
+    AC_MSG_ERROR(mysql_config is not found)
+  fi
+  if test \! -x $MYSQL_CONFIG; then
+    AC_MSG_ERROR(mysql_config not exists or not executable, use --with-mysql=path-to-mysql_config)
+  fi
+
+  if $MYSQL_CONFIG | grep -- '--include' > /dev/null ; then
+    MYSQL_INCLUDE="`$MYSQL_CONFIG --include | sed s/\'//g`"
+  else
+    MYSQL_INCLUDE="`$MYSQL_CONFIG --cflags | sed s/\'//g`"
+  fi
+  MYSQL_LIBS="`$MYSQL_CONFIG --libs | sed s/\'//g`"
+
+  AC_MSG_CHECKING(for MySQL includes at)
+  AC_MSG_RESULT($MYSQL_INCLUDE)
+
+  AC_MSG_CHECKING(for MySQL libraries at)
+  AC_MSG_RESULT($MYSQL_LIBS)
+dnl check for errmsg.h, which isn't installed by some versions of 3.21
+  old_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $MYSQL_INCLUDE"
+  AC_CHECK_HEADERS(errmsg.h mysql.h)
+  CPPFLAGS="$old_CPPFLAGS"
+
+  AC_DEFINE([HAVE_MYSQL], [1], [mysql support])
+else
+  AC_MSG_RESULT(no)
+fi
 
 AC_SUBST(MYSQL_LIBS)
 AC_SUBST(MYSQL_INCLUDE)
 
-
+dnl Check for LDAP
 AC_MSG_CHECKING(for LDAP support)
 AC_ARG_WITH(ldap, AC_HELP_STRING([--with-ldap],[enable LDAP support]),
-[AC_MSG_RESULT(yes)
+[WITH_LDAP=$withval], [WITH_LDAP=no])
+AC_MSG_RESULT([$withval])
+if test "$WITH_LDAP" != "no"; then
  AC_CHECK_LIB(ldap, ldap_bind, [
   AC_CHECK_HEADERS([ldap.h],[
     LDAP_LIB=-lldap
@@ -141,12 +152,14 @@ AC_ARG_WITH(ldap, AC_HELP_STRING([--with-ldap],[enable LDAP support]),
   ])
  ])
  AC_SUBST(LBER_LIB)
+fi
 
-],[AC_MSG_RESULT(no)])
-
+dnl Check for xattr
 AC_MSG_CHECKING(for extended attributes support)
 AC_ARG_WITH(attr, AC_HELP_STRING([--with-attr],[enable extended attribute support]),
-[AC_MSG_RESULT(yes)
+[WITH_ATTR=$withval],[WITH_ATTR=no])
+AC_MSG_RESULT($withval)
+if test "$WITH_ATTR" != "no"; then
  AC_CHECK_LIB(attr, attr_get, [
 	AC_CHECK_HEADERS([attr/attributes.h],[
 		ATTR_LIB=-lattr
@@ -154,38 +167,54 @@ AC_ARG_WITH(attr, AC_HELP_STRING([--with-attr],[enable extended attribute suppor
 		AC_DEFINE([HAVE_ATTR_ATTRIBUTES_H], [1])
 	])
  ])
-],[AC_MSG_RESULT(no)])
-AC_SUBST(ATTR_LIB)
+ AC_SUBST(ATTR_LIB)
+fi
 
-AC_MSG_CHECKING(for valgrind)
-AC_ARG_WITH(valgrind, AC_HELP_STRING([--with-valgrind],[enable internal
-support for valgrind]),
-[AC_MSG_RESULT(yes)
- AC_CHECK_HEADERS([valgrind/valgrind.h])
-],[AC_MSG_RESULT(no)])
+## openssl on solaris needs -lsocket -lnsl
+AC_SEARCH_LIBS(socket,socket)
+AC_SEARCH_LIBS(gethostbyname,nsl socket)
+AC_SEARCH_LIBS(hstrerror,resolv)
 
-AC_MSG_CHECKING(for OpenSSL)
-dnl check for openssl
-    AC_ARG_WITH(openssl,
-    AC_HELP_STRING([--with-openssl@<:@=DIR@:>@],[Include openssl support (default no)]),
-[
-    if test "$withval" != "no"; then
-        if test "$withval" != "yes"; then
-            CPPFLAGS="$CPPFLAGS -I$withval/include"
-            LDFLAGS="$LDFLAGS -L$withval/lib"
-	fi
-	
-        use_openssl=yes
-	AC_MSG_RESULT($withval)
-    else
-        use_openssl=no
-        AC_MSG_RESULT(no)
+save_LIBS=$LIBS
+AC_SEARCH_LIBS(dlopen,dl,[
+  AC_CHECK_HEADERS([dlfcn.h],[
+    if test "$ac_cv_search_dlopen" != no; then
+      test "$ac_cv_search_dlopen" = "none required" || DL_LIB="$ac_cv_search_dlopen"
     fi
-],[
-    use_openssl=no
-    AC_MSG_RESULT(no)
+
+    AC_DEFINE([HAVE_LIBDL], [1], [libdl])
+    AC_DEFINE([HAVE_DLFCN_H], [1])
+  ])
 ])
-    
+LIBS=$save_LIBS
+AC_SUBST(DL_LIB)
+
+dnl Check for valgrind
+AC_MSG_CHECKING(for valgrind)
+AC_ARG_WITH(valgrind, AC_HELP_STRING([--with-valgrind],[enable internal support for valgrind]),
+[WITH_VALGRIND=$withval],[WITH_VALGRIND=no])
+AC_MSG_RESULT([$WITH_VALGRIND])
+if test "$WITH_VALGRIND" != "no"; then
+ AC_CHECK_HEADERS([valgrind/valgrind.h])
+fi
+
+dnl Check for openssl
+AC_MSG_CHECKING(for OpenSSL)
+AC_ARG_WITH(openssl,
+    AC_HELP_STRING([--with-openssl@<:@=DIR@:>@],[Include openssl support (default no)]),
+    [WITH_OPENSSL=$withval],[WITH_OPENSSL=no])
+
+if test "$WITH_OPENSSL" != "no"; then
+    use_openssl=yes
+    if test "$WITH_OPENSSL" != "yes"; then
+	CPPFLAGS="$CPPFLAGS -I$WITH_OPENSSL/include"
+	LDFLAGS="$LDFLAGS -L$WITH_OPENSSL/lib"
+    fi
+else
+    use_openssl=no
+fi
+AC_MSG_RESULT([$use_openssl])
+
 AC_ARG_WITH(openssl-includes,
     AC_HELP_STRING([--with-openssl-includes=DIR],[OpenSSL includes]),
     [ use_openssl=yes CPPFLAGS="$CPPFLAGS -I$withval" ]
@@ -196,18 +225,32 @@ AC_ARG_WITH(openssl-libs,
     [ use_openssl=yes LDFLAGS="$LDFLAGS -L$withval" ]
 )
 
+AC_ARG_WITH(kerberos5,
+    AC_HELP_STRING([--with-kerberos5],[use Kerberos5 support with OpenSSL]),
+    [ use_kerberos=yes ], [use_kerberos=no]
+)
+
 if test "x$use_openssl" = "xyes"; then
+    if test "x$use_kerberos" != "xyes"; then
+        CPPFLAGS="$CPPFLAGS -DOPENSSL_NO_KRB5"
+    fi
+
     AC_CHECK_HEADERS([openssl/ssl.h])
     OLDLIBS="$LIBS"
     AC_CHECK_LIB(crypto, BIO_f_base64, [ 
       AC_CHECK_LIB(ssl, SSL_new, [ SSL_LIB="-lssl -lcrypto" 
-				 AC_DEFINE(HAVE_LIBSSL, [], [Have libssl]) ], [], [ -lcrypto ])
+				 AC_DEFINE(HAVE_LIBSSL, [], [Have libssl]) ], [], [ -lcrypto "$DL_LIB" ])
     ], [], [])
     LIBS="$OLDLIBS"
     AC_SUBST(SSL_LIB)
 fi
 
-if test "x$cross_compiling" = xno; then
+AC_MSG_CHECKING(for perl regular expressions support)
+AC_ARG_WITH(pcre, AC_HELP_STRING([--with-pcre],[Enable pcre support (default yes)]),
+    [WITH_PCRE=$withval],[WITH_PCRE=yes])
+AC_MSG_RESULT([$WITH_PCRE])
+
+if test "x$cross_compiling" = xno -a "$WITH_PCRE" != "no"; then
   AC_PATH_PROG(PCRECONFIG, pcre-config)
 
   if test x"$PCRECONFIG" != x; then 
@@ -236,32 +279,133 @@ AC_CHECK_LIB(z, deflate, [
 ])
 AC_SUBST(Z_LIB)
 
-AC_CHECK_LIB(bz2, BZ2_bzCompress, [
-  AC_CHECK_HEADERS([bzlib.h],[
-    BZ_LIB=-lbz2
-    AC_DEFINE([HAVE_LIBBZ2], [1], [libbz2])
-    AC_DEFINE([HAVE_BZLIB_H], [1])
+AC_MSG_CHECKING(for bzip2 support)
+AC_ARG_WITH(bzip2, AC_HELP_STRING([--with-bzip2],[Enable bzip2 support for mod_compress]),
+    [WITH_BZIP2=$withval],[WITH_BZIP2=yes])
+AC_MSG_RESULT([$WITH_BZIP2])
+
+if test "$WITH_BZIP2" != "no"; then
+  AC_CHECK_LIB(bz2, BZ2_bzCompress, [
+    AC_CHECK_HEADERS([bzlib.h],[
+      BZ_LIB=-lbz2
+      AC_DEFINE([HAVE_LIBBZ2], [1], [libbz2])
+      AC_DEFINE([HAVE_BZLIB_H], [1])
+    ])
   ])
-])
+fi
 AC_SUBST(BZ_LIB)
 
-AC_SEARCH_LIBS(socket,socket)
-AC_SEARCH_LIBS(gethostbyname,nsl socket)
-AC_SEARCH_LIBS(hstrerror,resolv)
+if test -z "$PKG_CONFIG"; then
+  AC_PATH_PROG(PKG_CONFIG, pkg-config, no)
+fi
 
-save_LIBS=$LIBS
-AC_SEARCH_LIBS(dlopen,dl,[
-  AC_CHECK_HEADERS([dlfcn.h],[
-    if test "$ac_cv_search_dlopen" != no; then
-      test "$ac_cv_search_dlopen" = "none required" || DL_LIB="$ac_cv_search_dlopen"
-    fi
+dnl Check for gamin
+AC_MSG_CHECKING(for FAM)
+AC_ARG_WITH(fam, AC_HELP_STRING([--with-fam],[fam/gamin for reducing number of stat() calls]),
+[WITH_FAM=$withval],[WITH_FAM=no])
+AC_MSG_RESULT([$WITH_FAM])
 
-    AC_DEFINE([HAVE_LIBDL], [1], [libdl])
-    AC_DEFINE([HAVE_DLFCN_H], [1])
+if test "$WITH_FAM" != "no"; then
+  AC_CHECK_LIB(fam, FAMOpen2, [
+    AC_CHECK_HEADERS([fam.h],[
+      FAM_LIBS=-lfam
+      AC_DEFINE([HAVE_LIBFAM], [1], [libfam])
+      AC_DEFINE([HAVE_FAM_H], [1], [fam.h])
+    ])
   ])
-])
-LIBS=$save_LIBS
-AC_SUBST(DL_LIB)
+  if test "x$FAM_LIBS" = x; then
+    PKG_CHECK_MODULES(FAM, gamin >= 0.1.0, [
+      AC_DEFINE([HAVE_LIBFAM], [1], [libfam])
+      AC_DEFINE([HAVE_FAM_H], [1], [fam.h])
+    ])
+  fi
+  OLD_LIBS=$LIBS
+  LIBS=$FAM_LIBS
+  AC_CHECK_FUNCS([FAMNoExists])
+  LIBS=$OLD_LIBS
+fi
+
+AC_MSG_CHECKING(for properties in mod_webdav)
+AC_ARG_WITH(webdav-props, AC_HELP_STRING([--with-webdav-props],[properties in mod_webdav]),
+[WITH_WEBDAV_PROPS=$withval],[WITH_WEBDAV_PROPS=no])
+AC_MSG_RESULT([$WITH_WEBDAV_PROPS])
+
+if test "$WITH_WEBDAV_PROPS" != "no"; then
+ PKG_CHECK_MODULES(XML, libxml-2.0, [
+    AC_DEFINE([HAVE_LIBXML2], [1], [libxml2])
+    AC_DEFINE([HAVE_LIBXML_H], [1], [libxml.h])
+ ])
+ PKG_CHECK_MODULES(SQLITE, sqlite3, [
+    AC_DEFINE([HAVE_SQLITE3], [1], [libsqlite3])
+    AC_DEFINE([HAVE_SQLITE3_H], [1], [sqlite3.h])
+ ])
+
+ AC_MSG_CHECKING(for locks in mod_webdav)
+ AC_ARG_WITH(webdav-locks, AC_HELP_STRING([--with-webdav-locks],[locks in mod_webdav]),
+ [WITH_WEBDAV_LOCKS=$withval],[WITH_WEBDAV_LOCKS=no])
+ AC_MSG_RESULT([$WITH_WEBDAV_LOCKS])
+
+ if test "$WITH_WEBDAV_LOCKS" != "no"; then
+   AC_CHECK_LIB(uuid, uuid_unparse, [
+         AC_CHECK_HEADERS([uuid/uuid.h],[
+                 UUID_LIB=-luuid
+                 AC_DEFINE([HAVE_UUID], [1], [libuuid])
+		 AC_DEFINE([HAVE_UUID_H], [1], [uuid/uuid.h is available])
+         ])
+ ])
+
+ fi
+fi
+
+dnl Check for gdbm
+AC_MSG_CHECKING(for gdbm)
+AC_ARG_WITH(gdbm, AC_HELP_STRING([--with-gdbm],[gdbm storage for mod_trigger_b4_dl]),
+[WITH_GDBM=$withval],[WITH_GDBM=no])
+AC_MSG_RESULT([$WITH_GDBM])
+
+if test "$WITH_GDBM" != "no"; then
+ AC_CHECK_LIB(gdbm, gdbm_open, [
+         AC_CHECK_HEADERS([gdbm.h],[
+                 GDBM_LIB=-lgdbm
+                 AC_DEFINE([HAVE_GDBM], [1], [libgdbm])
+		 AC_DEFINE([HAVE_GDBM_H], [1])
+         ])
+ ])
+ AC_SUBST(GDBM_LIB)
+fi
+
+dnl Check for memcache
+AC_MSG_CHECKING(for memcache)
+AC_ARG_WITH(memcache, AC_HELP_STRING([--with-memcache],[memcached storage for mod_trigger_b4_dl]),
+[WITH_MEMCACHE=$withval],[WITH_MEMCACHE=no])
+AC_MSG_RESULT([$WITH_MEMCACHE])
+if test "$WITH_MEMCACHE" != "no"; then
+ AC_CHECK_LIB(memcache, mc_new, [
+         AC_CHECK_HEADERS([memcache.h],[
+                 MEMCACHE_LIB=-lmemcache
+                 AC_DEFINE([HAVE_MEMCACHE], [1], [libmemcache])
+		 AC_DEFINE([HAVE_MEMCACHE_H], [1], [memcache.h])
+         ])
+ ])
+ AC_SUBST(MEMCACHE_LIB)
+fi
+  
+dnl Check for lua
+AC_MSG_CHECKING(for lua)
+AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[lua engine for mod_cml]),
+[WITH_LUA=$withval],[WITH_LUA=no])
+
+AC_MSG_RESULT($WITH_LUA)
+if test "$WITH_LUA" != "no"; then
+ # try pkgconfig
+ PKG_CHECK_MODULES(LUA, lua >= 5.1, [
+   AC_DEFINE([HAVE_LUA], [1], [liblua])
+   AC_DEFINE([HAVE_LUA_H], [1], [lua.h])
+ ])
+
+ AC_SUBST(LUA_CFLAGS)
+ AC_SUBST(LUA_LIBS)
+fi
 
 save_LIBS=$LIBS
 AC_SEARCH_LIBS(crypt,crypt,[
@@ -293,20 +437,37 @@ case $host_os in
 esac
 
 AC_CHECK_FUNCS([dup2 getcwd inet_ntoa inet_ntop memset mmap munmap strchr \
-		  strdup strerror strstr strtol sendfile  getopt socket \
-		  gethostbyname poll sigtimedwait epoll_ctl getrlimit chroot \
-		  getuid select signal\
+		  strdup strerror strstr strtol sendfile  getopt socket lstat \
+		  gethostbyname poll sigtimedwait epoll_ctl getrlimit chroot strptime \
+		  getuid select signal pathconf madvise posix_fadvise posix_madvise \
 		  writev sigaction sendfile64 send_file kqueue port_create localtime_r])
+
+AC_MSG_CHECKING(for Large File System support)
+AC_ARG_ENABLE(lfs,
+ AC_HELP_STRING([--enable-lfs],[Turn on Large File System (default)]),
+ [case "${enableval}" in
+   yes) CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES" ;;
+    no) ;;
+     *) AC_MSG_ERROR(bad value ${enableval} for --enable-lfs) ;;
+  esac],[CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES"
+	 enable_lfs=yes])
+AC_MSG_RESULT($enableval)
+
+AC_CHECK_SIZEOF(long)
+AC_CHECK_SIZEOF(off_t)
 
 if test "x$ac_cv_func_sendfile" = xyes; then
 	# check if sendfile works
         AC_MSG_CHECKING(if sendfile works)
 	if test "x$cross_compiling" = xno; then
 	AC_TRY_RUN([
+		    #ifdef HAVE_SYS_SENDFILE_H
+		    #include <sys/sendfile.h>
+		    #endif /* HAVE_SYS_SENDFILE_H */
 		    #include <errno.h>
 		    int main() {
 		      int o = 0;
-		      if (-1 == sendfile(0, 0, &o, 0) && errno == ENOSYS) return -1;
+		      if (-1 == sendfile(-1, 0, &o, 0) && errno == ENOSYS) return -1;
 		      return 0;
 		    } ], 
 		    AC_MSG_RESULT(yes), 
@@ -341,19 +502,6 @@ if test x$ipv6 = xtrue; then
 fi
 
 
-AC_MSG_CHECKING(for Large File System support)
-AC_ARG_ENABLE(lfs,
- AC_HELP_STRING([--enable-lfs],[Turn on Large File System (default)]),
- [case "${enableval}" in
-   yes) CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES" ;;
-    no) ;;
-     *) AC_MSG_ERROR(bad value ${enableval} for --enable-lfs) ;;
-  esac],[CPPFLAGS="${CPPFLAGS} -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES"])
-AC_MSG_RESULT($enableval)
-
-AC_CHECK_SIZEOF(long)
-AC_CHECK_SIZEOF(off_t)
-
 AM_CONDITIONAL(CROSS_COMPILING, test "x$cross_compiling" = xyes)
 
 dnl check for fastcgi lib, for the tests only
@@ -366,15 +514,16 @@ AC_CHECK_LIB(fcgi, FCGI_Accept, [
 
 AM_CONDITIONAL(CHECK_WITH_FASTCGI, test "x$fastcgi_found" = xyes)
 
+
 if test "${GCC}" = "yes"; then
-       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic"
+       CFLAGS="${CFLAGS} -Wall -W -Wshadow -pedantic -std=gnu99"
 fi
 
 dnl build version-id
 LIGHTTPD_VERSION_ID=`echo $PACKAGE_VERSION | $AWK -F '.' '{print "(" $1 " << 16 | " $2 " << 8 | " $3 ")"}'`
 AC_DEFINE_UNQUOTED([LIGHTTPD_VERSION_ID], [$LIGHTTPD_VERSION_ID], [lighttpd-version-id]) 
 
-AC_CONFIG_FILES([Makefile debian/Makefile src/Makefile doc/Makefile tests/Makefile \
+AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile tests/Makefile \
 		 tests/docroot/Makefile \
 		 tests/docroot/123/Makefile \
 		 tests/docroot/www/Makefile \
@@ -385,51 +534,147 @@ AC_CONFIG_FILES([Makefile debian/Makefile src/Makefile doc/Makefile tests/Makefi
 		 openwrt/Makefile openwrt/control openwrt/lighttpd.mk])
 AC_OUTPUT
 
-$ECHO
-$ECHO "Plugins:"
-$ECHO
+
+do_build="mod_cgi mod_fastcgi mod_proxy mod_evhost mod_simple_vhost mod_access mod_alias mod_setenv mod_usertrack mod_auth mod_status mod_accesslog mod_rrdtool mod_secdownload mod_expire mod_compress mod_dirlisting mod_indexfiles mod_userdir mod_webdav mod_staticfile mod_scgi mod_flv_streaming" 
+
+plugins="mod_rewrite mod_redirect mod_ssi mod_trigger_b4_dl"
+features="regex-conditionals"
 if test ! "x$PCRE_LIB" = x; then
-  $ECHO "mod_rewrite     : enabled"
-  $ECHO "mod_redirect    : enabled"
-  $ECHO "mod_ssi         : enabled"
+	do_build="$do_build $plugins"
+	enable_feature="$features"
 else
-  $ECHO "mod_rewrite     : disabled (libpcre missing)"
-  $ECHO "mod_redirect    : disabled (libpcre missing)"
-  $ECHO "mod_ssi         : disabled (libpcre missing)"
+	no_build="$no_build $plugins"
+	disable_feature="$features"
 fi
 
-$ECHO "mod_cgi         : enabled"
-$ECHO "mod_fastcgi     : enabled"
-$ECHO "mod_proxy       : enabled"
-$ECHO "mod_evhost      : enabled"
-$ECHO "mod_simple_vhost: enabled"
-
-if test "x$MYSQL_LIBS" = x; then
-  $ECHO "mod_mysql_vhost : disabled (libmysqlclient missing or mysql support disabled)"
+plugins="mod_mysql_vhost"
+if test ! "x$MYSQL_LIBS" = x; then
+	do_build="$do_build $plugins"
 else
-  $ECHO "mod_mysql_vhost : enabled"
+	no_build="$no_build $plugins"
 fi
 
-$ECHO "mod_access      : enabled"
-$ECHO "mod_alias       : enabled"
-$ECHO "mod_setenv      : enabled"
-$ECHO "mod_usertrack   : enabled"
-if test "x$Z_LIB" = x; then
-  $ECHO "mod_compress    : disabled (libz missing)"
+plugins="mod_cml"
+if test ! "x$LUA_LIBS" = x; then
+	do_build="$do_build $plugins"
 else
-  $ECHO "mod_compress    : enabled"
+	no_build="$no_build $plugins"
+fi
+
+features="storage-gdbm"
+if test ! "x$GDBM_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="storage-memcache"
+if test ! "x$MEMCACHE_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="compress-gzip compress-deflate"
+if test ! "x$Z_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="compress-bzip2"
+if test ! "x$BZ_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="auth-ldap"
+if test ! "x$LDAP_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="network-openssl"
+if test ! "x$SSL_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
 fi
 
 # no crypt call
+features="auth-crypt"
 if test "$ac_cv_search_crypt" = no; then
-  $ECHO "mod_auth        : enabled, crypt() support disabled"
+	disable_feature="$disable_feature $features"
 else
-  $ECHO "mod_auth        : enabled"
+	enable_feature="$enable_feature $features"
 fi
-$ECHO "mod_status      : enabled"
-$ECHO "mod_accesslog   : enabled"
-$ECHO "mod_rrdtool     : enabled"
-$ECHO "mod_secdownload : enabled"
-$ECHO "mod_expire      : enabled"
+
+features="network-ipv6"
+if test "$ac_cv_ipv6_support" = yes; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="large-files"
+if test "$enable_lfs" = yes; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="stat-cache-fam"
+if test ! "x$FAM_LIBS" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="webdav-properties"
+if test "x$XML_LIBS" \!= x -a "x$SQLITE_LIBS" \!= x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+features="webdav-locks"
+if test "x$UUID_LIB" \!= x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
+
+## output
+
+$ECHO
+$ECHO "Plugins:"
+$ECHO
+
+$ECHO "enabled: "
+for p in $do_build; do
+	$ECHO "  $p"
+done | sort
+
+$ECHO "disabled: "
+for p in $no_build; do
+	$ECHO "  $p"
+done | sort
+
+$ECHO
+$ECHO "Features:"
+$ECHO
+
+$ECHO "enabled: "
+for p in $enable_feature; do
+	$ECHO "  $p"
+done | sort
+
+$ECHO "disabled: "
+for p in $disable_feature; do
+	$ECHO "  $p"
+done | sort
 
 $ECHO

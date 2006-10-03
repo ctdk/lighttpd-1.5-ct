@@ -1,7 +1,9 @@
 #ifndef _NETWORK_BACKENDS_H_
 #define _NETWORK_BACKENDS_H_
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #include <sys/types.h>
 
@@ -41,14 +43,47 @@
 # define USE_AIX_SENDFILE
 #endif
 
+/**
+* unix can use read/write or recv/send on sockets
+* win32 only recv/send
+*/
+#ifdef _WIN32
+# define USE_WIN32_SEND
+/* wait for async-io support
+# define USE_WIN32_TRANSMITFILE
+*/
+#else
+# define USE_WRITE
+#endif
+
 #include "base.h"
+#include "network.h"
 
+#define NETWORK_BACKEND_WRITE_CHUNK(x) \
+    network_status_t network_write_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq, chunk *c)
 
-int network_write_chunkqueue_write(server *srv, connection *con, chunkqueue *cq);
-int network_write_chunkqueue_writev(server *srv, connection *con, chunkqueue *cq);
-int network_write_chunkqueue_linuxsendfile(server *srv, connection *con, chunkqueue *cq);
-int network_write_chunkqueue_freebsdsendfile(server *srv, connection *con, chunkqueue *cq);
-int network_write_chunkqueue_solarissendfilev(server *srv, connection *con, chunkqueue *cq);
-int network_write_chunkqueue_openssl(server *srv, connection *con, chunkqueue *cq);
+#define NETWORK_BACKEND_WRITE(x) \
+    network_status_t network_write_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq)
+#define NETWORK_BACKEND_READ(x) \
+    network_status_t network_read_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq)
+
+NETWORK_BACKEND_WRITE_CHUNK(writev_mem);
+
+NETWORK_BACKEND_WRITE(write);
+NETWORK_BACKEND_WRITE(writev);
+NETWORK_BACKEND_WRITE(linuxsendfile);
+NETWORK_BACKEND_WRITE(freebsdsendfile);
+NETWORK_BACKEND_WRITE(solarissendfilev);
+
+NETWORK_BACKEND_WRITE(win32transmitfile);
+NETWORK_BACKEND_WRITE(win32send);
+
+NETWORK_BACKEND_READ(read);
+NETWORK_BACKEND_READ(win32recv);
+
+#ifdef USE_OPENSSL
+NETWORK_BACKEND_WRITE(openssl);
+NETWORK_BACKEND_READ(openssl);
+#endif
 
 #endif

@@ -2,7 +2,7 @@ dist_man1_MANS=lighttpd.1 spawn-fcgi.1
 
 
 DOCS=accesslog.txt \
-authentification.txt \
+authentication.txt \
 cgi.txt \
 compress.txt \
 configuration.txt \
@@ -28,10 +28,17 @@ mysqlvhost.txt \
 access.txt \
 traffic-shaping.txt \
 setenv.txt \
-status.txt
+status.txt \
+scgi.txt \
+cml.txt \
+trigger_b4_dl.txt \
+webdav.txt \
+expire.txt \
+dirlisting.txt \
+evhost.txt
 
 HTMLDOCS=accesslog.html \
-	 authentification.html \
+	 authentication.html \
 	 cgi.html \
 	 compress.html \
 	 configuration.html \
@@ -57,28 +64,35 @@ HTMLDOCS=accesslog.html \
 	 access.html \
 	 traffic-shaping.html \
 	 setenv.html \
-	 status.html
+	 status.html \
+	 scgi.html \
+	 cml.html \
+	 trigger_b4_dl.html \
+	 webdav.html \
+	 expire.html \
+	 dirlisting.html \
+	 evhost.html
 
 EXTRA_DIST=lighttpd.conf lighttpd.user \
 	rc.lighttpd rc.lighttpd.redhat sysconfig.lighttpd \
-	state.ps.gz rrdtool-graph.sh \
-	state.dot fastcgi-state.dot fastcgi-state.ps.gz \
+	rrdtool-graph.sh \
+	state.dot fastcgi-state.dot \
 	spawn-php.sh \
 	newstyle.css \
 	oldstyle.css \
 	$(DOCS)
  
 %.html: %.txt
-	rst2html.py $^ > $@
+	rst2html $^ > $@
 
 
 html: $(HTMLDOCS)
 
-%.ps.gz: %.ps
-	gzip $^
+#%.ps.gz: %.ps
+#	gzip $^
 	
-%.ps: %.dot
-	dot -Tps -o $@ $^   
+#%.ps: %.dot
+#	dot -Tps -o $@ $^   
 
 clean-local:
 	rm -f *.html

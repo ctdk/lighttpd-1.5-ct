@@ -16,185 +16,161 @@
 #include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
-#include "file_cache.h"
+#include "stat_cache.h"
 
+/* on linux 2.4.29 + debian/ubuntu we have crashes if this is enabled */
+#undef HAVE_POSIX_FADVISE
 
-int network_write_chunkqueue_linuxsendfile(server *srv, connection *con, chunkqueue *cq) {
-	const int fd = con->fd;
-	chunk *c;
+NETWORK_BACKEND_WRITE(linuxsendfile) {
+	chunk *c, *tc;
 	size_t chunks_written = 0;
-	
+
 	for(c = cq->first; c; c = c->next, chunks_written++) {
 		int chunk_finished = 0;
-		
+		network_status_t ret;
+
 		switch(c->type) {
-		case MEM_CHUNK: {
-			char * offset;
-			size_t toSend;
-			ssize_t r;
-			
-			size_t num_chunks, i;
-			struct iovec chunks[UIO_MAXIOV];
-			chunk *tc;
-			size_t num_bytes = 0;
-			
-			/* we can't send more then SSIZE_MAX bytes in one chunk */
-			
-			/* build writev list 
-			 * 
-			 * 1. limit: num_chunks < UIO_MAXIOV
-			 * 2. limit: num_bytes < SSIZE_MAX
-			 */
-			for (num_chunks = 0, tc = c; 
-			     tc && tc->type == MEM_CHUNK && num_chunks < UIO_MAXIOV; 
-			     tc = tc->next, num_chunks++);
-			
-			for (tc = c, i = 0; i < num_chunks; tc = tc->next, i++) {
-				if (tc->data.mem->used == 0) {
-					chunks[i].iov_base = tc->data.mem->ptr;
-					chunks[i].iov_len  = 0;
-				} else {
-					offset = tc->data.mem->ptr + tc->offset;
-					toSend = tc->data.mem->used - 1 - tc->offset;
-				
-					chunks[i].iov_base = offset;
-					
-					/* protect the return value of writev() */
-					if (toSend > SSIZE_MAX ||
-					    num_bytes + toSend > SSIZE_MAX) {
-						chunks[i].iov_len = SSIZE_MAX - num_bytes;
-						
-						num_chunks = i + 1;
-						break;
-					} else {
-						chunks[i].iov_len = toSend;
-					}
-				 
-					num_bytes += toSend;
-				}
-			}
-			
-			if ((r = writev(fd, chunks, num_chunks)) < 0) {
-				switch (errno) {
-				case EAGAIN:
-				case EINTR:
-					r = 0;
-					break;
-				case EPIPE:
-				case ECONNRESET:
-					return -2;
-				default:
-					log_error_write(srv, __FILE__, __LINE__, "ssd", 
-							"writev failed:", strerror(errno), fd);
-				
-					return -1;
-				}
-			}
-			
-			/* check which chunks have been written */
-			
-			for(i = 0, tc = c; i < num_chunks; i++, tc = tc->next) {
-				if (r >= (ssize_t)chunks[i].iov_len) {
-					/* written */
-					r -= chunks[i].iov_len;
-					tc->offset += chunks[i].iov_len;
-					con->bytes_written += chunks[i].iov_len;
-					
+		case MEM_CHUNK:
+			ret = network_write_chunkqueue_writev_mem(srv, con, sock, cq, c);
+
+			/* check which chunks are finished now */
+			for (tc = c; tc; tc = tc->next) {
+				/* finished the chunk */
+				if (tc->offset == tc->mem->used - 1) {
+					/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
 					if (chunk_finished) {
-						/* skip the chunks from further touches */
-						chunks_written++;
 						c = c->next;
 					} else {
-						/* chunks_written + c = c->next is done in the for()*/
-						chunk_finished++;
+						chunk_finished = 1;
 					}
 				} else {
-					/* partially written */
-					
-					tc->offset += r;
-					con->bytes_written += r;
-					chunk_finished = 0;
-					
 					break;
 				}
 			}
-			
+
+			if (ret != NETWORK_STATUS_SUCCESS) {
+				return ret;
+			}
+
 			break;
-		}
 		case FILE_CHUNK: {
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
-			
-			switch(file_cache_get_entry(srv, con, c->data.file.name, &(con->fce))) {
-			case HANDLER_GO_ON:
-				offset = c->data.file.offset + c->offset;
-				/* limit the toSend to 2^31-1 bytes in a chunk */
-				toSend = c->data.file.length - c->offset > ((1 << 30) - 1) ? 
-					((1 << 30) - 1) : c->data.file.length - c->offset;
-				
-				if (offset > con->fce->st.st_size) {
-					log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.name);
-					
+			stat_cache_entry *sce = NULL;
+
+			offset = c->file.start + c->offset;
+			/* limit the toSend to 2^31-1 bytes in a chunk */
+			toSend = c->file.length - c->offset > ((1 << 30) - 1) ?
+				((1 << 30) - 1) : c->file.length - c->offset;
+
+			/* open file if not already opened */
+			if (-1 == c->file.fd) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY))) {
+					log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
+
 					return -1;
 				}
-				
-				/* Linux sendfile() */
-				if (-1 == (r = sendfile(fd, con->fce->fd, &offset, toSend))) {
-					if (errno != EAGAIN && 
-					    errno != EINTR) {
-						log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile:", strerror(errno), errno);
-						
-						return -1;
+#ifdef FD_CLOEXEC
+				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
+#endif
+#ifdef HAVE_POSIX_FADVISE
+				/* tell the kernel that we want to stream the file */
+				if (-1 == posix_fadvise(c->file.fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
+					if (ENOSYS != errno) {
+						log_error_write(srv, __FILE__, __LINE__, "ssd",
+							"posix_fadvise failed:", strerror(errno), c->file.fd);
 					}
-					
-					r = 0;
 				}
-				
-				break;
-			case HANDLER_WAIT_FOR_FD:
-				/* comeback later */
-				
-				log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile (handled):", strerror(errno), errno);
-				
-				r = 0;
-				
-				break;
-			default:
-				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->data.file.name);
-				
-				return -1;
+#endif
 			}
-			
+
+			if (-1 == (r = sendfile(sock->fd, c->file.fd, &offset, toSend))) {
+				switch (errno) {
+				case EAGAIN:
+				case EINTR:
+					return NETWORK_STATUS_WAIT_FOR_EVENT;
+				case EPIPE:
+				case ECONNRESET:
+					return NETWORK_STATUS_CONNECTION_CLOSE;
+				default:
+					log_error_write(srv, __FILE__, __LINE__, "ssd",
+							"sendfile failed:", strerror(errno), sock->fd);
+					return NETWORK_STATUS_FATAL_ERROR;
+				}
+			}
+
+			if (r == 0) {
+				/* We got an event to write but we wrote nothing
+				 *
+				 * - the file shrinked -> error
+				 * - the remote side closed inbetween -> remote-close */
+
+				if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
+					/* file is gone ? */
+					return NETWORK_STATUS_FATAL_ERROR;
+				}
+
+				if (offset > sce->st.st_size) {
+					/* file shrinked, close the connection */
+					return NETWORK_STATUS_FATAL_ERROR;
+				}
+
+				return NETWORK_STATUS_CONNECTION_CLOSE;
+			}
+
+#ifdef HAVE_POSIX_FADVISE
+#if 0
+#define K * 1024
+#define M * 1024 K
+#define READ_AHEAD 4 M
+			/* check if we need a new chunk */
+			if ((c->offset & ~(READ_AHEAD - 1)) != ((c->offset + r) & ~(READ_AHEAD - 1))) {
+				/* tell the kernel that we want to stream the file */
+				if (-1 == posix_fadvise(c->file.fd, (c->offset + r) & ~(READ_AHEAD - 1), READ_AHEAD, POSIX_FADV_NOREUSE)) {
+					log_error_write(srv, __FILE__, __LINE__, "ssd",
+						"posix_fadvise failed:", strerror(errno), c->file.fd);
+				}
+			}
+#endif
+#endif
+
 			c->offset += r;
-			con->bytes_written += r;
-			
-			if (c->offset == c->data.file.length) {
+			cq->bytes_out += r;
+
+			if (c->offset == c->file.length) {
 				chunk_finished = 1;
+
+				/* chunk_free() / chunk_reset() will cleanup for us but it is a ok to be faster :) */
+
+				if (c->file.fd != -1) {
+					close(c->file.fd);
+					c->file.fd = -1;
+				}
 			}
-			
+
 			break;
 		}
 		default:
-			
+
 			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
-			
-			return -1;
+
+			return NETWORK_STATUS_FATAL_ERROR;
 		}
-		
+
 		if (!chunk_finished) {
 			/* not finished yet */
-			
-			break;
+
+			return NETWORK_STATUS_WAIT_FOR_EVENT;
 		}
 	}
 
-	return chunks_written;
+	return NETWORK_STATUS_SUCCESS;
 }
 
 #endif

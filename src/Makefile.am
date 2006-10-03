@@ -1,4 +1,6 @@
-noinst_PROGRAMS=array chunk lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
+AM_CFLAGS = $(FAM_CFLAGS)
+
+noinst_PROGRAMS=proc_open lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
 sbin_PROGRAMS=lighttpd 
 bin_PROGRAMS=spawn-fcgi
 LEMON=$(top_builddir)/src/lemon
@@ -14,40 +16,61 @@ mod_ssi_exprparser.c mod_ssi_exprparser.h:
 else
 configparser.y: lemon
 mod_ssi_exprparser.y: lemon
+http_resp_parser.y: lemon
+http_req_parser.y: lemon
+http_req_range_parser.y: lemon
 
 configparser.c configparser.h: configparser.y
 	rm -f configparser.h
 	$(LEMON) -q $(srcdir)/configparser.y $(srcdir)/lempar.c
+
+http_resp_parser.c http_resp_parser.h: http_resp_parser.y
+	rm -f http_resp_parser.h
+	$(LEMON) -q $(srcdir)/http_resp_parser.y $(srcdir)/lempar.c
+
+http_req_parser.c http_req_parser.h: http_req_parser.y
+	rm -f http_req_parser.h
+	$(LEMON) -q $(srcdir)/http_req_parser.y $(srcdir)/lempar.c
+
+http_req_range_parser.c http_req_range_parser.h: http_req_range_parser.y
+	rm -f http_req_range_parser.h
+	$(LEMON) -q $(srcdir)/http_req_range_parser.y $(srcdir)/lempar.c
 
 mod_ssi_exprparser.c mod_ssi_exprparser.h: mod_ssi_exprparser.y 
 	rm -f mod_ssi_exprparser.h
 	$(LEMON) -q $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
 endif
 
-config.c: configparser.h
+configfile.c: configparser.h
 mod_ssi_expr.c: mod_ssi_exprparser.h
+http_resp.c: http_resp_parser.h
+http_req.c: http_req_parser.h
+http_req_range.c: http_req_range_parser.h
 
 common_src=buffer.c log.c \
       keyvalue.c chunk.c  \
-      http_chunk.c stream.c fdevent.c \
-      file_cache.c plugin.c joblist.c etag.c array.c \
+      stream.c fdevent.c \
+      stat_cache.c plugin.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
       data_integer.c md5.c data_fastcgi.c \
       fdevent_select.c fdevent_linux_rtsig.c \
       fdevent_poll.c fdevent_linux_sysepoll.c \
       fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c \
-      data_config.c bitset.c  configparser.c \
-      inet_ntop_cache.c \
-      connections-glue.c \
-      configfile-glue.c \
-      http-header-glue.c
-      
-src = server.c response.c connections.c network.c \
+      data_config.c bitset.c \
+      inet_ntop_cache.c crc32.c \
+      connections-glue.c iosocket.c \
+      configfile-glue.c status_counter.c \
+      http-header-glue.c \
       network_write.c network_linux_sendfile.c \
       network_freebsd_sendfile.c network_writev.c \
       network_solaris_sendfilev.c network_openssl.c \
-      config.c request.c
-
+      splaytree.c \
+      http_resp.c http_resp_parser.c \
+      http_req.c http_req_parser.c \
+      http_req_range.c http_req_range_parser.c 
+      
+src = server.c response.c connections.c network.c \
+      configfile.c configparser.c request.c proc_open.c
 
 spawn_fcgi_SOURCES=spawn-fcgi.c
 
@@ -61,22 +84,80 @@ lib_LTLIBRARIES += liblightcomp.la
 liblightcomp_la_SOURCES=$(common_src)
 liblightcomp_la_CFLAGS=$(AM_CFLAGS)
 liblightcomp_la_LDFLAGS = -avoid-version -no-undefined
-liblightcomp_la_LIBADD = $(PCRE_LIB) $(SSL_LIB)
+liblightcomp_la_LIBADD = $(PCRE_LIB) $(SSL_LIB) $(FAM_LIBS)
 common_libadd = liblightcomp.la
 else
 src += $(common_src)
 common_libadd = 
 endif
 
+lib_LTLIBRARIES += mod_flv_streaming.la
+mod_flv_streaming_la_SOURCES = mod_flv_streaming.c 
+mod_flv_streaming_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_flv_streaming_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_uploadprogress.la
+mod_uploadprogress_la_SOURCES = mod_uploadprogress.c 
+mod_uploadprogress_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_uploadprogress_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_evasive.la
+mod_evasive_la_SOURCES = mod_evasive.c
+mod_evasive_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_evasive_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_webdav.la
+mod_webdav_la_SOURCES = mod_webdav.c
+mod_webdav_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) $(SQLITE_CFLAGS) 
+mod_webdav_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_webdav_la_LIBADD = $(common_libadd) $(XML_LIBS) $(SQLITE_LIBS) $(UUID_LIB)
+
+lib_LTLIBRARIES += mod_cml.la
+mod_cml_la_SOURCES = mod_cml.c mod_cml_lua.c mod_cml_funcs.c
+mod_cml_la_CFLAGS = $(AM_CFLAGS) $(LUA_CFLAGS)
+mod_cml_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_cml_la_LIBADD = $(MEMCACHE_LIB) $(common_libadd) $(LUA_LIBS) -lm
+
+lib_LTLIBRARIES += mod_trigger_b4_dl.la
+mod_trigger_b4_dl_la_SOURCES = mod_trigger_b4_dl.c
+mod_trigger_b4_dl_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_trigger_b4_dl_la_LIBADD = $(GDBM_LIB) $(MEMCACHE_LIB) $(PCRE_LIB) $(common_libadd)
+
 lib_LTLIBRARIES += mod_mysql_vhost.la
 mod_mysql_vhost_la_SOURCES = mod_mysql_vhost.c
 mod_mysql_vhost_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_mysql_vhost_la_LIBADD = $(MYSQL_LIBS) $(common_libadd)
+mod_mysql_vhost_la_CPPFLAGS = $(MYSQL_INCLUDE)
+
+lib_LTLIBRARIES += mod_sql_vhost_core.la
+mod_sql_vhost_core_la_SOURCES = mod_sql_vhost_core.c
+mod_sql_vhost_core_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_sql_vhost_core_la_LIBADD = $(common_libadd)
 
 lib_LTLIBRARIES += mod_cgi.la
 mod_cgi_la_SOURCES = mod_cgi.c 
 mod_cgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_cgi_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_scgi.la
+mod_scgi_la_SOURCES = mod_scgi.c 
+mod_scgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_scgi_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_staticfile.la
+mod_staticfile_la_SOURCES = mod_staticfile.c 
+mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_staticfile_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_dirlisting.la
+mod_dirlisting_la_SOURCES = mod_dirlisting.c 
+mod_dirlisting_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_dirlisting_la_LIBADD = $(common_libadd) $(PCRE_LIB)
+
+lib_LTLIBRARIES += mod_indexfile.la
+mod_indexfile_la_SOURCES = mod_indexfile.c 
+mod_indexfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_indexfile_la_LIBADD = $(common_libadd)
 
 lib_LTLIBRARIES += mod_setenv.la
 mod_setenv_la_SOURCES = mod_setenv.c 
@@ -107,6 +188,15 @@ lib_LTLIBRARIES += mod_proxy.la
 mod_proxy_la_SOURCES = mod_proxy.c
 mod_proxy_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_proxy_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_proxy_core.la
+mod_proxy_core_la_SOURCES = mod_proxy_core.c mod_proxy_core_pool.c \
+			    mod_proxy_core_backend.c mod_proxy_core_address.c \
+			    mod_proxy_core_backlog.c mod_proxy_core_rewrites.c \
+			    mod_proxy_backend_http.c mod_proxy_backend_fastcgi.c
+mod_proxy_core_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_proxy_core_la_LIBADD = $(common_libadd) $(PCRE_LIB)
+
 
 lib_LTLIBRARIES += mod_ssi.la
 mod_ssi_la_SOURCES = mod_ssi_exprparser.c mod_ssi_expr.c mod_ssi.c 
@@ -149,7 +239,7 @@ mod_access_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_access_la_LIBADD = $(common_libadd)
 
 lib_LTLIBRARIES += mod_compress.la
-mod_compress_la_SOURCES = mod_compress.c crc32.c
+mod_compress_la_SOURCES = mod_compress.c 
 mod_compress_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_compress_la_LIBADD = $(Z_LIB) $(BZ_LIB) $(common_libadd)
 
@@ -181,32 +271,44 @@ mod_accesslog_la_LIBADD = $(common_libadd)
 
 hdr = server.h buffer.h network.h log.h keyvalue.h \
       response.h request.h fastcgi.h chunk.h \
-      settings.h http_chunk.h http_auth_digest.h \
-      md5.h md5_global.h http_auth.h stream.h \
-      fdevent.h connections.h base.h file_cache.h \
+      settings.h http_auth_digest.h \
+      md5.h http_auth.h stream.h \
+      fdevent.h connections.h base.h stat_cache.h \
       plugin.h mod_auth.h \
       etag.h joblist.h array.h crc32.h \
       network_backends.h configfile.h bitset.h \
       mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
       configparser.h mod_ssi_exprparser.h \
-      sys-mmap.h sys-socket.h
-      # license.h
-      
-#hdr += chat.h chat_misc.h chat_endec.h chat_user.h \
-#       chat_channel.h
+      sys-mmap.h sys-socket.h mod_cml.h mod_cml_funcs.h \
+      splaytree.h proc_open.h mod_sql_vhost_core.h \
+      sys-files.h sys-process.h sys-strings.h  \
+      iosocket.h array-static.h \
+      mod_proxy_core_address.h \
+      mod_proxy_core_backend.h \
+      mod_proxy_core_backlog.h \
+      mod_proxy_core.h  \
+      mod_proxy_core_pool.h \
+      mod_proxy_core_rewrites.h \
+      mod_proxy_backend_http.h \
+      mod_proxy_backend_fastcgi.h \
+      status_counter.h \
+      http_req.h \
+      http_req_parser.h \
+      http_req_range.h \
+      http_req_range_parser.h \
+      http_resp.h \
+      http_resp_parser.h \
+      http_parser.h
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 
 lighttpd_SOURCES = $(src)
-lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB)
+lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB) $(FAM_LIBS)
 lighttpd_LDFLAGS = -export-dynamic
-lighttpd_CCPFLAGS = $(MYSQL_INCLUDES)
+lighttpd_CCPFLAGS = $(FAM_CFLAGS)
 
-array_SOURCES = array.c buffer.c data_string.c data_count.c
-array_CPPFLAGS= -DDEBUG_ARRAY
-
-chunk_SOURCES = buffer.c chunk.c
-chunk_CPPFLAGS= -DDEBUG_CHUNK
+proc_open_SOURCES = proc_open.c buffer.c
+proc_open_CPPFLAGS= -DDEBUG_PROC_OPEN
 
 #gen_license_SOURCES = license.c md5.c buffer.c gen_license.c
 
@@ -223,4 +325,10 @@ chunk_CPPFLAGS= -DDEBUG_CHUNK
 #ajp_SOURCES = ajp.c
 
 noinst_HEADERS   = $(hdr)
-EXTRA_DIST = mod_skeleton.c configparser.y mod_ssi_exprparser.y lempar.c
+EXTRA_DIST = mod_skeleton.c \
+	     configparser.y \
+	     mod_ssi_exprparser.y \
+	     lempar.c  \
+	     http_resp_parser.y \
+	     http_req_parser.y \
+	     http_req_range_parser.y 

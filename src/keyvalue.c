@@ -15,12 +15,33 @@ static keyvalue http_methods[] = {
 	{ HTTP_METHOD_GET,  "GET" },
 	{ HTTP_METHOD_POST, "POST" },
 	{ HTTP_METHOD_HEAD, "HEAD" },
+	{ HTTP_METHOD_PROPFIND, "PROPFIND" },
+	{ HTTP_METHOD_PROPPATCH, "PROPPATCH" },
+	{ HTTP_METHOD_REPORT, "REPORT" },
+	{ HTTP_METHOD_OPTIONS, "OPTIONS" },
+	{ HTTP_METHOD_MKCOL, "MKCOL" },
+	{ HTTP_METHOD_PUT, "PUT" },
+	{ HTTP_METHOD_DELETE, "DELETE" },
+	{ HTTP_METHOD_COPY, "COPY" },
+	{ HTTP_METHOD_MOVE, "MOVE" },
+	{ HTTP_METHOD_LABEL, "LABEL" },
+	{ HTTP_METHOD_CHECKOUT, "CHECKOUT" },
+	{ HTTP_METHOD_CHECKIN, "CHECKIN" },
+	{ HTTP_METHOD_MERGE, "MERGE" },
+	{ HTTP_METHOD_LOCK, "LOCK" },
+	{ HTTP_METHOD_UNLOCK, "UNLOCK" },
+	{ HTTP_METHOD_MKACTIVITY, "MKACTIVITY" },
+	{ HTTP_METHOD_UNCHECKOUT, "UNCHECKOUT" },
+	{ HTTP_METHOD_VERSION_CONTROL, "VERSION-CONTROL" },
+	{ HTTP_METHOD_CONNECT, "CONNECT" },
+
 	{ HTTP_METHOD_UNSET, NULL }
 };
 
 static keyvalue http_status[] = {
 	{ 100, "Continue" },
 	{ 101, "Switching Protocols" },
+	{ 102, "Processing" }, /* WebDAV */
 	{ 200, "OK" },
 	{ 201, "Created" },
 	{ 202, "Accepted" },
@@ -28,6 +49,7 @@ static keyvalue http_status[] = {
 	{ 204, "No Content" },
 	{ 205, "Reset Content" },
 	{ 206, "Partial Content" },
+	{ 207, "Multi-status" }, /* WebDAV */
 	{ 300, "Multiple Choices" },
 	{ 301, "Moved Permanently" },
 	{ 302, "Found" },
@@ -54,14 +76,19 @@ static keyvalue http_status[] = {
 	{ 415, "Unsupported Media Type" },
 	{ 416, "Requested Range Not Satisfiable" },
 	{ 417, "Expectation Failed" },
-	{ 426, "Upgrade Required" },
+	{ 422, "Unprocessable Entity" }, /* WebDAV */
+	{ 423, "Locked" }, /* WebDAV */
+	{ 424, "Failed Dependency" }, /* WebDAV */
+	{ 426, "Upgrade Required" }, /* TLS */
 	{ 500, "Internal Server Error" },
 	{ 501, "Not Implemented" },
 	{ 502, "Bad Gateway" },
 	{ 503, "Service Not Available" },
 	{ 504, "Gateway Timeout" },
 	{ 505, "HTTP Version Not Supported" },
-	
+	{ 507, "Insufficient Storage" }, /* WebDAV */
+	{ 509, "Bandwidth Limit exceeded" },
+
 	{ -1, NULL }
 };
 
@@ -76,12 +103,12 @@ static keyvalue http_status_body[] = {
 	{ 501, "501.html" },
 	{ 503, "503.html" },
 	{ 505, "505.html" },
-	
+
 	{ -1, NULL }
 };
 
 
-const char *keyvalue_get_value(keyvalue *kv, int k) { 
+const char *keyvalue_get_value(keyvalue *kv, int k) {
 	int i;
 	for (i = 0; kv[i].value; i++) {
 		if (kv[i].key == k) return kv[i].value;
@@ -89,7 +116,7 @@ const char *keyvalue_get_value(keyvalue *kv, int k) {
 	return NULL;
 }
 
-int keyvalue_get_key(keyvalue *kv, const char *s) { 
+int keyvalue_get_key(keyvalue *kv, const char *s) {
 	int i;
 	for (i = 0; kv[i].value; i++) {
 		if (0 == strcmp(kv[i].value, s)) return kv[i].key;
@@ -99,9 +126,9 @@ int keyvalue_get_key(keyvalue *kv, const char *s) {
 
 keyvalue_buffer *keyvalue_buffer_init(void) {
 	keyvalue_buffer *kvb;
-	
+
 	kvb = calloc(1, sizeof(*kvb));
-	
+
 	return kvb;
 }
 
@@ -109,49 +136,49 @@ int keyvalue_buffer_append(keyvalue_buffer *kvb, int key, const char *value) {
 	size_t i;
 	if (kvb->size == 0) {
 		kvb->size = 4;
-		
+
 		kvb->kv = malloc(kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = 0; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	} else if (kvb->used == kvb->size) {
 		kvb->size += 4;
-		
+
 		kvb->kv = realloc(kvb->kv, kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = kvb->used; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	}
-	
+
 	kvb->kv[kvb->used]->key = key;
 	kvb->kv[kvb->used]->value = strdup(value);
-	
+
 	kvb->used++;
-	
+
 	return 0;
 }
 
 void keyvalue_buffer_free(keyvalue_buffer *kvb) {
 	size_t i;
-	
+
 	for (i = 0; i < kvb->size; i++) {
 		if (kvb->kv[i]->value) free(kvb->kv[i]->value);
 		free(kvb->kv[i]);
 	}
-	
+
 	if (kvb->kv) free(kvb->kv);
-	
+
 	free(kvb);
 }
 
 
 s_keyvalue_buffer *s_keyvalue_buffer_init(void) {
 	s_keyvalue_buffer *kvb;
-	
+
 	kvb = calloc(1, sizeof(*kvb));
-	
+
 	return kvb;
 }
 
@@ -160,50 +187,50 @@ int s_keyvalue_buffer_append(s_keyvalue_buffer *kvb, const char *key, const char
 	if (kvb->size == 0) {
 		kvb->size = 4;
 		kvb->used = 0;
-		
+
 		kvb->kv = malloc(kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = 0; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	} else if (kvb->used == kvb->size) {
 		kvb->size += 4;
-		
+
 		kvb->kv = realloc(kvb->kv, kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = kvb->used; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	}
-	
+
 	kvb->kv[kvb->used]->key = key ? strdup(key) : NULL;
 	kvb->kv[kvb->used]->value = strdup(value);
-	
+
 	kvb->used++;
-	
+
 	return 0;
 }
 
 void s_keyvalue_buffer_free(s_keyvalue_buffer *kvb) {
 	size_t i;
-	
+
 	for (i = 0; i < kvb->size; i++) {
 		if (kvb->kv[i]->key) free(kvb->kv[i]->key);
 		if (kvb->kv[i]->value) free(kvb->kv[i]->value);
 		free(kvb->kv[i]);
 	}
-	
+
 	if (kvb->kv) free(kvb->kv);
-	
+
 	free(kvb);
 }
 
 
 httpauth_keyvalue_buffer *httpauth_keyvalue_buffer_init(void) {
 	httpauth_keyvalue_buffer *kvb;
-	
+
 	kvb = calloc(1, sizeof(*kvb));
-	
+
 	return kvb;
 }
 
@@ -211,42 +238,42 @@ int httpauth_keyvalue_buffer_append(httpauth_keyvalue_buffer *kvb, const char *k
 	size_t i;
 	if (kvb->size == 0) {
 		kvb->size = 4;
-		
+
 		kvb->kv = malloc(kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = 0; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	} else if (kvb->used == kvb->size) {
 		kvb->size += 4;
-		
+
 		kvb->kv = realloc(kvb->kv, kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = kvb->used; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	}
-	
+
 	kvb->kv[kvb->used]->key = strdup(key);
 	kvb->kv[kvb->used]->realm = strdup(realm);
 	kvb->kv[kvb->used]->type = type;
-	
+
 	kvb->used++;
-	
+
 	return 0;
 }
 
 void httpauth_keyvalue_buffer_free(httpauth_keyvalue_buffer *kvb) {
 	size_t i;
-	
+
 	for (i = 0; i < kvb->size; i++) {
 		if (kvb->kv[i]->key) free(kvb->kv[i]->key);
 		if (kvb->kv[i]->realm) free(kvb->kv[i]->realm);
 		free(kvb->kv[i]);
 	}
-	
+
 	if (kvb->kv) free(kvb->kv);
-	
+
 	free(kvb);
 }
 
@@ -280,9 +307,9 @@ http_method_t get_http_method_key(const char *s) {
 
 pcre_keyvalue_buffer *pcre_keyvalue_buffer_init(void) {
 	pcre_keyvalue_buffer *kvb;
-	
+
 	kvb = calloc(1, sizeof(*kvb));
-	
+
 	return kvb;
 }
 
@@ -291,41 +318,48 @@ int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, cons
 	size_t i;
 	const char *errptr;
 	int erroff;
+	pcre_keyvalue *kv;
 #endif
-	
+
 	if (!key) return -1;
 
 #ifdef HAVE_PCRE_H
 	if (kvb->size == 0) {
 		kvb->size = 4;
 		kvb->used = 0;
-		
+
 		kvb->kv = malloc(kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = 0; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	} else if (kvb->used == kvb->size) {
 		kvb->size += 4;
-		
+
 		kvb->kv = realloc(kvb->kv, kvb->size * sizeof(*kvb->kv));
-		
+
 		for(i = kvb->used; i < kvb->size; i++) {
 			kvb->kv[i] = calloc(1, sizeof(**kvb->kv));
 		}
 	}
-	
-	if (NULL == (kvb->kv[kvb->used]->key = pcre_compile(key,
+
+	kv = kvb->kv[kvb->used];
+	if (NULL == (kv->key = pcre_compile(key,
 					  0, &errptr, &erroff, NULL))) {
-		
+
 		fprintf(stderr, "%s.%d: rexexp compilation error at %s\n", __FILE__, __LINE__, errptr);
 		return -1;
 	}
-	
-	kvb->kv[kvb->used]->value = strdup(value);
-	
+
+	if (NULL == (kv->key_extra = pcre_study(kv->key, 0, &errptr)) &&
+			errptr != NULL) {
+		return -1;
+	}
+
+	kv->value = buffer_init_string(value);
+
 	kvb->used++;
-	
+
 	return 0;
 #else
 	UNUSED(kvb);
@@ -338,15 +372,18 @@ int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, cons
 void pcre_keyvalue_buffer_free(pcre_keyvalue_buffer *kvb) {
 #ifdef HAVE_PCRE_H
 	size_t i;
+	pcre_keyvalue *kv;
 
 	for (i = 0; i < kvb->size; i++) {
-		if (kvb->kv[i]->key) pcre_free(kvb->kv[i]->key);
-		if (kvb->kv[i]->value) free(kvb->kv[i]->value);
-		free(kvb->kv[i]);
+		kv = kvb->kv[i];
+		if (kv->key) pcre_free(kv->key);
+		if (kv->key_extra) pcre_free(kv->key_extra);
+		if (kv->value) buffer_free(kv->value);
+		free(kv);
 	}
-	
+
 	if (kvb->kv) free(kvb->kv);
 #endif
-	
+
 	free(kvb);
 }

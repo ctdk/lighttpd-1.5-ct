@@ -1,6 +1,6 @@
-=================
-Configuation File
-=================
+==================
+Configuration File
+==================
 
 ------------
 Module: core
@@ -26,13 +26,16 @@ Basic Syntax
 
 A BNF like notation: ::
 
-  option   : NAME = VARIABLE
+  option   : NAME = VALUE
+  merge    : NAME += VALUE
   NAME     : modulename.key
-  VARIABLE : ( <string> | <integer> | <boolean> | <array> )
+  VALUE    : ( <string> | <integer> | <boolean> | <array> | VALUE [ + VALUE ]*)
   <string> : "text"
   <integer>: digit*
   <boolean>: ( "enable" | "disable" )
-  <array>  : "(" [ <string> "=>" ] <variable> [, [ <string> "=>" ] <variable> ]* ")"
+  <array>  : "(" [ <string> "=>" ] <value> [, [ <string> "=>" ] <value> ]* ")"
+  INCLUDE  : "include" VALUE
+  INCLUDE_SHELL : "include_shell" STRING_VALUE
   
 Example
 -------
@@ -48,9 +51,16 @@ Example
   # selecting modules
   server.modules = ( "mod_access", "mod_rewrite" )
   
-  # enable directory listings
-  server.dir-listing = "enable"
- 
+  # variables, computed when config is read.
+  var.mymodule = "foo"
+  server.modules += ( "mod_" + var.mymodule )
+  # var.PID is initialised to the pid of lighttpd before config is parsed
+
+  # include, relative to dirname of main config file
+  include "mime.types.conf"
+
+  # read configuration from output of a command
+  include_shell "/usr/local/bin/confmimetype /etc/mime.types"
 
 
 Conditional Configuration
@@ -63,6 +73,12 @@ Most options can be configured conditionally by using the following syntax
 
   <field> <operator> <value> {
     ...
+    <field> <operator> <value> {
+      ... nesting: match only when parent match
+    }
+  }
+  else <field> <operator> <value> {
+    ... the "else if" block
   }
 
 where <field> is one of one of the following:
@@ -77,9 +93,13 @@ $HTTP["referer"]
   match on referer
 $HTTP["url"]
   match on url
+$HTTP["remoteip"]
+  match on the remote IP or a remote Network
 $SERVER["socket"]
-  match on socket.  Value must be on the format "$ip:$port" where $ip is an IP
-  address and $port a port number.  Only equal match (==) is supported.
+  match on socket. Value must be on the format "ip:port" where ip is an IP
+  address and port a port number. Only equal match (==) is supported.
+  It also binds the daemon to this socket. Use this if you want to do IP/port-
+  based virtual hosts.
 
 <operator> is one of:
 
@@ -101,14 +121,14 @@ Example
 ::
 
   # disable directory-listings for /download/*
-  server.dir-listing = "enable"
+  dir-listing.activate = "enable"
   $HTTP["url"] =~ "^/download/" {
-    server.dir-listing = "disable"
+    dir-listing.activate = "disable"
   }
   
   # handish virtual hosting
-  # map all subdomains to a single document-root
-  $HTTP["host"] =~ "\.example\.org$" {
+  # map all domains of a top-level-domain to a single document-root
+  $HTTP["host"] =~ "(^|\.)example\.org$" {
     server.document-root = "/var/www/htdocs/example.org/pages/"
   }
   
@@ -134,6 +154,83 @@ Example
     url.access-deny = ( ".jpg", ".jpeg", ".png" )
   }
 
+  # deny the access to www.example.org to all user which 
+  # are not in the 10.0.0.0/8 network
+  $HTTP["host"] == "www.example.org" {
+    $HTTP["remoteip"] != "10.0.0.0/8" {
+     url.access-deny = ( "" )
+    }
+  }  
+
+Using variables
+===============
+
+You can set your own variables in the configuration to simplify your config.
+::
+
+  var.basedir = "/home/www/servers/"
+  $HTTP["host"] == "www.example.org" {
+     server.name = "www.example.org"
+     include "incl-base.conf"
+  }
+
+  in incl-base.conf:
+  server.document-root = basedir + server.name + "/pages/"
+  accesslog.filename   = basedir + server.name + "/logs/access.log"
+   
+You can also use environement variables or the default variables var.PID and
+var.CWD: ::
+
+  var.basedir = env.LIGHTTPDBASE
+
+  $HTTP["host"] == "www.example.org" {
+     server.name = "www.example.org"
+     include "incl-base.conf"
+     include "incl-fastcgi.conf"
+  }
+
+  in incl-fastcgi.conf:
+  fastcgi.server = ( ... => ((
+     "socket" => basedir + server.name + "/tmp/fastcgi-" + PID + ".sock"
+  )) )
+
+Or like the lighttpd script for rails does:
+
+  var.basedir = var.CWD
+
+  server.document-root = basedir + "/public/"
+
+Global context
+==============
+
+::
+
+  global {
+    ...
+  }
+
+You don't need it in the main configuration file. But you might have
+difficulty setting server wide configuration inside a included-file from
+conditionals.
+
+Example
+-------
+
+::
+
+  in lighttpd.conf:
+  server.modules = ()
+  $HTTP["host"] == "www.example.org" {
+    include "incl-php.conf"
+  }
+
+  in incl-php.conf:
+  global {
+    server.modules += ("mod_fastcgi")
+    static-file.exclude-extensions += (".php")
+  }
+  fastcgi.server = "..."
+
 Options
 =======
 
@@ -153,63 +250,90 @@ server.document-root
   Default: no default, required
   
 server.bind
-  hostname of the server
+  IP address, hostname or absolute path to the unix-domain socket the server
+  listen on.
+  
+  Default: bind to all interfaces
+
+  Example: ::
+
+    server.bind = "127.0.0.1"
+    server.bind = "www.example.org"
+    server.bind = "/tmp/lighttpd.socket"
   
 server.port
   tcp-port to bind the server to
-  if nothing is specified port 80 is used
-  NOTE: port belows 1024 require root-permissions
+  
+.. note:: port belows 1024 require root-permissions
+  
+  Default: 80 (443 if ssl is enabled)
   
 server.use-ipv6
   bind to the IPv6 socket
+
+server.tag
+  set the string returned by the Server: response header
+
+  Default: lighttpd <current-version>
   
 server.errorlog
   pathname of the error-log
-  if nothing is specified STDERR is used
+  
+  Default: either STDERR or ``server.errorlog-use-syslog``
+  
+server.errorlog-use-syslog
+  send errorlog to syslog
+  
+  Default: disabled
   
 server.chroot
   root-directory of the server
   
+  NOTE: requires root-permissions
+  
 server.username
   username used to run the server
+  
   NOTE: requires root-permissions
 
 server.groupname
   groupname used to run the server
+  
   NOTE: requires root-permissions
-
-server.dir-listing
-  enables virtual directory listings if a directory is requested no
-  index-file was found 
-
-dir-listing.hide-dotfiles
-  if enabled, does not list hidden files in directory listings generated
-  by the dir-listing option.
-
-  default: enabled
-
-dir-listing.external-css
-  path to an external css stylesheet for the directory listing
 
 server.follow-symlink
   allow to follow-symlinks
   
-  default: enabled
+  Default: enabled
 
-server.indexfiles
+index-file.names
   list of files to search for if a directory is requested
   e.g.: ::
 
-    server.indexfiles         = ( "index.php", "index.html", 
+    index-file.names          = ( "index.php", "index.html", 
                                   "index.htm", "default.htm" )
+
+  if a name starts with slash this file will be used a index generator
+  for all directories.
 
 server.modules
   modules to load
   
-..note: the order of the modules is somewhat important as the modules are
-        handled in the way they are specified. mod_rewrite should always be
-        the first module, mod_accesslog always the last.
-  
+.. note:: the order of the modules is important.
+
+  The modules are executed in the order as they are specified. Loading
+  mod_auth AFTER mod_fastcgi might disable authentication for fastcgi
+  backends (if check-local is disabled). 
+
+  As auth should be done first, move it before all executing modules (like 
+  proxy, fastcgi, scgi and cgi).
+
+  rewrites, redirects and access should be first, followed by auth and 
+  the docroot plugins.
+
+  Afterwards the external handlers like fastcgi, cgi, scgi and proxy and
+  at the bottom the post-processing plugins like mod_accesslog.
+
   e.g.: ::
 
     server.modules          = ( "mod_rewrite", 
@@ -218,19 +342,25 @@ server.modules
 			        "mod_access", 
 				"mod_auth", 
                                 "mod_status", 
-				"mod_fastcgi",
-				"mod_proxy",
 				"mod_simple_vhost",
 				"mod_evhost",
 				"mod_userdir",
+				"mod_secdownload",
+				"mod_fastcgi",
+				"mod_proxy",
 				"mod_cgi",
-				"mod_compress",
                                 "mod_ssi",
+				"mod_compress",
                                 "mod_usertrack",
 				"mod_expire",
-				"mod_secdownload",
  				"mod_rrdtool",
 				"mod_accesslog" )
+
+  Starting with lighttpd 1.4.0 three default modules are loaded automaticly:
+
+  - mod_indexfile
+  - mod_dirlisting
+  - mod_staticfile
 
 server.event-handler
   set the event handler 
@@ -239,17 +369,20 @@ server.event-handler
 
 server.pid-file
   set the name of the .pid-file where the PID of the server should be placed. 
-  This option is used in combination with a start-script and the deamon mode
+  This option is used in combination with a start-script and the daemon mode
   
   Default: not set
   
 server.max-request-size
-  maximum size in kbytes of the request (header + body) 
+  maximum size in kbytes of the request (header + body). Only applies to POST
+  requests.
   
-  Default: 2Gb
+  Default: 2097152 (2GB)
 
 server.max-worker
-  number of worker processes to spawn (works but has no benefit)
+  number of worker processes to spawn. This is usually only needed on servers
+  which are fairly loaded and the network handler calls delay often (e.g. new
+  requests are not handled instantaneously).
   
   Default: 0
   
@@ -295,6 +428,12 @@ server.protocol-http11
   
   Default: enabled
 
+server.range-requests
+  defines if range requests are allowed or not.
+  
+  Default: enabled
+
+
 SSL engine
 ``````````
 
@@ -320,12 +459,24 @@ mimetype.assign
   
   e.g.: ::
   
-    mimetype.assign           = ( ".png"  => "image/png", 
-                                  ".jpg"  => "image/jpeg",
-                                  ".jpeg" => "image/jpeg",
-				  ".html" => "text/html",
-  				  ".txt"  => "text/plain" )
+    mimetype.assign   = ( ".png"  => "image/png", 
+                          ".jpg"  => "image/jpeg",
+                          ".jpeg" => "image/jpeg",
+			  ".html" => "text/html",
+  			  ".txt"  => "text/plain" )
 
+  The list is compared top down and the first match is taken. This is 
+  important if you have matches like: ::
+
+                          ".tar.gz" => "application/x-tgz",
+			  ".gz" => "application/x-gzip", 
+
+  If you want to set another default mimetype use: ::
+
+                          ...,
+                          "" => "text/plain" )
+
+  as the last entry in the list.
 
 mimetype.use-xattr
   If available, use the XFS-style extended attribute interface to
@@ -350,17 +501,20 @@ debugging
 `````````
 
 debug.log-request-header
-
   default: disabled 
   
 debug.log-response-header
-
   default: disabled 
 
 debug.log-file-not-found
-
   default: disabled 
 
-debug.log-request-handler
+debug.log-request-handling
+  default: disabled 
 
+debug.log-condition-handling
+  default: disabled 
+
+debug.log-condition-cache-handling
+  for developers only
   default: disabled 

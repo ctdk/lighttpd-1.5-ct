@@ -3,6 +3,253 @@
 NEWS
 ====
 
+- 1.4.12 - 2006-..-..
+
+  * added handling of Content-Range to PUT requests in mod_webdav
+  * added handling of ETag and If-Modified-Since to mod_compress if 
+    cache-dir is not set
+  * added experimental LOCK support for mod_webdav 
+  * added support for X-Sendfile as addition to X-LIGHTTPD-send-file.
+    This allows compatibility with mod_xsendfile for apache
+    (http://celebnamer.celebworld.ws/stuff/mod_xsendfile/)
+  * fixed handling of If-Modified-Since if Etag is not set
+  * fixed hanging fastcgi connections
+  * fixed stalling SSL POST requests 
+  * fixed round-robin load-balancing in mod_proxy
+  * TODO: add fail-over to mod-proxy
+  * TODO: fix CACHE_HIT/MISS in mod_cml
+  * TODO: finish LOCK/UNLOCK in mod_webdav
+
+- 1.4.11 - 2006-03-09
+
+  * added ability to specify which ip address spawn-fci listens on 
+    (agkr@pobox.com)
+  * added mod_flv_streaming to streaming Flash Movies efficiently
+  * fixed handling of error codes returned by mod_dav_svn behing a 
+    mod_proxy
+  * fixed error-messages in mod_auth and mod_fastcgi
+  * fixed re-enabling overloaded local fastcgi backends
+  * fixed handling of deleted files in linux-sendfile
+  * fixed compilation on BSD and MacOSX
+  * fixed $SERVER["socket"] on a already bound socket
+  * fixed local source retrieval on windows 
+    (secunia)
+  * fixed hanging cgi if remote side is dieing while reading 
+    from the pipe (sandy@meebo.com)
+
+- 1.4.10 - 2006-02-08
+
+  * added docs for mod_dirlisting
+  * added fastcgi.map-extensions to mod_fastcgi
+  * fixed load balancing for mod_fastcgi 
+  * fixed extra newline for syslog() in mod_accesslog
+  * fixed user-track cookie for IE in mod_usertrack
+  * fixed crash in digest handling in mod_auth 
+  * fixed handling of 301 response-bodies from a mod_proxy backend
+  * fixed loading of base modules if server.modules is not set
+  * fixed broken cgi if mod_scgi is loaded
+
+- 1.4.9 - 2006-01-14
+
+  * added server.core-files option (sandy <sandy@meebo.com>)
+  * added docs for mod_status
+  * added mod_evasive to limit the number of connections by IP (<w1zzard@techpowerup.com>)
+  * added the power-magnet to mod_cml
+  * added internal statistics to mod_fastcgi
+  * added server.statistics-url to get internal statistics from mod_status
+  * added support for conditional range-requests through If-Range
+  * added static building via scons
+  * fixed 100% cpu loops in mod_cgi ("sandy" <sjen@cs.stanford.edu>)
+  * fixed handling for secure-download.timeout (jamis@37signals.com)
+  * fixed IE bug in content-charset in the output of mod_dirlisting (sniper@php.net)
+  * fixed typos and language in the docs (ryan-2005@ryandesign.com)
+  * fixed assertion in mod_cgi on HEAD request is Content-Length (<sandy@meebo.com>)
+  * fixed handling if equal but duplicate If-Modified-Since request headers
+  * fixed endless loops in mod_fastcgi if backend is dead
+  * fixed Depth: 1 handling in PROPFIND requests on empty dirs
+  * fixed encoding of UTF8 encoded dirlistings (Jani Taskinen <sniper@iki.fi>)
+  * fixed initial bind to a unix-domain socket through server.bind
+  * fixed handling of lowercase filesystems
+  * fixed duplicate request headers cause by mod_setenv
+
+- 1.4.8 - 2005-11-23
+
+  * added auto-reconnect to ldap-server in mod_auth
+    (joerg@netbsd.org)
+  * changed auth.ldap-cafile to be optional 
+    (joerg@netbsd.org)
+  * added strip_request_uri in mod_fastcgi
+  * added more X-* headers to mod_proxy
+    (Ben Grimm <bengrimm@gmail.com>)
+  * added 'debug' to simple-vhost to suppress the 
+    (mod_simple_vhost.c.157) No such file or directory /servers/ww.lighttpd.net/pages/
+    messages by default
+  * added support to let the server listen on UNIX-socket 
+  * changed default stat-cache-engine to 'simple'
+  * removed debian/ dir from source package on request by packager
+  * fixed max-age timestamps in mod_expire
+  * fixed encoding the filenames in PROPFIND in mod_webdav
+  * fixed range request handling in network_writev
+  * fixed retry on connect error in mod_fastcgi
+    (Robert G. Jakabosky <bobby@alphatrade.com>)
+  * fixed possible crash in mod_webdav if sqlite3 support 
+    is available but not use
+  * fixed fdvent-handler init if server.max-worker was used
+    (Siddharth Vijayakrishnan <mail@bluefireworks.net>)
+  * fixed missing cleanup in mysql_vhost
+  * fixed assert() in "connections.c:962: 
+      connection_handle_read_state: Assertion 'c->mem->used' failed."
+  * fixed 64bit issue in md5
+  * fixed crash in mod_status
+  * fixed duplicate headers in mod_proxy
+  * fixed Content-Length in HEAD request in mod_proxy
+  * fixed unsigned/signed comparisions
+  * fixed streaming in mod_cgi
+  * fixed possible overflow in password-salt handling
+    (reported on slashdot by james-web@and.org)
+  * fixed server-traffic-limit if connection limit is not set
+
+- 1.4.7 - 2005-11-02
+
+  * added FD_CLOEXEC to fds which are kept open for a longer time
+  * added smaller, moving mmaped windows to network_writev
+  * added madvise() to instruct the kernel the do proper read-ahead in network_writev
+  * added support for %I in mod_accesslog
+  * added better compat to Apache for ?auto in mod_status
+  * added support for userdirs without a entry in /etc/passwd in mod_userdir 
+    (rob@inversepath.com)
+  * added startup-time selectable network-backend
+  * added location of upload-files to config as array
+  * added webdav.log-xml for logging xml-content in mod_webdav
+  * added Cache-Control: max-age to mod_expire
+  * workaround missing client-bug by assuming we received a close-notify on 
+    non-keep-alive requests in SSL request
+  * disabled kerberos5 support by default to fix compilation on RHEL
+  * fixed order of library checks to fix compilation on Solaris 9
+  * fixed open file-descriptors on read-error
+  * fixed crash if /var/tmp is not writable
+
+- 1.4.6 - 2005-10-09
+
+  * fixed compilation on MacOS X and cygwin
+  * fixed compressed output if caching was disabled (seen in IE and Opera)
+  * fixed range-request option
+  * fixed mysql-vhost module (was broken in 1.4.5)
+  * fixed false positive in the detection of case-insensitive FS
+
+- 1.4.5 - 2005-10-02
+
+  * added all DeltaV methods as known methods
+  * added buffer-to-disk of request content
+  * added warning for unused variables in conditionals
+  * added global index-generators to mod_indexfile
+  * fixed caching for remote-ip conditionals with keep-alive
+  * fixed redirects with content
+  * fixed infinite loop in exec-cmd in mod_ssi
+  * fixed segfault in config handling for mod_mysql_vhost
+  * fixed segfault on FIFOs/Sockets
+  * fixed possible crash on uninit memory if If-Modified-Since was too long
+  * fixed accounting of mem-chunks
+  * fixed starving of connections on high load
+  * fixed crc errors in mod_compress on 64bit platforms
+  * fixed handling of overlapping fastcgi packets (bug added in 1.4.4)
+  * fixed logic of conditionals if a header was not set
+  * fixed a segfault in mod_rewrite if %1 references were used
+  * fixed handling of empty request URIs in HTTP requests
+
+- 1.4.4 - 2005-09-16
+  * added support for %V in mod_accesslog
+  * added a option for a FastCGI responser to send static files
+  * added md5 and blowfish hashes to htpasswd
+  * fixed METHOD in mod_accesslog of WebDAV methods
+  * fixed check for permission before files in sent
+  * fixed mod-proxy and content for non-POST requests
+  * fixed compilation of mod_cml on MacOS X
+  * fixed SSL errmsg after accept()
+  * fixed memleak in stat-cache
+  * fixed aborted connections if file was moved while in transfer
+  * fixed mem-usage for large FastCGI transfers
+
+- 1.4.3 - 2005-09-01
+
+  * added gracefull shutdown
+  * added server.max-connections 
+  * fixed compilation on all BSD platforms
+  * fixed init of kqueue and /dev/poll after daemonize
+  * fixed segfault if select() is event-handler and more than FD_SETSIZE 
+    fds are opened
+  * fixed compilation of mod_cml
+  * fixed bin-copy-env in mod_fastcgi
+
+- 1.4.2 - 2005-08-29
+
+  * fixed mimetype detection on uppercase extensions
+  * fixed memleak in stat-cache
+  * fixed infinite loop in mod_cgi
+  * fixed alignment crashes on sparc64 and alpha64
+  * fixed test system for gentoo ebuild
+  * fixed infinite loop in SSL
+  * fixed range request for files > 2Gb
+
+- 1.4.1 - 2005-08-22
+
+  * added a complete Class 1 complient mod_webdav
+  * fixed ssl support (especially on OpenBSD)
+  * fixed response header in body problem in mod_cgi
+  * fixed numbers before body problem 
+  * fixed compilation on Solaris and FreeBSD
+  * fixed conditional options in mod_dirlisting
+  * fixed segfault in mod_dirlisting for NFS directories
+  * fixed check for docroot in change-root environments
+
+- 1.4.0 - 2005-08-17 
+
+  * added nested conditionals
+  * added remote-ip to $HTTP
+  * added support for stat-cache via FAM
+  * added a read-only WebDAV module
+  * fixed cleanup in mod_proxy and mod_fastcgi
+  * fixed handling of filenames on case-insensitive filesystems
+
+- 1.3.16 - 2005-07-31
+
+  * added Date: headers to dynamic HTTP/1.0 requests
+  * added support for OPTION * HTTP/1.1
+  * added support for accesslog to syslog
+  * added support for PATH_INFO guessing if check-local is disabled in
+      mod_fastcgi
+  * added switch to disable range-requests 
+  * added valid-user option for mod_auth (tigger at gentoo.org)
+  * added JavaScript based sorting to mod_status (erik)
+  * added selective TCP_CORK (Christian von Roques)
+  * break up endless loops with Status: 500
+  * fixed endless loops in mod_rewrite
+  * mapped url.rewrite and url.rewrite-final to uri.rewrite-once
+  * fixed compilation for mod_trigger_b4_dl
+  * fixed 'can't reach host' in mod_proxy
+  * error-handler-404 defaults to Status: 200 and static files work now
+
+- 1.3.15 - 2005-07-15
+
+  * added mod_cml 
+  * added mod_trigger_b4_dl
+  * added encoding to mod_dirlisting
+  * added ?auto to mod_status
+  * relaxed handling of characters in URIs even more
+  * fixed detection of sendfile() on Linux 2.4.x
+  * fixed comparision of buffers for short strings
+  * server.errorfile-prefix is now conditional
+  * fixed mod_rrdtool to close STDERR
+
+- 1.3.14 - 2005-06-15
+
+  * added SCGI support via mod_scgi
+  * added hash-based and round-robin load balancing to mod_proxy
+  * fixed range requests larger than 2Gb
+  * fixed compilation on Solaris
+  * fixed endless loops in mod_fastcgi, mod_cgi and mod_proxy
+  * fixed handling of URIs for '+' and characters > 127
+
 - 1.3.13 - 2005-03-06
 
   * added customizable directory listings

@@ -1,67 +1,126 @@
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/time.h>
-#ifdef HAVE_SYS_RESOURCE_H
-#include <sys/resource.h>
-#endif
 
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <assert.h>
 
 #include "network.h"
 #include "fdevent.h"
 #include "log.h"
-#include "file_cache.h"
+#include "stat_cache.h"
 
 #include "sys-socket.h"
+#include "sys-files.h"
 
 #include "network_backends.h"
 
-int network_write_chunkqueue_write(server *srv, connection *con, chunkqueue *cq) {
-	const int fd = con->fd;
+#ifdef USE_WRITE
+
+#ifdef HAVE_SYS_FILIO_H
+# include <sys/filio.h>
+#endif
+
+#ifdef HAVE_SYS_RESOURCE_H
+#include <sys/resource.h>
+#endif
+
+
+/**
+* fill the chunkqueue will all the data that we can get
+*
+* this might be optimized into a readv() which uses the chunks
+* as vectors
+*/
+NETWORK_BACKEND_READ(read) {
+	int toread;
+	buffer *b;
+	off_t r, start_bytes_in;
+	off_t max_read = 256 * 1024;
+
+	/**
+	 * a EAGAIN is a successful read if we already read something to the chunkqueue
+	 */
+	int read_something = 0;
+
+	start_bytes_in = cq->bytes_in;
+	
+	/* use a chunk-size of 16k */
+	do {
+		toread = 16384;
+
+		b = chunkqueue_get_append_buffer(cq);
+
+		buffer_prepare_copy(b, toread);
+
+		if (-1 == (r = read(sock->fd, b->ptr, toread))) {
+			switch (errno) {
+			case EAGAIN:
+				/* remove the last chunk from the chunkqueue */
+				chunkqueue_remove_empty_last_chunk(cq);
+				return read_something ? NETWORK_STATUS_SUCCESS : NETWORK_STATUS_WAIT_FOR_EVENT;
+			case ECONNRESET:
+				return NETWORK_STATUS_CONNECTION_CLOSE;
+			default:
+				ERROR("oops, read from fd=%d failed: %s (%d)", sock->fd, strerror(errno), errno );
+
+				return NETWORK_STATUS_FATAL_ERROR;
+			}
+		}
+
+		if (r == 0) {
+			chunkqueue_remove_empty_last_chunk(cq);
+			return read_something ? NETWORK_STATUS_SUCCESS : NETWORK_STATUS_CONNECTION_CLOSE;
+		}
+
+		read_something = 1;
+
+		b->used = r;
+		b->ptr[b->used++] = '\0';
+		cq->bytes_in += r;
+
+		if (cq->bytes_in - start_bytes_in > max_read) break;
+	} while (r == toread); 
+
+	return NETWORK_STATUS_SUCCESS;
+}
+
+NETWORK_BACKEND_WRITE(write) {
 	chunk *c;
 	size_t chunks_written = 0;
-	
+
 	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
-		
+
 		switch(c->type) {
 		case MEM_CHUNK: {
 			char * offset;
 			size_t toSend;
 			ssize_t r;
-			
-			if (c->data.mem->used == 0) {
+
+			if (c->mem->used == 0) {
 				chunk_finished = 1;
 				break;
 			}
-			
-			offset = c->data.mem->ptr + c->offset;
-			toSend = c->data.mem->used - 1 - c->offset;
-#ifdef __WIN32	
-			if ((r = send(fd, offset, toSend, 0)) < 0) {
-				log_error_write(srv, __FILE__, __LINE__, "ssd", "write failed: ", strerror(errno), fd);
-				
-				return -1;
+
+			offset = c->mem->ptr + c->offset;
+			toSend = c->mem->used - 1 - c->offset;
+
+			if ((r = write(sock->fd, offset, toSend)) < 0) {
+				log_error_write(srv, __FILE__, __LINE__, "ssd", "write failed: ", strerror(errno), sock->fd);
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-#else
-			if ((r = write(fd, offset, toSend)) < 0) {
-				log_error_write(srv, __FILE__, __LINE__, "ssd", "write failed: ", strerror(errno), fd);
-				
-				return -1;
-			}
-#endif
-			
+
 			c->offset += r;
-			con->bytes_written += r;
-			
-			if (c->offset == (off_t)c->data.mem->used - 1) {
+			cq->bytes_out += r;
+
+			if (c->offset == (off_t)c->mem->used - 1) {
 				chunk_finished = 1;
 			}
-			
+
 			break;
 		}
 		case FILE_CHUNK: {
@@ -71,118 +130,91 @@ int network_write_chunkqueue_write(server *srv, connection *con, chunkqueue *cq)
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
-			
-			if (HANDLER_GO_ON != file_cache_get_entry(srv, con, c->data.file.name, &(con->fce))) {
+			stat_cache_entry *sce = NULL;
+			int ifd;
+
+			if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->data.file.name);
-				return -1;
+						strerror(errno), c->file.name);
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-			
-			offset = c->data.file.offset + c->offset;
-			toSend = c->data.file.length - c->offset;
-			
-			if (offset > con->fce->st.st_size) {
-				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->data.file.name);
-				
-				return -1;
+
+			offset = c->file.start + c->offset;
+			toSend = c->file.length - c->offset;
+
+			if (offset > sce->st.st_size) {
+				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->file.name);
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-			
-			if (-1 == con->fce->fd) {
-				log_error_write(srv, __FILE__, __LINE__, "sb", "fd is invalid", c->data.file.name);
-				
-				return -1;
+
+			if (-1 == (ifd = open(c->file.name->ptr, O_RDONLY))) {
+				log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-			
+
 #if defined USE_MMAP
-			/* check if the mapping fits */
-			if (con->fce->mmap_p &&
-			    con->fce->mmap_length != con->fce->st.st_size &&
-			    con->fce->mmap_offset != 0) {
-				munmap(con->fce->mmap_p, con->fce->mmap_length);
-				
-				con->fce->mmap_p = NULL;
+			if (MAP_FAILED == (p = mmap(0, sce->st.st_size, PROT_READ, MAP_SHARED, ifd, 0))) {
+				log_error_write(srv, __FILE__, __LINE__, "ss", "mmap failed: ", strerror(errno));
+
+				close(ifd);
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-			
-			/* build mapping if neccesary */
-			if (con->fce->mmap_p == NULL) {
-				if (MAP_FAILED == (p = mmap(0, con->fce->st.st_size, PROT_READ, MAP_SHARED, con->fce->fd, 0))) {
-					log_error_write(srv, __FILE__, __LINE__, "ss", "mmap failed: ", strerror(errno));
-					
-					return -1;
-				}
-				con->fce->mmap_p = p;
-				con->fce->mmap_offset = 0;
-				con->fce->mmap_length = con->fce->st.st_size;
-			} else {
-				p = con->fce->mmap_p;
-			}
-			
-			if ((r = write(fd, p + offset, toSend)) <= 0) {
+			close(ifd);
+
+			if ((r = write(sock->fd, p + offset, toSend)) <= 0) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "write failed: ", strerror(errno));
-				
-				return -1;
+				munmap(p, sce->st.st_size);
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-			
-			/* don't cache mmap()ings for files large then 64k */
-			if (con->fce->mmap_length > 64 * 1024) {
-				munmap(con->fce->mmap_p, con->fce->mmap_length);
-				
-				con->fce->mmap_p = NULL;
-			}
-			
+
+			munmap(p, sce->st.st_size);
 #else
 			buffer_prepare_copy(srv->tmp_buf, toSend);
-			
-			lseek(con->fce->fd, offset, SEEK_SET);
-			if (-1 == (toSend = read(con->fce->fd, srv->tmp_buf->ptr, toSend))) {
+
+			lseek(ifd, offset, SEEK_SET);
+			if (-1 == (toSend = read(ifd, srv->tmp_buf->ptr, toSend))) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "read: ", strerror(errno));
-				
-				return -1;
+				close(ifd);
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-#ifdef __WIN32
-			if (-1 == (r = send(fd, srv->tmp_buf->ptr, toSend, 0))) {
+			close(ifd);
+
+			if (-1 == (r = send(sock->fd, srv->tmp_buf->ptr, toSend, 0))) {
 				log_error_write(srv, __FILE__, __LINE__, "ss", "write: ", strerror(errno));
-				
-				return -1;
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
-#else			
-			if (-1 == (r = write(fd, srv->tmp_buf->ptr, toSend))) {
-				log_error_write(srv, __FILE__, __LINE__, "ss", "write: ", strerror(errno));
-				
-				return -1;
-			}
-#endif
 #endif
 			c->offset += r;
-			con->bytes_written += r;
-			
-			if (c->offset == c->data.file.length) {
+			cq->bytes_out += r;
+
+			if (c->offset == c->file.length) {
 				chunk_finished = 1;
 			}
-			
+
 			break;
 		}
 		default:
-			
+
 			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
-			
-			return -1;
+
+			return NETWORK_STATUS_FATAL_ERROR;
 		}
-		
+
 		if (!chunk_finished) {
 			/* not finished yet */
-			
+
 			break;
 		}
-		
+
 		chunks_written++;
 	}
 
-	return chunks_written;
+	return NETWORK_STATUS_SUCCESS;
 }
 
-#if 0
-network_write_init(void) {
-	p->write = network_write_write_chunkset;
-}
 #endif

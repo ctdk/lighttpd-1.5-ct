@@ -1,9 +1,14 @@
 #ifndef _FDEVENT_H_
 #define _FDEVENT_H_
 
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 #include "settings.h"
 #include "bitset.h"
+
+#include "iosocket.h"
+#include "array-static.h"
 
 /* select event-system */
 
@@ -15,13 +20,13 @@
 # include <sys/epoll.h>
 #endif
 
-/* MacOS 10.3.x has poll.h under /usr/include/, all other unixes 
+/* MacOS 10.3.x has poll.h under /usr/include/, all other unixes
  * under /usr/include/sys/ */
 #if defined HAVE_POLL && (defined(HAVE_SYS_POLL_H) || defined(HAVE_POLL_H))
 # define USE_POLL
 # ifdef HAVE_POLL_H
 #  include <poll.h>
-# else 
+# else
 #  include <sys/poll.h>
 # endif
 # if defined HAVE_SIGTIMEDWAIT && defined(__linux__)
@@ -29,12 +34,17 @@
 #  include <signal.h>
 # endif
 #endif
-
+#ifdef _WIN32
+# define HAVE_SELECT
+#endif
 #if defined HAVE_SELECT
-# ifdef __WIN32
+# ifdef _WIN32
 #  include <winsock2.h>
 # endif
 # define USE_SELECT
+# ifdef HAVE_SYS_SELECT_H
+#  include <sys/select.h>
+# endif
 #endif
 
 #if defined HAVE_SYS_DEVPOLL_H && defined(__sun)
@@ -62,14 +72,14 @@ typedef handler_t (*fdevent_handler)(void *srv, void *ctx, int revents);
 #define FDEVENT_HUP    BV(4)
 #define FDEVENT_NVAL   BV(5)
 
-typedef enum { FD_EVENT_TYPE_UNSET = -1, 
-		FD_EVENT_TYPE_CONNECTION, 
-		FD_EVENT_TYPE_FCGI_CONNECTION, 
-		FD_EVENT_TYPE_DIRWATCH, 
-		FD_EVENT_TYPE_CGI_CONNECTION 
+typedef enum { FD_EVENT_TYPE_UNSET = -1,
+		FD_EVENT_TYPE_CONNECTION,
+		FD_EVENT_TYPE_FCGI_CONNECTION,
+		FD_EVENT_TYPE_DIRWATCH,
+		FD_EVENT_TYPE_CGI_CONNECTION
 } fd_event_t;
 
-typedef enum { FDEVENT_HANDLER_UNSET, 
+typedef enum { FDEVENT_HANDLER_UNSET,
 		FDEVENT_HANDLER_SELECT,
 		FDEVENT_HANDLER_POLL,
 		FDEVENT_HANDLER_LINUX_RTSIG,
@@ -81,7 +91,7 @@ typedef enum { FDEVENT_HANDLER_UNSET,
 
 /**
  * a mapping from fd to connection structure
- * 
+ *
  */
 typedef struct {
 	int fd;                  /**< the fd */
@@ -91,48 +101,51 @@ typedef struct {
 	int revents;
 } fd_conn;
 
+ARRAY_STATIC_DEF(fd_conn_buffer, fd_conn, );
+
+/**
+ * revents
+ */
 typedef struct {
-	fd_conn *ptr;
-	
-	size_t size;
-	size_t used;
-} fd_conn_buffer;
+	int fd;
+	int revents;
+
+	fdevent_handler handler;
+	void *context;
+} fdevent_revent;
+
+ARRAY_STATIC_DEF(fdevent_revents, fdevent_revent, );
 
 /**
  * array of unused fd's
- * 
+ *
  */
 
-typedef struct fdnode {
-	fdevent_handler handler;
-	void *ctx;
-	int fd;
-	
-	struct fdnode *prev, *next;
+typedef struct _fdnode {
+	fdevent_handler handler; /* who handles the events for this fd */
+	void *ctx;               /* opaque pointer which is passed as 3rd parameter to the handler */
+	int fd;                  /* fd */
+
+	struct _fdnode *prev, *next;
 } fdnode;
 
 typedef struct {
-	fdnode *first, *last;
-} fdlist;
-
-typedef struct {
 	int *ptr;
-	
+
 	size_t used;
 	size_t size;
 } buffer_int;
 
 /**
  * fd-event handler for select(), poll() and rt-signals on Linux 2.4
- * 
+ *
  */
 typedef struct fdevents {
 	fdevent_handler_t type;
-	
-	fdlist fdlist;
-	fdnode **fdarray;
+
+	fdnode **fdarray; /* a list of fdnodes */
 	size_t maxfds;
-	
+
 #ifdef USE_LINUX_SIGIO
 	int in_sigio;
 	int signum;
@@ -146,21 +159,21 @@ typedef struct fdevents {
 #endif
 #ifdef USE_POLL
 	struct pollfd *pollfds;
-	
+
 	size_t size;
 	size_t used;
-	
+
 	buffer_int unused;
 #endif
 #ifdef USE_SELECT
 	fd_set select_read;
 	fd_set select_write;
 	fd_set select_error;
-	
+
 	fd_set select_set_read;
 	fd_set select_set_write;
 	fd_set select_set_error;
-	
+
 	int select_max_fd;
 #endif
 #ifdef USE_SOLARIS_DEVPOLL
@@ -177,16 +190,13 @@ typedef struct fdevents {
 #endif
 	int (*reset)(struct fdevents *ev);
 	void (*free)(struct fdevents *ev);
-	
-	int (*event_add)(struct fdevents *ev, int fde_ndx, int fd, int events);
-	int (*event_del)(struct fdevents *ev, int fde_ndx, int fd);
-	int (*event_get_revent)(struct fdevents *ev, size_t ndx);
-	int (*event_get_fd)(struct fdevents *ev, size_t ndx);
-	
-	int (*event_next_fdndx)(struct fdevents *ev, int ndx);
-	
+
+	int (*event_add)(struct fdevents *ev, iosocket *sock, int events);
+	int (*event_del)(struct fdevents *ev, iosocket *sock);
+	int (*get_revents)(struct fdevents *ev, size_t event_count, fdevent_revents *revents);
+
 	int (*poll)(struct fdevents *ev, int timeout_ms);
-	
+
 	int (*fcntl_set)(struct fdevents *ev, int fd);
 } fdevents;
 
@@ -194,22 +204,44 @@ fdevents *fdevent_init(size_t maxfds, fdevent_handler_t type);
 int fdevent_reset(fdevents *ev);
 void fdevent_free(fdevents *ev);
 
-int fdevent_event_add(fdevents *ev, int *fde_ndx, int fd, int events);
-int fdevent_event_del(fdevents *ev, int *fde_ndx, int fd);
-int fdevent_event_get_revent(fdevents *ev, size_t ndx);
-int fdevent_event_get_fd(fdevents *ev, size_t ndx);
-fdevent_handler fdevent_get_handler(fdevents *ev, int fd);
-void * fdevent_get_context(fdevents *ev, int fd);
-
-int fdevent_event_next_fdndx(fdevents *ev, int ndx);
-
+/**
+ * call the plugin for the number of available events
+ */
 int fdevent_poll(fdevents *ev, int timeout_ms);
+/**
+ * get all available events
+ */
+int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents);
 
-int fdevent_register(fdevents *ev, int fd, fdevent_handler handler, void *ctx);
-int fdevent_unregister(fdevents *ev, int fd);
+/**
+ * add or remove a fd to the handled-pool
+ */
+int fdevent_register(fdevents *ev, iosocket *sock, fdevent_handler handler, void *ctx);
+int fdevent_unregister(fdevents *ev, iosocket *sock);
 
-int fdevent_fcntl_set(fdevents *ev, int fd);
+/**
+ * add a event to a registered fd
+ */
+int fdevent_event_add(fdevents *ev, iosocket *sock, int events);
+int fdevent_event_del(fdevents *ev, iosocket *sock);
 
+/**
+ * set non-blocking
+ */
+int fdevent_fcntl_set(fdevents *ev, iosocket *sock);
+
+fdevent_revents *fdevent_revents_init(void);
+void fdevent_revents_reset(fdevent_revents *revents);
+void fdevent_revents_add(fdevent_revents *revents, int fd, int events);
+void fdevent_revents_free(fdevent_revents *revents);
+
+fdevent_revent *fdevent_revent_init(void);
+void fdevent_revent_free(fdevent_revent *revent);
+
+
+/**
+ * plugin init
+ */
 int fdevent_select_init(fdevents *ev);
 int fdevent_poll_init(fdevents *ev);
 int fdevent_linux_rtsig_init(fdevents *ev);

@@ -1,5 +1,5 @@
 # lighttpd.conf and conformance.pl expect this directory
-testdir=/tmp/lighttpd/
+testdir=$(srcdir)/tmp/lighttpd/
 
 if CHECK_WITH_FASTCGI
 check_PROGRAMS=fcgi-auth fcgi-responder
@@ -12,9 +12,9 @@ fcgi_responder_LDADD=-lfcgi
 endif
 
 TESTS=\
-prepare.sh \
-run-tests.pl \
-cleanup.sh
+	prepare.sh \
+	run-tests.pl \
+	cleanup.sh
 
 CONFS=fastcgi-10.conf \
       fastcgi-auth.conf \
@@ -22,8 +22,14 @@ CONFS=fastcgi-10.conf \
       fastcgi-13.conf \
       bug-06.conf \
       bug-12.conf \
+      core-var-include.t \
+      var-include.conf \
+      var-include-sub.conf \
+      condition.conf \
+      core-condition.t \
       core-request.t \
       core-response.t \
+      core-keepalive.t \
       core.t \
       mod-access.t \
       mod-auth.t \
@@ -33,15 +39,28 @@ CONFS=fastcgi-10.conf \
       mod-redirect.t \
       mod-userdir.t \
       mod-rewrite.t \
-      request.t 
+      mod-proxy.t \
+      request.t \
+      mod-ssi.t \
+      LightyTest.pm \
+      mod-setenv.t \
+      lowercase.t \
+      lowercase.conf \
+      proxy.conf \
+      cachable.t \
+      default.conf \
+      proxy-backend-1.conf \
+      proxy-backend-2.conf 
 
 
-TESTS_ENVIRONMENT=$(srcdir)/wrapper.sh $(srcdir) $(top_builddir)
+TESTS_ENVIRONMENT=$(srcdir)/wrapper.sh $(srcdir) $(top_builddir) 
 
 EXTRA_DIST=wrapper.sh lighttpd.conf \
 	lighttpd.user \
+	lighttpd.htpasswd \
 	$(CONFS) \
 	$(TESTS)
+
 SUBDIRS=docroot
 
 leak-check:

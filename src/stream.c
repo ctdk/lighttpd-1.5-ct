@@ -1,51 +1,57 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include <unistd.h> 
 #include <fcntl.h>
 
 #include "stream.h"
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
 
 #include "sys-mmap.h"
+#include "sys-files.h"
 
+#ifndef O_BINARY
+# define O_BINARY 0
+#endif
 
 int stream_open(stream *f, buffer *fn) {
 	struct stat st;
 #ifdef HAVE_MMAP
 	int fd;
-#elif defined __WIN32
+#elif defined _WIN32
 	HANDLE *fh, *mh;
 	void *p;
 #endif
 
-	
+	f->start = NULL;
+
 	if (-1 == stat(fn->ptr, &st)) {
 		return -1;
 	}
-	
+
 	f->size = st.st_size;
 
 #ifdef HAVE_MMAP
-	if (-1 == (fd = open(fn->ptr, O_RDONLY))) {
+	if (-1 == (fd = open(fn->ptr, O_RDONLY | O_BINARY))) {
 		return -1;
 	}
-	
+
 	f->start = mmap(0, f->size, PROT_READ, MAP_SHARED, fd, 0);
-	
+
 	close(fd);
-	
+
 	if (MAP_FAILED == f->start) {
 		return -1;
 	}
 
-#elif defined __WIN32
-	fh = CreateFile(fn->ptr, 
-			GENERIC_READ, 
-			FILE_SHARE_READ, 
-			NULL, 
-			OPEN_EXISTING, 
-			FILE_ATTRIBUTE_READONLY, 
+#elif defined _WIN32
+	fh = CreateFile(fn->ptr,
+			GENERIC_READ,
+			FILE_SHARE_READ,
+			NULL,
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_READONLY,
 			NULL);
 
 	if (!fh) return -1;
@@ -60,7 +66,7 @@ int stream_open(stream *f, buffer *fn) {
 	if (!mh) {
 		LPVOID lpMsgBuf;
 		FormatMessage(
-		        FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+		        FORMAT_MESSAGE_ALLOCATE_BUFFER |
 		        FORMAT_MESSAGE_FROM_SYSTEM,
 		        NULL,
 		        GetLastError(),
@@ -70,7 +76,7 @@ int stream_open(stream *f, buffer *fn) {
 
 		return -1;
 	}
-	
+
 	p = MapViewOfFile(mh,
 			FILE_MAP_READ,
 			0,
@@ -81,9 +87,9 @@ int stream_open(stream *f, buffer *fn) {
 
 	f->start = p;
 #else
-# error no mmap found	
+# error no mmap found
 #endif
-	
+
 	return 0;
 }
 

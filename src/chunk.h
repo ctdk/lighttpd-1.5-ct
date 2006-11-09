@@ -23,6 +23,12 @@ typedef struct chunk {
 		} mmap;
 
 		int is_temp; /* file is temporary and will be deleted on cleanup */
+
+		struct {
+			int fd; 
+			off_t length;
+			off_t offset;
+		} copy;
 	} file;
 
 	off_t  offset; /* octets sent from this chunk

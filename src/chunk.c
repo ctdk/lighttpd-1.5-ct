@@ -40,6 +40,7 @@ static chunk *chunk_init(void) {
 	c->mem = buffer_init();
 	c->file.name = buffer_init();
 	c->file.fd = -1;
+	c->file.copy.fd = -1;
 	c->file.mmap.start = MAP_FAILED;
 	c->next = NULL;
 
@@ -70,6 +71,12 @@ static void chunk_reset(chunk *c) {
 		close(c->file.fd);
 		c->file.fd = -1;
 	}
+
+	if (c->file.copy.fd != -1) {
+		close(c->file.copy.fd);
+		c->file.copy.fd = -1;
+	}
+
 	if (MAP_FAILED != c->file.mmap.start) {
 		munmap(c->file.mmap.start, c->file.mmap.length);
 		c->file.mmap.start = MAP_FAILED;

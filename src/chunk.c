@@ -81,6 +81,9 @@ static void chunk_reset(chunk *c) {
 		munmap(c->file.mmap.start, c->file.mmap.length);
 		c->file.mmap.start = MAP_FAILED;
 	}
+
+	c->file.copy.length = 0;
+	c->file.copy.offset = 0;
 }
 
 

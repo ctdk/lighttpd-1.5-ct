@@ -90,7 +90,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				toSend = c->file.length - c->offset > max_toSend ?
 					max_toSend : c->file.length - c->offset;
 
-				if (0 == c->file.copy.length) {
+				if (-1 == c->file.copy.fd || 0 == c->file.copy.length) {
         
 					struct io_event event;
 					struct iocb iocb;

@@ -72,6 +72,7 @@ NETWORK_BACKEND_WRITE_CHUNK(writev_mem);
 NETWORK_BACKEND_WRITE(write);
 NETWORK_BACKEND_WRITE(writev);
 NETWORK_BACKEND_WRITE(linuxsendfile);
+NETWORK_BACKEND_WRITE(linuxaiosendfile);
 NETWORK_BACKEND_WRITE(freebsdsendfile);
 NETWORK_BACKEND_WRITE(solarissendfilev);
 

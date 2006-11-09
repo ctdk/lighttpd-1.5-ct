@@ -452,12 +452,16 @@ typedef enum {
 
 	NETWORK_BACKEND_WRITE,
 	NETWORK_BACKEND_WRITEV,
+
 	NETWORK_BACKEND_LINUX_SENDFILE,
+	NETWORK_BACKEND_LINUX_AIO_SENDFILE,
+
 	NETWORK_BACKEND_FREEBSD_SENDFILE,
 	NETWORK_BACKEND_SOLARIS_SENDFILEV,
 
-    NETWORK_BACKEND_WIN32_SEND,
-    NETWORK_BACKEND_WIN32_TRANSMITFILE,
+	NETWORK_BACKEND_WIN32_SEND,
+	NETWORK_BACKEND_WIN32_TRANSMITFILE,
+
 } network_backend_t;
 
 int network_init(server *srv) {
@@ -472,6 +476,7 @@ int network_init(server *srv) {
 		/* lowest id wins */
 #if defined USE_LINUX_SENDFILE
 		{ NETWORK_BACKEND_LINUX_SENDFILE,       "linux-sendfile" },
+		{ NETWORK_BACKEND_LINUX_AIO_SENDFILE,   "linux-aio-sendfile" },
 #endif
 #if defined USE_FREEBSD_SENDFILE
 		{ NETWORK_BACKEND_FREEBSD_SENDFILE,     "freebsd-sendfile" },
@@ -545,38 +550,41 @@ int network_init(server *srv) {
 
 #ifdef USE_WIN32_SEND
 	case NETWORK_BACKEND_WIN32_SEND:
-        SET_NETWORK_BACKEND(win32recv, win32send);
+		SET_NETWORK_BACKEND(win32recv, win32send);
 		break;
 #ifdef USE_WIN32_TRANSMITFILE
 	case NETWORK_BACKEND_WIN32_TRANSMITFILE:
-        SET_NETWORK_BACKEND(win32recv, win32transmitfile);
+		SET_NETWORK_BACKEND(win32recv, win32transmitfile);
 		break;
 #endif
 #endif
 
 #ifdef USE_WRITE
 	case NETWORK_BACKEND_WRITE:
-        SET_NETWORK_BACKEND(read, write);
+		SET_NETWORK_BACKEND(read, write);
 		break;
 
 #ifdef USE_WRITEV
 	case NETWORK_BACKEND_WRITEV:
-        SET_NETWORK_BACKEND(read, writev);
+		SET_NETWORK_BACKEND(read, writev);
 		break;
 #endif
 #ifdef USE_LINUX_SENDFILE
 	case NETWORK_BACKEND_LINUX_SENDFILE:
-        SET_NETWORK_BACKEND(read, linuxsendfile);
+		SET_NETWORK_BACKEND(read, linuxsendfile);
+		break;
+	case NETWORK_BACKEND_LINUX_AIO_SENDFILE:
+		SET_NETWORK_BACKEND(read, linuxaiosendfile);
 		break;
 #endif
 #ifdef USE_FREEBSD_SENDFILE
 	case NETWORK_BACKEND_FREEBSD_SENDFILE:
-        SET_NETWORK_BACKEND(read, freebsdsendfile);
+		SET_NETWORK_BACKEND(read, freebsdsendfile);
 		break;
 #endif
 #ifdef USE_SOLARIS_SENDFILEV
 	case NETWORK_BACKEND_SOLARIS_SENDFILEV:
-        SET_NETWORK_BACKEND(read, solarissendfilev);
+		SET_NETWORK_BACKEND(read, solarissendfilev);
 		break;
 #endif
 #endif
@@ -684,14 +692,15 @@ network_status_t network_write_chunkqueue(server *srv, connection *con, chunkque
 		ret = srv->network_backend_write(srv, con, con->sock, cq);
 	}
 
-    switch (ret) {
-    case NETWORK_STATUS_WAIT_FOR_EVENT:
-    case NETWORK_STATUS_SUCCESS:
+	switch (ret) {
+	case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
+	case NETWORK_STATUS_WAIT_FOR_EVENT:
+	case NETWORK_STATUS_SUCCESS:
 		chunkqueue_remove_finished_chunks(cq);
 
-        break;
-    default:
-        break;
+		break;
+	default:
+		break;
 	}
 
 #ifdef TCP_CORK

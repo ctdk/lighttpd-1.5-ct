@@ -22,6 +22,7 @@ common_src = Split("buffer.c log.c \
       network_write.c network_linux_sendfile.c \
       network_freebsd_sendfile.c  network_win32_send.c \
       network_solaris_sendfilev.c network_openssl.c \
+      network_linux_aio.c \
       http_resp.c http_resp_parser.c \
       http_req.c http_req_parser.c \
       http_req_range.c http_req_range_parser.c ")
@@ -206,7 +207,7 @@ else:
 	else:
 		bin_linkflags += [ '-Wl,--export-dynamic' ]
 
-instbin = env.Program(bin_targets, src, LINKFLAGS = bin_linkflags, LIBS= [ env['LIBS'], common_lib, env['LIBDL'] ])
+instbin = env.Program(bin_targets, src, LINKFLAGS = [ bin_linkflags, "-pthread" ], LIBS= [ env['LIBS'], common_lib, env['LIBDL'], "aio" ])
 env.Depends("#build/configfile.o", configparser)
 env.Depends("configfile.c", configparser)
 

@@ -35,6 +35,10 @@
 # include <fam.h>
 #endif
 
+#ifdef HAVE_LIBAIO_H
+# include <libaio.h>
+#endif
+
 #ifndef O_BINARY
 # define O_BINARY 0
 #endif
@@ -413,12 +417,13 @@ typedef struct {
 } buffer_plugin;
 
 typedef enum {
-    NETWORK_STATUS_UNSET,
-    NETWORK_STATUS_SUCCESS,
-    NETWORK_STATUS_FATAL_ERROR,
-    NETWORK_STATUS_CONNECTION_CLOSE,
-    NETWORK_STATUS_WAIT_FOR_EVENT,
-    NETWORK_STATUS_INTERRUPTED
+	NETWORK_STATUS_UNSET,
+	NETWORK_STATUS_SUCCESS,
+	NETWORK_STATUS_FATAL_ERROR,
+	NETWORK_STATUS_CONNECTION_CLOSE,
+	NETWORK_STATUS_WAIT_FOR_EVENT,
+	NETWORK_STATUS_WAIT_FOR_AIO_EVENT,
+	NETWORK_STATUS_INTERRUPTED
 } network_status_t;
 
 typedef struct {
@@ -563,6 +568,11 @@ typedef struct server {
 #ifdef HAVE_PWD_H
 	uid_t uid;
 	gid_t gid;
+#endif
+
+#ifdef HAVE_LIBAIO_H
+	io_context_t linux_io_ctx;
+	int linux_io_waiting;
 #endif
 } server;
 

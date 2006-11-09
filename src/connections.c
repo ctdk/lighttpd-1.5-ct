@@ -1360,6 +1360,8 @@ int connection_state_machine(server *srv, connection *con) {
 				TRACE("%s", "(error)");
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
+			case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
+				return HANDLER_WAIT_FOR_EVENT;
 			case NETWORK_STATUS_WAIT_FOR_EVENT:
 				fdevent_event_add(srv->ev, con->sock, FDEVENT_OUT);
 

@@ -136,7 +136,6 @@ NETWORK_BACKEND_WRITE_CHUNK(writev_mem) {
 
 NETWORK_BACKEND_WRITE(writev) {
 	chunk *c, *tc;
-	size_t chunks_written = 0;
 
 	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
@@ -309,8 +308,7 @@ NETWORK_BACKEND_WRITE(writev) {
 				switch (errno) {
 				case EAGAIN:
 				case EINTR:
-					r = 0;
-					break;
+					return NETWORK_STATUS_WAIT_FOR_EVENT;
 				case EPIPE:
 				case ECONNRESET:
 					return NETWORK_STATUS_CONNECTION_CLOSE;
@@ -347,10 +345,8 @@ NETWORK_BACKEND_WRITE(writev) {
 		if (!chunk_finished) {
 			/* not finished yet */
 
-			break;
+			return NETWORK_STATUS_WAIT_FOR_EVENT;
 		}
-
-		chunks_written++;
 	}
 
 	return NETWORK_STATUS_SUCCESS;

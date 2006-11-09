@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 
 #include <string.h>
 #include <errno.h>
@@ -77,6 +78,9 @@ static volatile sig_atomic_t graceful_restart = 0;
 static volatile sig_atomic_t handle_sig_alarm = 1;
 static volatile sig_atomic_t handle_sig_hup = 0;
 
+#ifdef HAVE_LIBAIO_H
+#include <pthread.h>
+#endif
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
 static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 	UNUSED(si);
@@ -138,7 +142,8 @@ static server *server_init(void) {
 
 	server *srv = calloc(1, sizeof(*srv));
 	assert(srv);
-    srv->max_fds = 1024;
+
+	srv->max_fds = 1024;
 #define CLEAN(x) \
 	srv->x = buffer_init();
 
@@ -192,6 +197,11 @@ static server *server_init(void) {
 
 	srv->split_vals = array_init();
 
+#ifdef HAVE_LIBAIO_H 
+	srv->linux_io_ctx = NULL;
+	io_setup(64, &(srv->linux_io_ctx));
+#endif
+
 	return srv;
 }
 
@@ -201,6 +211,13 @@ static void server_free(server *srv) {
 	for (i = 0; i < FILE_CACHE_MAX; i++) {
 		buffer_free(srv->mtime_cache[i].str);
 	}
+
+
+#ifdef HAVE_LIBAIO_H 
+	if (srv->linux_io_ctx) {
+		io_destroy(srv->linux_io_ctx);
+	}
+#endif
 
 #define CLEAN(x) \
 	buffer_free(srv->x);
@@ -287,7 +304,11 @@ static void show_version (void) {
 "Build-Date: " __DATE__ " " __TIME__ "\n";
 ;
 #undef TEXT_SSL
-	write(STDOUT_FILENO, b, strlen(b));
+	if (-1 == write(STDOUT_FILENO, b, strlen(b))) {
+		/* what to do if this happens ? */
+
+		exit(-1);
+	}
 }
 
 static void show_features (void) {
@@ -439,9 +460,83 @@ static void show_help (void) {
 	write(STDOUT_FILENO, b, strlen(b));
 }
 
+#ifdef HAVE_LIBAIO_H
+
+static pthread_mutex_t getevents_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
+
+/**
+ * a async event handler for libaio
+ * 
+ * The problem:
+ * - poll(..., 1000) is blocking
+ * - getevents(..., 1000) is blocking too
+ * 
+ * I havn't found a way to monitor getevents with poll or friends
+ *
+ * So ... we run io_getevents() and fdevents_poll() at the same time. As long
+ * as the poll() is running io_getevents() running too. 
+ *
+ * The one who finishes earlier fires a kill(getpid(), SIGUSR1); to interrupt 
+ * the other system call. We use mutexes to synchronize the two functions.
+ *
+ * If no io-event is pending, linux_io_getevents_thread() won't be activated
+ */
+static void *linux_io_getevents_thread(void *_data) {
+	server *srv = _data;
+	struct timeval tv;
+
+	while (!srv_shutdown) {
+		struct io_event event[16];
+	        struct timespec io_ts;
+		int res;
+
+		pthread_cond_wait(&getevents_cond, &getevents_mutex);
+
+		if (srv_shutdown) break;
+
+		/* wait one second as the poll() */
+		io_ts.tv_sec = 1;
+	        io_ts.tv_nsec = 0; 
+
+		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
+			int i;
+			for (i = 0; i < res; i++) {
+				connection *con = event[i].data;
+		
+				joblist_append(srv, con);
+				srv->linux_io_waiting--;
+			}
+
+			/* interrupt the poll() */
+			kill(getpid(), SIGUSR1);
+		} else if (res < 0) { 
+			TRACE("getevents - failed: %d", res);
+		}
+
+		pthread_mutex_unlock(&getevents_mutex);
+	}
+
+	return NULL;
+}
+#endif
+
 int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
+	int poll_errno;
+	struct timeval tv;
 
+#ifdef HAVE_LIBAIO_H
+	/* the getevents and the poll() have to run in parallel
+	 * as soon as one has data, it has to interrupt the otherone */
+
+	pthread_t getevents_thread;
+	int is_unlocked = 0;
+
+	pthread_mutex_lock(&getevents_mutex);
+
+	pthread_create(&getevents_thread, NULL, linux_io_getevents_thread, srv);
+#endif
 	/* main-loop */
 	while (!srv_shutdown) {
 		int n;
@@ -455,7 +550,7 @@ int lighty_mainloop(server *srv) {
 			handle_sig_hup = 0;
 
 #if 0
-            			pid_t pid;
+      			pid_t pid;
 
 			/* send the old process into a graceful-shutdown and start a
 			 * new process right away
@@ -705,7 +800,33 @@ int lighty_mainloop(server *srv) {
 			}
 		}
 
-		if ((n = fdevent_poll(srv->ev, 1000)) > 0) {
+#ifdef HAVE_LIBAIO_H
+		if (srv->linux_io_waiting) {
+			pthread_mutex_unlock(&getevents_mutex);
+			pthread_cond_signal(&getevents_cond);
+
+			is_unlocked = 1;
+		}
+		
+		n = fdevent_poll(srv->ev, 1000);
+		poll_errno = errno;
+
+		if (is_unlocked) {
+			/* if the other side didn't interrupted us, we interrupt the getevents() */
+
+			if (n != -1 || poll_errno != EINTR) {
+				kill(getpid(), SIGUSR1);
+			}
+
+			pthread_mutex_lock(&getevents_mutex);
+
+			is_unlocked = 0;
+		}
+#else
+		n = fdevent_poll(srv->ev, 1000);
+#endif
+		
+		if (n > 0) {
 			/* n is the number of events */
 			size_t i;
 			fdevent_get_revents(srv->ev, n, revents);
@@ -775,7 +896,7 @@ int lighty_mainloop(server *srv) {
 		for (ndx = 0; ndx < srv->joblist->used; ndx++) {
 			connection *con = srv->joblist->ptr[ndx];
 			handler_t r;
-
+		
 			connection_state_machine(srv, con);
 
 			switch(r = plugins_call_handle_joblist(srv, con)) {
@@ -795,6 +916,11 @@ int lighty_mainloop(server *srv) {
 
 	fdevent_revents_free(revents);
 
+#ifdef HAVE_LIBAIO_H
+	pthread_mutex_unlock(&getevents_mutex);
+	pthread_cond_signal(&getevents_cond); /* set the thread shutdown */
+	pthread_join(getevents_thread, NULL);
+#endif
 	return 0;
 }
 
@@ -1270,7 +1396,6 @@ int main (int argc, char **argv, char **envp) {
 	memset(&act, 0, sizeof(act));
 	act.sa_handler = SIG_IGN;
 	sigaction(SIGPIPE, &act, NULL);
-	sigaction(SIGUSR1, &act, NULL);
 # if defined(SA_SIGINFO)
 	act.sa_sigaction = sigaction_handler;
 	sigemptyset(&act.sa_mask);
@@ -1285,11 +1410,12 @@ int main (int argc, char **argv, char **envp) {
 	sigaction(SIGHUP,  &act, NULL);
 	sigaction(SIGALRM, &act, NULL);
 	sigaction(SIGCHLD, &act, NULL);
+	sigaction(SIGUSR1, &act, NULL);
 
 #elif defined(HAVE_SIGNAL)
 	/* ignore the SIGPIPE from sendfile() */
 	signal(SIGPIPE, SIG_IGN);
-	signal(SIGUSR1, SIG_IGN);
+	signal(SIGUSR1, signal_handler);
 	signal(SIGALRM, signal_handler);
 	signal(SIGTERM, signal_handler);
 	signal(SIGHUP,  signal_handler);

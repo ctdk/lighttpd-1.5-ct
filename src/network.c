@@ -476,6 +476,8 @@ int network_init(server *srv) {
 		/* lowest id wins */
 #if defined USE_LINUX_SENDFILE
 		{ NETWORK_BACKEND_LINUX_SENDFILE,       "linux-sendfile" },
+#endif
+#if defined USE_LINUX_AIO_SENDFILE
 		{ NETWORK_BACKEND_LINUX_AIO_SENDFILE,   "linux-aio-sendfile" },
 #endif
 #if defined USE_FREEBSD_SENDFILE
@@ -573,6 +575,8 @@ int network_init(server *srv) {
 	case NETWORK_BACKEND_LINUX_SENDFILE:
 		SET_NETWORK_BACKEND(read, linuxsendfile);
 		break;
+#endif
+#ifdef USE_LINUX_AIO_SENDFILE
 	case NETWORK_BACKEND_LINUX_AIO_SENDFILE:
 		SET_NETWORK_BACKEND(read, linuxaiosendfile);
 		break;

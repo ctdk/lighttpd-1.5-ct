@@ -2,7 +2,7 @@
 
 #include "network_backends.h"
 
-#ifdef USE_LINUX_SENDFILE
+#ifdef USE_LINUX_AIO_SENDFILE
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -85,7 +85,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 			do {
 				size_t toSend;
-				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				const size_t max_toSend = 4 * 256 * 1024; /** should be larger than the send buffer */
 
 				toSend = c->file.length - c->offset > max_toSend ?
 					max_toSend : c->file.length - c->offset;

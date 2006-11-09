@@ -12,6 +12,9 @@
 # define USE_LINUX_SENDFILE
 # include <sys/sendfile.h>
 # include <sys/uio.h>
+# if defined HAVE_LIBAIO_H
+#  define USE_LINUX_AIO_SENDFILE
+# endif
 #endif
 
 #if defined HAVE_SYS_UIO_H && defined HAVE_SENDFILE && defined HAVE_WRITEV && defined(__FreeBSD__)

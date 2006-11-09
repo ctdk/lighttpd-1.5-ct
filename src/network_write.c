@@ -89,7 +89,6 @@ NETWORK_BACKEND_READ(read) {
 
 NETWORK_BACKEND_WRITE(write) {
 	chunk *c;
-	size_t chunks_written = 0;
 
 	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
@@ -207,11 +206,8 @@ NETWORK_BACKEND_WRITE(write) {
 
 		if (!chunk_finished) {
 			/* not finished yet */
-
-			break;
+			return NETWORK_STATUS_WAIT_FOR_EVENT;
 		}
-
-		chunks_written++;
 	}
 
 	return NETWORK_STATUS_SUCCESS;

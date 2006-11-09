@@ -177,6 +177,7 @@ if 1:
 			stdint.h 
 			inttypes.h 
 			sys/prctl.h
+			libaio.h
 			sys/wait.h""", "\n"))
 
 	checkFuncs(autoconf, Split('fork stat lstat strftime dup2 getcwd inet_ntoa inet_ntop memset mmap munmap strchr \

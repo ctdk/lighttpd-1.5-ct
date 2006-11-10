@@ -297,7 +297,8 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 
 	fcgi_header(&(header), FCGI_PARAMS, FCGI_NULL_REQUEST_ID, 0, 0);
 	buffer_append_memory(b, (const char *)&header, sizeof(header));
-	out->bytes_in += sizeof(header);
+	b->used++;
+	out->bytes_in += sizeof(header) + 1;
 
 	return 0;
 }

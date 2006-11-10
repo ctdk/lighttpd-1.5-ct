@@ -8,6 +8,14 @@
 #include "log.h"
 #include "fastcgi.h"
 
+
+/** 
+ * we aren't supporting multiplexing
+ *
+ * use always the same request-id
+ */
+#define PROXY_FASTCGI_REQUEST_ID 1
+
 int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	buffer *b;
 
@@ -260,7 +268,7 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 	b = chunkqueue_get_append_buffer(out);
 	/* send FCGI_BEGIN_REQUEST */
 
-	fcgi_header(&(beginRecord.header), FCGI_BEGIN_REQUEST, FCGI_NULL_REQUEST_ID, sizeof(beginRecord.body), 0);
+	fcgi_header(&(beginRecord.header), FCGI_BEGIN_REQUEST, PROXY_FASTCGI_REQUEST_ID, sizeof(beginRecord.body), 0);
 	beginRecord.body.roleB0 = FCGI_RESPONDER;
 	beginRecord.body.roleB1 = 0;
 	beginRecord.body.flags = 0;
@@ -287,7 +295,7 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 		fcgi_env_add(packet, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
 	}
 
-	fcgi_header(&(header), FCGI_PARAMS, FCGI_NULL_REQUEST_ID, packet->used, 0);
+	fcgi_header(&(header), FCGI_PARAMS, PROXY_FASTCGI_REQUEST_ID, packet->used, 0);
 	buffer_append_memory(b, (const char *)&header, sizeof(header));
 	buffer_append_memory(b, (const char *)packet->ptr, packet->used);
 	out->bytes_in += sizeof(header);
@@ -295,7 +303,7 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 
 	buffer_free(packet);
 
-	fcgi_header(&(header), FCGI_PARAMS, FCGI_NULL_REQUEST_ID, 0, 0);
+	fcgi_header(&(header), FCGI_PARAMS, PROXY_FASTCGI_REQUEST_ID, 0, 0);
 	buffer_append_memory(b, (const char *)&header, sizeof(header));
 	b->used++;
 	out->bytes_in += sizeof(header) + 1;
@@ -448,7 +456,7 @@ int proxy_fastcgi_stream_encoder(server *srv, proxy_session *sess, chunkqueue *i
 		 * now take all the request_content chunk that we need to fill this request
 		 */
 		b = chunkqueue_get_append_buffer(out);
-		fcgi_header(&(header), FCGI_STDIN, FCGI_NULL_REQUEST_ID, weWant, 0);
+		fcgi_header(&(header), FCGI_STDIN, PROXY_FASTCGI_REQUEST_ID, weWant, 0);
 		buffer_copy_memory(b, (const char *)&header, sizeof(header) + 1);
 		out->bytes_in += sizeof(header);
 
@@ -523,7 +531,7 @@ int proxy_fastcgi_stream_encoder(server *srv, proxy_session *sess, chunkqueue *i
 		/* send the closing packet */
 		b = chunkqueue_get_append_buffer(out);
 		/* terminate STDIN */
-		fcgi_header(&(header), FCGI_STDIN, FCGI_NULL_REQUEST_ID, 0, 0);
+		fcgi_header(&(header), FCGI_STDIN, PROXY_FASTCGI_REQUEST_ID, 0, 0);
 		buffer_copy_memory(b, (const char *)&header, sizeof(header) + 1);
 
 		out->bytes_in += sizeof(header);

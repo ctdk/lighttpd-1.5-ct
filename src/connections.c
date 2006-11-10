@@ -610,7 +610,6 @@ handler_t connection_handle_read_request_header(server *srv, connection *con)  {
 	switch (network_read(srv, con, con->sock, con->recv_raw)) {
 	case NETWORK_STATUS_SUCCESS:
 		/* we read everything from the socket, do we have a full header ? */
-
 		break;
 	case NETWORK_STATUS_WAIT_FOR_EVENT:
 		fdevent_event_add(srv->ev, con->sock, FDEVENT_IN);
@@ -624,7 +623,6 @@ handler_t connection_handle_read_request_header(server *srv, connection *con)  {
 		ERROR("++ %s", "oops, something went wrong while reading");
 		return HANDLER_ERROR;
 	}
-
 
 	switch (http_request_parse_cq(con->recv_raw, con->http_req)) {
 	case PARSE_ERROR:
@@ -1113,10 +1111,12 @@ int connection_state_machine(server *srv, connection *con) {
 			}
 
 			switch (connection_handle_read_request_header(srv, con)) {
-			case HANDLER_GO_ON:
-				connection_set_state(srv, con, CON_STATE_VALIDATE_REQUEST_HEADER);
+			case HANDLER_GO_ON: /** we have a full header, or connection close */
+				if (con->state == CON_STATE_READ_REQUEST_HEADER) {
+					connection_set_state(srv, con, CON_STATE_VALIDATE_REQUEST_HEADER);
+				}
 				break;
-			case HANDLER_FINISHED:
+			case HANDLER_FINISHED: /** parsing failed, ->http_status is set */
 				connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
 				break;
 			case HANDLER_WAIT_FOR_EVENT:
@@ -1353,11 +1353,10 @@ int connection_state_machine(server *srv, connection *con) {
 				}
 				break;
 			case NETWORK_STATUS_FATAL_ERROR: /* error on our side */
-				TRACE("%s", "(error)");
+				TRACE("%s", "(network-subsys sent us a fatal-error)");
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			case NETWORK_STATUS_CONNECTION_CLOSE: /* remote close */
-				TRACE("%s", "(error)");
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <time.h>
+#include <fcntl.h>
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -140,6 +141,7 @@ int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const 
 		case 0: {
 			char cgi_childs[64];
 			char *b;
+			int max_fd = 0;
 
 			int i = 0;
 
@@ -155,9 +157,19 @@ int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const 
 				close(fcgi_fd);
 			}
 
+			max_fd = open("/dev/null", O_RDWR);
+			close(STDERR_FILENO);
+			dup2(STDERR_FILENO, max_fd);
+			close(max_fd);
+	
+			max_fd = open("/dev/null", O_RDWR);
+			close(STDOUT_FILENO);
+			dup2(STDOUT_FILENO, max_fd);
+			close(max_fd);
+
 			/* we don't need the client socket */
-			for (i = 3; i < 256; i++) {
-				close(i);
+			for (i = 3; i < max_fd; i++) {
+				if (i != FCGI_LISTENSOCK_FILENO) close(i);
 			}
 
 			/* create environment */
@@ -280,7 +292,7 @@ int main(int argc, char **argv) {
        while(-1 != (o = getopt(argc, argv, "c:f:g:hna:p:u:vC:s:P:"))) {
 		switch(o) {
 		case 'f': fcgi_app = optarg; break;
-               case 'a': addr = optarg;/* ip addr */ break;
+		case 'a': addr = optarg;/* ip addr */ break;
 		case 'p': port = strtol(optarg, NULL, 10);/* port */ break;
 		case 'C': child_count = strtol(optarg, NULL, 10);/*  */ break;
 		case 's': unixsocket = optarg; /* unix-domain socket */ break;

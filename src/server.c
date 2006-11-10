@@ -199,7 +199,11 @@ static server *server_init(void) {
 
 #ifdef HAVE_LIBAIO_H 
 	srv->linux_io_ctx = NULL;
-	io_setup(64, &(srv->linux_io_ctx));
+	/**
+	 * we can't call io_setup before the fork() in daemonize()
+	 *
+	 * so we call it in fdevent_reset() instead, as for the kqueue-init
+	 */
 #endif
 
 	return srv;
@@ -431,9 +435,9 @@ static void show_features (void) {
 #endif
       "\n";
 
-  show_version();
+	show_version();
 
-  printf("\nEvent Handlers:\n\n%s", s);
+	printf("\nEvent Handlers:\n\n%s", s);
 }
 
 static void show_help (void) {
@@ -457,7 +461,9 @@ static void show_help (void) {
 ;
 #undef TEXT_SSL
 #undef TEXT_IPV6
-	write(STDOUT_FILENO, b, strlen(b));
+	if (-1 == write(STDOUT_FILENO, b, strlen(b))) {
+		exit(-1);
+	}
 }
 
 #ifdef HAVE_LIBAIO_H
@@ -484,7 +490,6 @@ static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
  */
 static void *linux_io_getevents_thread(void *_data) {
 	server *srv = _data;
-	struct timeval tv;
 
 	while (!srv_shutdown) {
 		struct io_event event[16];
@@ -524,7 +529,6 @@ static void *linux_io_getevents_thread(void *_data) {
 int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
 	int poll_errno;
-	struct timeval tv;
 
 #ifdef HAVE_LIBAIO_H
 	/* the getevents and the poll() have to run in parallel
@@ -1327,7 +1331,9 @@ int main (int argc, char **argv, char **envp) {
 	if (pid_fd != -1) {
 		buffer_copy_long(srv->tmp_buf, getpid());
 		buffer_append_string(srv->tmp_buf, "\n");
-		write(pid_fd, srv->tmp_buf->ptr, srv->tmp_buf->used - 1);
+		if (-1 == write(pid_fd, srv->tmp_buf->ptr, srv->tmp_buf->used - 1)) {
+			ERROR("writing to PID to '%s' failed: %s, ignored", "...", strerror(errno));
+		}
 		close(pid_fd);
 		pid_fd = -1;
 	}
@@ -1508,6 +1514,9 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif
 
+#ifdef HAVE_LIBAIO_H
+	io_setup(64, &(srv->linux_io_ctx));
+#endif
 
 	/* get the current number of FDs */
 	srv->cur_fds = open("/dev/null", O_RDONLY);

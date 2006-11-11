@@ -87,9 +87,9 @@ testenv.Alias('bin-tests', [resptest, reqtest, reqrangetest ] )
 modules = {
 	'mod_access' : { 'src' : [ 'mod_access.c' ] },
 	'mod_alias' : { 'src' : [ 'mod_alias.c' ] },
-	'mod_cgi' : { 'src' : [ 'mod_cgi.c' ] },
-	'mod_fastcgi' : { 'src' : [ 'mod_fastcgi.c' ] },
-	'mod_scgi' : { 'src' : [ 'mod_scgi.c' ] },
+#	'mod_cgi' : { 'src' : [ 'mod_cgi.c' ] },
+#	'mod_fastcgi' : { 'src' : [ 'mod_fastcgi.c' ] },
+#	'mod_scgi' : { 'src' : [ 'mod_scgi.c' ] },
 	'mod_dirlisting' : { 'src' : [ 'mod_dirlisting.c' ], 'lib' : [ env['LIBPCRE'] ] },
 	'mod_staticfile' : { 'src' : [ 'mod_staticfile.c' ] },
 
@@ -97,7 +97,7 @@ modules = {
 	'mod_setenv' : { 'src' : [ 'mod_setenv.c' ] },
 	'mod_rrdtool' : { 'src' : [ 'mod_rrdtool.c' ] },
 	'mod_usertrack' : { 'src' : [ 'mod_usertrack.c' ] },
-	'mod_proxy' : { 'src' : [ 'mod_proxy.c' ] },
+#	'mod_proxy' : { 'src' : [ 'mod_proxy.c' ] },
 	'mod_proxy_core' : { 'src' : [ 
 		'mod_proxy_core.c', 
 		'mod_proxy_core_pool.c', 
@@ -125,9 +125,9 @@ modules = {
 	'mod_sql_vhost_core' : { 'src' : [ 'mod_sql_vhost_core.c' ] },
 	'mod_mysql_vhost' : { 'src' : [ 'mod_mysql_vhost.c' ], 'lib' : [ env['LIBMYSQL'] ] },
 	'mod_trigger_b4_dl' : { 'src' : [ 'mod_trigger_b4_dl.c' ], 'lib' : [ env['LIBPCRE'] ] },
-	'mod_cml' : { 
-		'src' : [ 'mod_cml_lua.c', 'mod_cml.c', 'mod_cml_funcs.c' ], 
-		'lib' : [ env['LIBPCRE'], env['LIBMEMCACHE'], env['LIBLUA'], env['LIBLUALIB'] ] },
+#	'mod_cml' : { 
+#		'src' : [ 'mod_cml_lua.c', 'mod_cml.c', 'mod_cml_funcs.c' ], 
+#		'lib' : [ env['LIBPCRE'], env['LIBMEMCACHE'], env['LIBLUA'], env['LIBLUALIB'] ] },
 	'mod_uploadprogress' : { 'src' : [ 'mod_uploadprogress.c' ] },
 	'mod_evasive' : { 'src' : [ 'mod_evasive.c' ] },
 	'mod_ssi' : { 'src' : [ 'mod_ssi_exprparser.c', 'mod_ssi_expr.c', 'mod_ssi.c' ], 'lib' : [ env['LIBPCRE'] ] },

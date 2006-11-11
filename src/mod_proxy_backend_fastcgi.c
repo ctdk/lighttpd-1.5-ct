@@ -15,6 +15,9 @@
  * use always the same request-id
  */
 #define PROXY_FASTCGI_REQUEST_ID 1
+#if 1
+#define PROXY_FASTCGI_USE_KEEP_ALIVE 1
+#endif
 
 int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	buffer *b;
@@ -263,7 +266,6 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 	size_t i;
 	FCGI_BeginRequestRecord beginRecord;
 	FCGI_Header header;
-	int request_id = 1;
 
 	b = chunkqueue_get_append_buffer(out);
 	/* send FCGI_BEGIN_REQUEST */
@@ -271,7 +273,11 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 	fcgi_header(&(beginRecord.header), FCGI_BEGIN_REQUEST, PROXY_FASTCGI_REQUEST_ID, sizeof(beginRecord.body), 0);
 	beginRecord.body.roleB0 = FCGI_RESPONDER;
 	beginRecord.body.roleB1 = 0;
+#ifdef PROXY_FASTCGI_USE_KEEP_ALIVE
+	beginRecord.body.flags = FCGI_KEEP_CONN;
+#else
 	beginRecord.body.flags = 0;
+#endif
 	memset(beginRecord.body.reserved, 0, sizeof(beginRecord.body.reserved));
 
 	buffer_copy_string_len(b, (const char *)&beginRecord, sizeof(beginRecord));
@@ -328,6 +334,8 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
 	fastcgi_response_packet packet;
 	buffer *b;
 
+	/* no data ? */
+
 	if (!raw->first) return 0;
 
 	packet.b = buffer_init();
@@ -374,29 +382,29 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
 		for (; c && (packet.b->used < packet.len + 1); c = c->next) {
 			size_t weWant = packet.len - (packet.b->used - 1);
 			size_t weHave = c->mem->used - c->offset - offset - 1;
-
+	
 			if (weHave > weWant) weHave = weWant;
-
+	
 			buffer_append_string_len(packet.b, c->mem->ptr + c->offset + offset, weHave);
-
+	
 			/* we only skipped the first 8 bytes as they are the fcgi header */
 			offset = 0;
 		}
-
+	
 		if (packet.b->used < packet.len + 1) {
 			/* we didn't got the full packet */
-
+	
 			buffer_free(packet.b);
-
+	
 			TRACE("%s", "need more");
-
+	
 			return 0;
 		}
-
+	
 		packet.b->used -= packet.padding;
 		packet.b->ptr[packet.b->used - 1] = '\0';
 	}
-
+	
 	/* tag the chunks as read */
 	toread = packet.len + sizeof(FCGI_Header);
 	for (c = raw->first; c && toread; c = c->next) {
@@ -409,11 +417,10 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
 			toread = 0;
 		}
 	}
-
+	
 	chunkqueue_remove_finished_chunks(raw);
-
+	
 	/* we are still here ? */
-
 	switch (packet.type) {
 	case FCGI_STDOUT:
 		b = chunkqueue_get_append_buffer(decoded);
@@ -427,14 +434,19 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
 		buffer_free(packet.b);
 		return 0;
 	case FCGI_END_REQUEST:
+#ifndef PROXY_FASTCGI_USE_KEEP_ALIVE
+		sess->is_closing = 1;
+#endif
 		buffer_free(packet.b);
 		return 1;
 	default:
 		buffer_free(packet.b);
-
+	
 		TRACE("unknown packet.type: %d", packet.type);
 		return -1;
 	}
+
+	return 0;
 }
 
 /**
@@ -560,12 +572,11 @@ parse_status_t proxy_fastcgi_parse_response_header(server *srv, connection *con,
 		old_len = chunkqueue_length(sess->recv);
 		/* decode the packet */
 		switch (proxy_fastcgi_stream_decoder(srv, sess, cq, sess->recv)) {
-		case 0:
-			/* STDERR + STDOUT */
+		case 0: /* STDERR + STDOUT */
 			break;
-		case 1:
-			/* the FIN packet was catched, why ever */
-			return PARSE_ERROR;
+		case 1: /* the FIN packet was catched too, we parse all in one */
+			con->send->is_closed = 1;
+			break;
 		case -1:
 			return PARSE_ERROR;
 		}

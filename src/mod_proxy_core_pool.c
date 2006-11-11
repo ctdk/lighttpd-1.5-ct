@@ -34,7 +34,7 @@ proxy_connection_pool *proxy_connection_pool_init(void) {
 	 * this should match max-procs if we manage the procs ourself
        	 */
 
-	pool->max_size = 8;
+	pool->max_size = 1;
 
 	return pool;
 }

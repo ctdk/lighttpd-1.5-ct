@@ -42,7 +42,11 @@ int config_insert_values_internal(server *srv, array *ca, const config_values_t 
 
 				for (j = 0; j < da->value->used; j++) {
 					if (da->value->data[j]->type == TYPE_STRING) {
-						data_string *ds = data_string_init();
+						data_string *ds;
+			
+						if (NULL == (ds = (data_string *)array_get_unused_element(cv[i].destination, TYPE_STRING))) {
+							ds = data_string_init();
+						}
 
 						buffer_copy_string_buffer(ds->value, ((data_string *)(da->value->data[j]))->value);
 						if (!da->is_index_key) {

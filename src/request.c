@@ -469,7 +469,9 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			}
 		}
 
-		hdr = data_string_init();
+		if (NULL == (hdr = (data_string *)array_get_unused_element(con->request.headers, TYPE_STRING))) {
+			hdr = data_string_init();
+		}
 
 		buffer_copy_string_buffer(hdr->key, ds->key);
 		buffer_copy_string_buffer(hdr->value, ds->value);

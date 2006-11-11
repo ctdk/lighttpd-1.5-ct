@@ -407,6 +407,22 @@ if test "$WITH_LUA" != "no"; then
  AC_SUBST(LUA_LIBS)
 fi
 
+dnl Check for memcache
+AC_MSG_CHECKING(for libaio)
+AC_ARG_WITH(linux-aio, AC_HELP_STRING([--with-linux-aio],[Async IO support for Linux via libaio]),
+[WITH_LINUXLIBAIO=$withval],[WITH_LINUXLIBAIO=no])
+AC_MSG_RESULT([$WITH_LINUXLIBAIO])
+if test "$WITH_LINUXLIBAIO" != "no"; then
+ AC_CHECK_LIB(aio, io_submit, [
+         AC_CHECK_HEADERS([libaio.h],[
+                 AIO_LIB="-laio -pthread"
+                 AC_DEFINE([HAVE_LIBAIO], [1], [libaio])
+		 AC_DEFINE([HAVE_LIBAIO_H], [1], [libaio.h])
+         ])
+ ])
+ AC_SUBST(AIO_LIB)
+fi
+ 
 save_LIBS=$LIBS
 AC_SEARCH_LIBS(crypt,crypt,[
   AC_CHECK_HEADERS([crypt.h],[
@@ -645,6 +661,14 @@ if test "x$UUID_LIB" \!= x; then
 else
 	disable_feature="$disable_feature $features"
 fi
+
+features="linux-libaio"
+if test ! "x$AIO_LIB" = x; then
+	enable_feature="$enable_feature $features"
+else
+	disable_feature="$disable_feature $features"
+fi
+
 
 
 ## output

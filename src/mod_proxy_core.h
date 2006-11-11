@@ -97,6 +97,8 @@ typedef struct {
 	proxy_state_t state;
 
 	time_t connect_start_ts;
+
+	int sent_to_backlog;
 } proxy_session;
 
 void proxy_set_header(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);

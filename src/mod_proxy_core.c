@@ -55,8 +55,8 @@ INIT_FUNC(mod_proxy_core_init) {
 	/* create some backends as long as we don't have the config-parser */
 
 	p->possible_balancers = array_init();
-	array_insert_int(p->possible_balancers, "fair", PROXY_BALANCE_FAIR);
-	array_insert_int(p->possible_balancers, "hash", PROXY_BALANCE_HASH);
+	array_insert_int(p->possible_balancers, "sqf", PROXY_BALANCE_SQF);
+	array_insert_int(p->possible_balancers, "carp", PROXY_BALANCE_CARP);
 	array_insert_int(p->possible_balancers, "round-robin", PROXY_BALANCE_RR);
 
 	p->possible_protocols = array_init();
@@ -73,6 +73,17 @@ INIT_FUNC(mod_proxy_core_init) {
 	p->tmp_buf = buffer_init();
 
 	p->resp = http_response_init();
+#if 0
+	/**
+	 * create a small pool of session objects
+	 *
+	 * instead of creating new one each time, 
+	 * cleanup old ones and put them into the pool
+	 *
+	 * 8 clean items should be enough at a time, destroy the other ones
+	 */
+	p->session_pool = proxy_session_pool_init();
+#endif
 
 	return p;
 }
@@ -110,6 +121,9 @@ FREE_FUNC(mod_proxy_core_free) {
 	buffer_free(p->tmp_buf);
 	
 	http_response_free(p->resp);
+#if 0
+	proxy_session_pool_free(p->session_pool);
+#endif
 
 	free(p);
 
@@ -319,6 +333,35 @@ proxy_session *proxy_session_init(void) {
 	sess->send_response_content = 1;
 
 	return sess;
+}
+
+void proxy_session_reset(proxy_session *sess) {
+	if (!sess) return;
+
+	array_reset(sess->request_headers);
+	array_reset(sess->env_headers);
+
+	chunkqueue_reset(sess->recv);
+	chunkqueue_reset(sess->recv_raw);
+	chunkqueue_reset(sess->send_raw);
+	chunkqueue_reset(sess->send);
+
+	sess->state = PROXY_STATE_UNSET;
+
+	sess->is_chunked = 0;
+	sess->send_response_content = 1;
+
+	sess->bytes_read = 0;
+	sess->connect_start_ts = 0;
+	sess->content_length = 0;
+	sess->internal_redirect_count = 0;
+	sess->do_internal_redirect = 0;
+	sess->is_closing = 0;
+	sess->send_response_content = 0;
+
+	sess->remote_con = NULL;
+	sess->proxy_con = NULL;
+	sess->proxy_backend = NULL;
 }
 
 void proxy_session_free(proxy_session *sess) {
@@ -978,7 +1021,7 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 	int active_addresses = 0, rand_ndx;
 
 	switch(backend->balancer) {
-	case PROXY_BALANCE_HASH:
+	case PROXY_BALANCE_CARP:
 		/* hash balancing */
 
 		for (i = 0, last_max = ULONG_MAX; i < address_pool->used; i++) {
@@ -1006,8 +1049,8 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 		}
 
 		break;
-	case PROXY_BALANCE_FAIR:
-		/* fair balancing */
+	case PROXY_BALANCE_SQF:
+		/* shortest-queue-first balancing */
 
 		for (i = 0; i < address_pool->used; i++) {
 			cur_address = address_pool->ptr[i];

@@ -59,6 +59,10 @@
 #include <sys/prctl.h>
 #endif
 
+#ifdef USE_OPENSSL
+#include <openssl/err.h>
+#endif
+
 #ifndef __sgi
 /* IRIX doesn't like the alarm based time() optimization */
 /* #define USE_ALARM */
@@ -293,7 +297,14 @@ static void server_free(server *srv) {
 
 	array_free(srv->srvconf.modules);
 	array_free(srv->split_vals);
-
+#ifdef USE_OPENSSL
+	if (srv->ssl_is_init) {
+		CRYPTO_cleanup_all_ex_data();
+		ERR_free_strings();
+		ERR_remove_state(0);
+		EVP_cleanup();
+	}
+#endif
 	free(srv);
 }
 

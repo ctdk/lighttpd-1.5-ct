@@ -57,8 +57,9 @@ typedef struct {
 	handler_t (* handle_docroot)         (server *srv, connection *con, void *p_d);    /* getting the document-root (e.g. mod_simple_vhost) */
 	handler_t (* handle_physical)        (server *srv, connection *con, void *p_d);    /* mapping url to physical path (e.g. mod_alias, mod_proxy_core) */
 	handler_t (* handle_start_backend)   (server *srv, connection *con, void *p_d);    /* file exists locally (e.g. mod_staticfile) */
-	handler_t (* handle_send_request_content)(server *srv, connection *con, void *p_d);    /* a handler for the request content */
+	handler_t (* handle_send_request_content)(server *srv, connection *con, void *p_d); /* a handler for the request content */
 	handler_t (* handle_response_header) (server *srv, connection *con, void *p_d);    /* a handler for the request content */
+	handler_t (* handle_read_response_content)(server *srv, connection *con, void *p_d); /* read the content from the source and push it to the next queue */
 	handler_t (* handle_response_done)   (server *srv, connection *con, void *p_d);    /* after the response is sent (e.g. mod_accesslog) */
 	handler_t (* connection_reset)       (server *srv, connection *con, void *p_d);    /* end of a request-response cycle (mod_acceslog, mod_proxy_core) */
 	handler_t (* handle_connection_close)(server *srv, connection *con, void *p_d);    /* at the end of a connection [remove-me ?] */
@@ -82,6 +83,7 @@ handler_t plugins_call_handle_physical(server *srv, connection *con);
 handler_t plugins_call_handle_start_backend(server *srv, connection *con);
 handler_t plugins_call_handle_send_request_content(server *srv, connection *con);
 handler_t plugins_call_handle_response_header(server *srv, connection *con);
+handler_t plugins_call_handle_read_response_content(server *srv, connection *con);
 handler_t plugins_call_handle_response_done(server *srv, connection *con);
 handler_t plugins_call_handle_connection_close(server *srv, connection *con);
 handler_t plugins_call_handle_joblist(server *srv, connection *con);

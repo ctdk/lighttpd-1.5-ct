@@ -1257,7 +1257,7 @@ int connection_state_machine(server *srv, connection *con) {
 				case HANDLER_GO_ON:
 					break;
 				case HANDLER_ERROR:
-				TRACE("%s", "(error)");
+					TRACE("%s", "(error)");
 					connection_set_state(srv, con, CON_STATE_ERROR);
 					break;
 				case HANDLER_WAIT_FOR_EVENT:
@@ -1335,6 +1335,14 @@ int connection_state_machine(server *srv, connection *con) {
 			 * - chunking
 			 * - compression
 			 */
+
+			/* looks like we shall read some content from the backend */
+
+			switch (plugins_call_handle_read_response_content(srv, con)) {
+			case HANDLER_GO_ON:
+			default:
+				break;
+			}
 
 			http_stream_encoder(srv, con, con->send, con->send_raw);
 

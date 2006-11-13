@@ -460,6 +460,8 @@ CONNECTION_FUNC(mod_staticfile_dev_null) {
 	chunk *c;
 	off_t offset;
 	chunkqueue *in = con->recv;
+	
+	if (con->mode != DIRECT) return HANDLER_GO_ON;
 
 	/* there is nothing that we have to send out anymore */
 	if (in->bytes_in == in->bytes_out && 

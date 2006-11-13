@@ -1267,7 +1267,6 @@ int connection_state_machine(server *srv, connection *con) {
 				}
 
 				if (con->recv->bytes_in == con->request.content_length) {
-					TRACE("%s", "read-content-done");
 					/* we read everything */
 					fdevent_event_del(srv->ev, con->sock);
 					con->recv->is_closed = 1;

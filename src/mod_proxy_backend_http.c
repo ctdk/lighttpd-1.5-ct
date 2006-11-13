@@ -273,6 +273,8 @@ int proxy_http_get_request_chunk(server *srv, connection *con, plugin_data *p, p
 	}
 
 	BUFFER_APPEND_STRING_CONST(b, "\r\n");
+
+	cq->bytes_in += b->used - 1;
 	
 	return 0;
 }

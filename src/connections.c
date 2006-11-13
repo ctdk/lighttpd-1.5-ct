@@ -1003,7 +1003,7 @@ int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue
 			}
 			chunkqueue_append_mem(out, "\r\n", 2 + 1);
 		}
-		if (in->is_closed) http_chunk_append_len(out, 0);
+		if (in->is_closed) chunkqueue_append_mem(out, "0\r\n\r\n", 5 + 1);
 	} else {
 		for (c = in->first; c; c = c->next) {
 			switch (c->type) {

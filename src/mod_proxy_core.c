@@ -921,11 +921,11 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 		chunkqueue_remove_finished_chunks(sess->recv_raw);
 
-		if (sess->recv_raw->is_closed != 0 &&
+		if (!sess->recv_raw->is_closed &&
 		    (sess->recv_raw->first == NULL || 
 		     sess->recv_raw->bytes_in == sess->recv_raw->bytes_out)) {
 			/* we have to read more data */
-		
+
 			switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
 			case NETWORK_STATUS_CONNECTION_CLOSE:
 				fdevent_event_del(srv->ev, sess->proxy_con->sock);
@@ -937,8 +937,10 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			case NETWORK_STATUS_SUCCESS:
 				/* read even more, do we have all the content */
-
 				break;
+			case NETWORK_STATUS_WAIT_FOR_EVENT:
+				fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_IN);
+				return HANDLER_WAIT_FOR_EVENT;
 			default:
 				ERROR("%s", "oops, we failed to read");
 				break;

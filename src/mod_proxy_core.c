@@ -831,6 +831,8 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			TRACE("%s", "(con-close)");
 			return HANDLER_ERROR;
+		case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
+			return HANDLER_WAIT_FOR_EVENT;
 		default:
 			TRACE("%s", "(error)");
 			return HANDLER_ERROR;

@@ -47,18 +47,7 @@ handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 	 *
 	 * we jump out after 100 to give the waiting connections a chance */
 	for (loops = 0; loops < 100 && NULL != (con = connection_accept(srv, srv_socket)); loops++) {
-		handler_t r;
-
-		connection_state_machine(srv, con);
-
-		switch(r = plugins_call_handle_joblist(srv, con)) {
-		case HANDLER_FINISHED:
-		case HANDLER_GO_ON:
-			break;
-		default:
-			log_error_write(srv, __FILE__, __LINE__, "d", r);
-			break;
-		}
+		joblist_append(srv, con);
 	}
 	return HANDLER_GO_ON;
 }

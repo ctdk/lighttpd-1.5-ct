@@ -874,6 +874,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 			/* we were stopped _before_ we had a connection */
 		case ECONNABORTED: /* this is a FreeBSD thingy */
 			/* we were stopped _after_ we had a connection */
+		case EMFILE: /* we are out of FDs */
 			break;
 		default:
 			ERROR("accept failed on fd=%d with error: (%d) %s", srv_socket->sock->fd, errno, strerror(errno));

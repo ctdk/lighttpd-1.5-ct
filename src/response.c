@@ -529,15 +529,18 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			case ENOTDIR:
 				/* PATH_INFO ! :) */
 				break;
+			case EMFILE:
+				return HANDLER_WAIT_FOR_FD;
 			default:
 				/* we have no idea what happened, so tell the user. */
 				con->http_status = 500;
-				buffer_reset(con->physical.path);
 
-				log_error_write(srv, __FILE__, __LINE__, "ssbsb",
-						"file not found ... or so: ", strerror(errno),
-						con->uri.path,
-						"->", con->physical.path);
+				ERROR("checking file '%s' (%s) failed: %d (%s) -> sending status 500", 
+					BUF_STR(con->uri.path),
+					BUF_STR(con->physical.path),
+					errno, strerror(errno));
+				
+				buffer_reset(con->physical.path);
 
 				return HANDLER_FINISHED;
 			}

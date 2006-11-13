@@ -789,7 +789,7 @@ int lighty_mainloop(server *srv) {
 				} else if (srv->conns->used > srv->max_conns) {
 					log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, connection limit reached");
 				} else {
-					log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, out-of-fds");
+					log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, out-of-fds (you may want to raise server.max-fds)");
 				}
 
 				srv->sockets_disabled = 1;

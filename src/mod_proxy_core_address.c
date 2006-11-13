@@ -11,6 +11,7 @@ proxy_address *proxy_address_init(void) {
 	address = calloc(1, sizeof(*address));
 
 	address->name = buffer_init();
+	address->used = 0;
 
 	return address;
 }

@@ -19,6 +19,8 @@ proxy_connection * proxy_connection_init(void) {
 void proxy_connection_free(proxy_connection *con) {
 	if (!con) return;
 
+	con->address->used--;
+
 	iosocket_free(con->sock);
 
 	free(con);
@@ -105,9 +107,12 @@ proxy_connection_pool_t proxy_connection_pool_get_connection(proxy_connection_po
 	}
 
 	if (i == pool->used) {
-		/* no idling connection found */
+		/* no idling connection found
+		 *
+		 * check if we can open another connection to this address
+		 */
 
-		if (pool->used == pool->max_size) return PROXY_CONNECTIONPOOL_FULL;
+		if (address->used == pool->max_size) return PROXY_CONNECTIONPOOL_FULL;
 		
 		proxy_con = proxy_connection_init();
 
@@ -118,6 +123,9 @@ proxy_connection_pool_t proxy_connection_pool_get_connection(proxy_connection_po
 	} else {
 		proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
 	}
+
+	/* inc. the use-counter of the address */
+	proxy_con->address->used++;
 
 	*rcon = proxy_con;
 

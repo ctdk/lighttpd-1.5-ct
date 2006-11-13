@@ -20,6 +20,8 @@ typedef struct {
 	time_t last_used;
 	time_t disabled_until;
 
+	size_t used; /* count of connections currently using this address */
+
 	proxy_address_state_t state;
 } proxy_address;
 

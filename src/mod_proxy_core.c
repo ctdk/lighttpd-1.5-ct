@@ -756,7 +756,6 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			}
 
 			sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
-
 			sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
 			return HANDLER_COMEBACK;
 		}
@@ -1021,6 +1020,7 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 	unsigned long last_max; /* for the HASH balancer */
 	proxy_address *address = NULL, *cur_address = NULL;
 	int active_addresses = 0, rand_ndx;
+	size_t min_used;
 
 	switch(backend->balancer) {
 	case PROXY_BALANCE_CARP:
@@ -1054,16 +1054,16 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 	case PROXY_BALANCE_SQF:
 		/* shortest-queue-first balancing */
 
-		for (i = 0; i < address_pool->used; i++) {
+		for (i = 0, min_used = SIZE_MAX; i < address_pool->used; i++) {
 			cur_address = address_pool->ptr[i];
 
 			if (cur_address->state != PROXY_ADDRESS_STATE_ACTIVE) continue;
 
 			/* the address is up, use it */
-
-			address = cur_address;
-
-			break;
+			if (cur_address->used < min_used ) {
+				address = cur_address;
+				min_used = cur_address->used;
+			}
 		}
 
 		break;

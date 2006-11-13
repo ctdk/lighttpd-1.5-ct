@@ -641,6 +641,7 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 
 		if (buffer_is_equal_string(ds->key, CONST_STR_LEN("Connection"))) continue;
 		if (buffer_is_equal_string(ds->key, CONST_STR_LEN("Keep-Alive"))) continue;
+		if (buffer_is_equal_string(ds->key, CONST_STR_LEN("Expect"))) continue;
 
 		for (k = 0; k < p->conf.request_rewrites->used; k++) {
 			proxy_rewrite *rw = p->conf.request_rewrites->ptr[k];

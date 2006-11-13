@@ -326,7 +326,7 @@ typedef struct {
 	size_t   request_id;
 } fastcgi_response_packet;
 
-int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw, chunkqueue *decoded) {
+static int proxy_fastcgi_stream_decoder_internal(server *srv, proxy_session *sess, chunkqueue *raw, chunkqueue *decoded) {
 	chunk *	c;
 	size_t offset = 0;
 	size_t toread = 0;
@@ -407,6 +407,8 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
 	
 	/* tag the chunks as read */
 	toread = packet.len + sizeof(FCGI_Header);
+	raw->bytes_out += toread;
+
 	for (c = raw->first; c && toread; c = c->next) {
 		if (c->mem->used - c->offset - 1 <= toread) {
 			/* we read this whole buffer, move it to unused */
@@ -447,6 +449,16 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
 	}
 
 	return 0;
+}
+
+int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw, chunkqueue *decoded) {
+	int res;
+
+	do {
+		res = proxy_fastcgi_stream_decoder_internal(srv, sess, raw, decoded);
+	} while (raw->first && res == 0);
+
+	return res;
 }
 
 /**
@@ -571,7 +583,7 @@ parse_status_t proxy_fastcgi_parse_response_header(server *srv, connection *con,
 	do {
 		old_len = chunkqueue_length(sess->recv);
 		/* decode the packet */
-		switch (proxy_fastcgi_stream_decoder(srv, sess, cq, sess->recv)) {
+		switch (proxy_fastcgi_stream_decoder_internal(srv, sess, cq, sess->recv)) {
 		case 0: /* STDERR + STDOUT */
 			break;
 		case 1: /* the FIN packet was catched too, we parse all in one */

@@ -176,7 +176,8 @@ int proxy_http_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, 
 
 			if (weHave > weWant) weHave = weWant;
 
-			chunkqueue_append_file(out, c->file.name, c->offset, weHave);
+			/** steal the chunk from the incoming chunkqueue */	
+			chunkqueue_steal_tempfile(out, c);
 
 			c->offset += weHave;
 			in->bytes_out += weHave;

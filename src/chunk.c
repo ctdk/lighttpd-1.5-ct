@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <assert.h>
 
 #include "chunk.h"
 
@@ -185,6 +186,27 @@ int chunkqueue_append_file(chunkqueue *cq, buffer *fn, off_t offset, off_t len) 
 	c->file.start = offset;
 	c->file.length = len;
 	c->offset = 0;
+
+	chunkqueue_append_chunk(cq, c);
+
+	return 0;
+}
+
+int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in) {
+	chunk *c;
+
+	assert(in->type == FILE_CHUNK);
+	assert(in->file.is_temp == 1);
+	
+	c = chunkqueue_get_unused_chunk(cq);
+
+	c->type = FILE_CHUNK;
+	buffer_copy_string_buffer(c->file.name, in->file.name);
+	c->file.start = in->offset;
+	c->file.length = in->file.length - c->file.start - in->offset;
+	c->offset = 0;
+	c->file.is_temp = 1;
+	in->file.is_temp = 0;
 
 	chunkqueue_append_chunk(cq, c);
 

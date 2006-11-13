@@ -71,10 +71,12 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT))) {
-					log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
+					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
-					return -1;
+					return NETWORK_STATUS_FATAL_ERROR;
 				}
+
+				srv->cur_fds++;
 			
 				if (offset) lseek(c->file.fd, offset, SEEK_SET);
 
@@ -86,20 +88,18 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 			do {
 				size_t toSend;
 				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				int file_fd;
 
 				toSend = c->file.length - c->offset > max_toSend ?
 					max_toSend : c->file.length - c->offset;
 
 				if (-1 == c->file.copy.fd || 0 == c->file.copy.length) {
         
-					struct io_event event;
 					struct iocb iocb;
 			        	struct iocb *iocbs[] = { &iocb };
-				        /* 30 second timeout should be enough */
-				        struct timespec io_ts;
-					int io_is_ready = 0;
 
 					int res;
+					int async_error = 0;
 				
 					c->file.copy.offset = 0; 
 					c->file.copy.length = toSend;
@@ -109,52 +109,87 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 						/* open a file in /dev/shm to write to */
 						strcpy(tmpfile_name, "/dev/shm/XXXXXX");
-						c->file.copy.fd = mkstemp(tmpfile_name);
-						unlink(tmpfile_name); /* remove the file again, we still keep it open */
-						ftruncate(c->file.copy.fd, toSend);
-
-						c->file.mmap.offset = 0;
-						c->file.mmap.length = toSend;
-						c->file.mmap.start = mmap(0, c->file.mmap.length, PROT_READ | PROT_WRITE, MAP_SHARED, c->file.copy.fd, 0);
-				
-						assert(c->file.mmap.start != MAP_FAILED);
-					}
-
-					/* copy the 64k of the file to the tmp-file in shm */
-					io_prep_pread(&iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, 0);
-					iocb.data = con;
-        	
-					assert(1 == io_submit(srv->linux_io_ctx, 1, iocbs));
-
-					io_ts.tv_sec = 0;
-				        io_ts.tv_nsec = 0;
-
-					srv->linux_io_waiting++;
-#if 0
-					while (srv->linux_io_waiting && 1 == io_getevents(srv->linux_io_ctx, 0, 1, &event, &io_ts)) {
-						connection *io_con = event.data;
-
-						srv->linux_io_waiting--;
-
-						if (io_con == con) {
-							io_is_ready = 1;
-							break;
+						if (-1 == (c->file.copy.fd = mkstemp(tmpfile_name))) {
+							async_error = 1;
+					
+							if (errno != EMFILE) {	
+								TRACE("mkstemp returned: %d (%s), open fds: %d, falling back to sync-io", 
+									errno, strerror(errno), srv->cur_fds);
+							}
 						}
 
-						/* this is not our connection, active the other one */
-						joblist_append(srv, io_con);
+						if (!async_error) {
+							srv->cur_fds++;
+							unlink(tmpfile_name); /* remove the file again, we still keep it open */
+							if (0 != ftruncate(c->file.copy.fd, toSend)) {
+								/* disk full ... */
+								async_error = 1;
+								
+								TRACE("ftruncate returned: %d (%s), open fds: %d, falling back to sync-io", 
+									errno, strerror(errno), srv->cur_fds);
+							}
+						}
+
+						if (!async_error) {
+							c->file.mmap.offset = 0;
+							c->file.mmap.length = toSend;
+							c->file.mmap.start = mmap(0, c->file.mmap.length, PROT_READ | PROT_WRITE, MAP_SHARED, c->file.copy.fd, 0);
+							if (c->file.mmap.start == MAP_FAILED) {
+								async_error = 1;
+							}
+						}
 					}
-#endif
-					if (!io_is_ready) return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+
+        
+					/* looks like we couldn't get a temp-file [disk-full] */	
+					if (async_error == 0 && -1 != c->file.copy.fd) {
+						io_prep_pread(&iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, 0);
+						iocb.data = con;
+
+					       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
+							srv->linux_io_waiting++;
+
+							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+						} else {
+							if (-res != EAGAIN) {
+								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
+									res, strerror(-res), srv->linux_io_waiting);
+							}
+						}
+					}
+
+					/* oops, looks like the IO-queue is full
+					 *
+					 * how do we get woken up as soon as the queue free's up ?
+					 */
+
+					if (c->file.mmap.start != MAP_FAILED) {
+						munmap(c->file.mmap.start, c->file.mmap.length);
+						c->file.mmap.start = MAP_FAILED;
+					}
+					if (c->file.copy.fd != -1) {
+						close(c->file.copy.fd);
+						srv->cur_fds--;
+						c->file.copy.fd = -1;
+					}
+
+					c->file.copy.length = 0;
+					c->file.copy.offset = 0;
 				} else if (c->file.copy.offset == 0) {
 					/* we are finished */
 				}
 
-				offset = c->file.copy.offset;
-				toSend = c->file.copy.length - offset;
+				if (c->file.copy.fd == -1) {
+					file_fd = c->file.fd;
+				} else {
+					file_fd = c->file.copy.fd;
+
+					offset = c->file.copy.offset;
+					toSend = c->file.copy.length - offset;
+				}
 
 				/* send the tmp-file from /dev/shm/ */
-				if (-1 == (r = sendfile(sock->fd, c->file.copy.fd, &offset, toSend))) {
+				if (-1 == (r = sendfile(sock->fd, file_fd, &offset, toSend))) {
 					switch (errno) {
 					case EAGAIN:
 					case EINTR:
@@ -176,10 +211,15 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 				c->offset += r; /* global offset in the file */
 				cq->bytes_out += r;
-				c->file.copy.offset += r; /* local offset in the mmap file */
 
-				if (c->file.copy.offset == c->file.copy.length) {
-					c->file.copy.length = 0; /* reset the length and let the next round fetch a new item */
+				if (c->file.copy.fd == -1) {
+					/* ... */
+				} else {
+					c->file.copy.offset += r; /* local offset in the mmap file */
+
+					if (c->file.copy.offset == c->file.copy.length) {
+						c->file.copy.length = 0; /* reset the length and let the next round fetch a new item */
+					}
 				}
 
 				if (c->offset == c->file.length) {
@@ -188,11 +228,13 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					if (c->file.copy.fd != -1) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;
+						srv->cur_fds--;
 					}
 
 					if (c->file.fd != -1) {
 						close(c->file.fd);
 						c->file.fd = -1;
+						srv->cur_fds--;
 					}
 				}
 

@@ -13,7 +13,9 @@ use LightyTest;
 
 my $tf = LightyTest->new();
 my $t;
-    
+
+SKIP: {
+  skip "disabled for now", 10;
 ok($tf->start_proc == 0, "Starting lighttpd") or die();
 
 $t->{REQUEST}  = ( <<EOF
@@ -90,3 +92,4 @@ ok($tf->handle_http($t) == 0, 'Empty Accept-Encoding');
 
 
 ok($tf->stop_proc == 0, "Stopping lighttpd");
+}

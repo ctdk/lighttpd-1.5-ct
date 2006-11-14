@@ -242,10 +242,10 @@ if 1:
 		if autoconf.CheckLibWithHeader('uuid', 'uuid/uuid.h', 'C'):
 			autoconf.env.Append(CPPFLAGS = [ '-DHAVE_UUID_H' ], LIBUUID = 'uuid')
 
-	ol = env['LIBS']
-	if autoconf.CheckLibWithHeader('fcgi', 'fastcgi.h', 'C'):
-		autoconf.env.Append(LIBFCGI = 'fcgi')
-	env['LIBS'] = ol
+	## ol = env['LIBS']
+	## if autoconf.CheckLibWithHeader('fcgi', 'fastcgi.h', 'C'):
+	##	autoconf.env.Append(LIBFCGI = 'fcgi')
+	## env['LIBS'] = ol
 
 	ol = env['LIBS']
 	if autoconf.CheckLibWithHeader('dl', 'dlfcn.h', 'C'):

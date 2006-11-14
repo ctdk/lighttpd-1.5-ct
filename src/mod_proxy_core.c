@@ -677,7 +677,6 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 	return 0;
 }
 
-
 /* we are event-driven
  * 
  * the first entry is connect() call, if the doesn't need a event 
@@ -980,10 +979,20 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			if (sess->send_response_content) {
 				/* X-Sendfile ignores the content-body */
-				chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
+				if (c->offset == 0) {
+					/* steal the buffer from the previous queue */
+
+					chunkqueue_steal_chunk(con->send, c);
+				} else {
+					chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
+			
+					c->offset = c->mem->used - 1; /* mark the incoming side as read */
+				}
+			} else {
+				/* discard the data */
+				c->offset = c->mem->used - 1; /* mark the incoming side as read */
 			}
 
-			c->offset = c->mem->used - 1;
 
 		}
 		chunkqueue_remove_finished_chunks(sess->recv);

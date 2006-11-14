@@ -1010,8 +1010,12 @@ int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue
 			case MEM_CHUNK:
 				if (c->mem->used == 0) continue;
 
-				chunkqueue_append_buffer(out, c->mem);
-				c->offset = c->mem->used - 1;
+				if (c->offset == 0) {
+					chunkqueue_steal_chunk(out, c);
+				} else {
+					chunkqueue_append_buffer(out, c->mem);
+					c->offset = c->mem->used - 1;
+				}
 				break;
 			case FILE_CHUNK:
 				if (c->file.length == 0) continue;

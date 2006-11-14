@@ -128,13 +128,21 @@ int proxy_http_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw,
 
 			if (c->mem->used == 0) continue;
 		       
-			b = chunkqueue_get_append_buffer(decoded);
+			decoded->bytes_in += c->mem->used - c->offset - 1;
+			raw->bytes_out += c->mem->used - c->offset - 1;
 
 			sess->bytes_read += c->mem->used - c->offset - 1;
 
-			buffer_copy_string_len(b, c->mem->ptr + c->offset, c->mem->used - c->offset - 1);
+			if (c->offset == 0) {
+				/* we are copying the whole buffer, just steal it */
 
-			c->offset = c->mem->used - 1;
+				chunkqueue_steal_chunk(decoded, c);
+			} else {
+				b = chunkqueue_get_append_buffer(decoded);
+				buffer_copy_string_len(b, c->mem->ptr + c->offset, c->mem->used - c->offset - 1);
+				c->offset = c->mem->used - 1; /* marks is read */
+			}
+
 
 			if (sess->bytes_read == sess->content_length) {
 				break;

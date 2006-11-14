@@ -213,6 +213,34 @@ int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in) {
 	return 0;
 }
 
+int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c) {
+	/* we are copying the whole buffer, just steal it */
+	size_t len;
+	char *s;
+	buffer *b;
+
+	if (!cq) return 0;
+
+	b = chunkqueue_get_append_buffer(cq);
+
+	len = b->used;
+	b->used = c->mem->used;
+	c->mem->used = len;
+
+	len = b->size;
+	b->size = c->mem->size;
+	c->mem->size = len;
+
+	s = b->ptr;
+	b->ptr = c->mem->ptr;
+	c->mem->ptr = s;
+
+	c->offset = 0; /* mark as read */
+
+	return 0;
+}
+
+
 int chunkqueue_append_buffer(chunkqueue *cq, buffer *mem) {
 	chunk *c;
 

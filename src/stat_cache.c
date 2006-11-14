@@ -97,6 +97,7 @@ stat_cache *stat_cache_init(void) {
 	fc = calloc(1, sizeof(*fc));
 
 	fc->dir_name = buffer_init();
+	fc->hash_key = buffer_init();
 #ifdef HAVE_FAM_H
 	fc->fam = calloc(1, sizeof(*fc->fam));
 	fc->sock = iosocket_init();
@@ -171,6 +172,7 @@ void stat_cache_free(stat_cache *sc) {
 	}
 
 	buffer_free(sc->dir_name);
+	buffer_free(sc->hash_key);
 
 #ifdef HAVE_FAM_H
 	while (sc->dirs) {
@@ -246,7 +248,7 @@ handler_t stat_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 			FAMEvent fe;
 			fam_dir_entry *fam_dir;
 			splay_tree *node;
-			int ndx;
+			int ndx, j;
 
 			FAMNextEvent(sc->fam, &fe);
 
@@ -264,20 +266,25 @@ handler_t stat_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 				/* file/dir is still here */
 				if (fe.code == FAMChanged) break;
 
-				buffer_copy_string(sc->dir_name, fe.filename);
+				/* we have 2 versions, follow and no-follow-symlink */
 
-				ndx = hashme(sc->dir_name);
+				for (j = 0; j < 2; j++) {
+					buffer_copy_string(sc->hash_key, fe.filename);
+					buffer_append_long(sc->hash_key, j);
 
-				sc->dirs = splaytree_splay(sc->dirs, ndx);
-				node = sc->dirs;
+					ndx = hashme(sc->hash_key);
 
-				if (node && (node->key == ndx)) {
-					int osize = splaytree_size(sc->dirs);
+					sc->dirs = splaytree_splay(sc->dirs, ndx);
+					node = sc->dirs;
 
-					fam_dir_entry_free(node->data);
-					sc->dirs = splaytree_delete(sc->dirs, ndx);
+					if (node && (node->key == ndx)) {
+						int osize = splaytree_size(sc->dirs);
 
-					assert(osize - 1 == splaytree_size(sc->dirs));
+						fam_dir_entry_free(node->data);
+						sc->dirs = splaytree_delete(sc->dirs, ndx);
+
+						assert(osize - 1 == splaytree_size(sc->dirs));
+					}
 				}
 				break;
 			default:
@@ -317,12 +324,12 @@ static int buffer_copy_dirname(buffer *dst, buffer *file) {
 #endif
 
 #ifdef HAVE_LSTAT
-static int stat_cache_lstat(server *srv, char *dname, struct stat *lst) {
-	if (lstat(dname, lst) == 0) {
+static int stat_cache_lstat(server *srv, buffer *dname, struct stat *lst) {
+	if (lstat(dname->ptr, lst) == 0) {
 		return S_ISLNK(lst->st_mode) ? 0 : 1;
 	}
 	else {
-		log_error_write(srv, __FILE__, __LINE__, "sss",
+		log_error_write(srv, __FILE__, __LINE__, "sbs",
 				"lstat failed for:",
 				dname, strerror(errno));
 	};
@@ -350,6 +357,7 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 	struct stat st;
 	size_t k;
 	int fd;
+	struct stat lst;
 #ifdef DEBUG_STAT_CACHE
 	size_t i;
 #endif
@@ -365,7 +373,10 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 
 	sc = srv->stat_cache;
 
-	file_ndx = hashme(name);
+	buffer_copy_string_buffer(sc->hash_key, name);
+	buffer_append_long(sc->hash_key, con->conf.follow_symlink);
+
+	file_ndx = hashme(sc->hash_key);
 	sc->files = splaytree_splay(sc->files, file_ndx);
 
 #ifdef DEBUG_STAT_CACHE
@@ -425,7 +436,10 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 			SEGFAULT();
 		}
 
-		dir_ndx = hashme(sc->dir_name);
+		buffer_copy_string_buffer(sc->hash_key, sc->dir_name);
+		buffer_append_long(sc->hash_key, con->conf.follow_symlink);
+
+		dir_ndx = hashme(sc->hash_key);
 
 		sc->dirs = splaytree_splay(sc->dirs, dir_ndx);
 
@@ -511,48 +525,56 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 	 * only be done at network level.
 	 *
 	 * per default it is not a symlink
-	 **/
+	 * */
 #ifdef HAVE_LSTAT
 	sce->is_symlink = 0;
-	struct stat lst;
-	if (stat_cache_lstat(srv, name->ptr, &lst)  == 0) {
+
+	/* we want to only check for symlinks if we should block symlinks.
+	 */
+	if (!con->conf.follow_symlink) {
+		if (stat_cache_lstat(srv, name, &lst)  == 0) {
 #ifdef DEBUG_STAT_CACHE
-			log_error_write(srv, __FILE__, __LINE__, "sb",
-					"found symlink", name);
+				log_error_write(srv, __FILE__, __LINE__, "sb",
+						"found symlink", name);
 #endif
-			sce->is_symlink = 1;
+				sce->is_symlink = 1;
 		}
 
-	/*
-	 * we assume "/" can not be symlink, so
-	 * skip the symlink stuff if our path is /
-	 **/
-	else if ((name->used > 2)) {
-		char *dname, *s_cur;
+		/*
+		 * we assume "/" can not be symlink, so
+		 * skip the symlink stuff if our path is /
+		 **/
+		else if ((name->used > 2)) {
+			buffer *dname;
+			char *s_cur;
 
-		dname = strndup(name->ptr, name->used);
-		while ((s_cur = strrchr(dname,'/'))) {
-			*s_cur = '\0';
-			if (dname == s_cur) {
+			dname = buffer_init();
+			buffer_copy_string_buffer(dname, name);
+
+			while ((s_cur = strrchr(dname->ptr,'/'))) {
+				*s_cur = '\0';
+				dname->used = s_cur - dname->ptr + 1;
+				if (dname->ptr == s_cur) {
 #ifdef DEBUG_STAT_CACHE
-				log_error_write(srv, __FILE__, __LINE__, "s", "reached /");
+					log_error_write(srv, __FILE__, __LINE__, "s", "reached /");
 #endif
-				break;
-			}
+					break;
+				}
 #ifdef DEBUG_STAT_CACHE
-			log_error_write(srv, __FILE__, __LINE__, "sss",
-					"checking if", dname, "is a symlink");
+				log_error_write(srv, __FILE__, __LINE__, "sbs",
+						"checking if", dname, "is a symlink");
 #endif
-			if (stat_cache_lstat(srv, dname, &lst)  == 0) {
-				sce->is_symlink = 1;
+				if (stat_cache_lstat(srv, dname, &lst)  == 0) {
+					sce->is_symlink = 1;
 #ifdef DEBUG_STAT_CACHE
-				log_error_write(srv, __FILE__, __LINE__, "ss",
-						"found symlink", dname);
+					log_error_write(srv, __FILE__, __LINE__, "sb",
+							"found symlink", dname);
 #endif
-				break;
+					break;
+				};
 			};
+			buffer_free(dname);
 		};
-		free(dname);
 	};
 #endif
 

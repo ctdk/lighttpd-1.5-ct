@@ -680,7 +680,6 @@ handler_t connection_handle_read_request_content(server *srv, connection *con)  
 			break;
 		case NETWORK_STATUS_WAIT_FOR_EVENT:
 			fdevent_event_add(srv->ev, con->sock, FDEVENT_IN);
-			TRACE("%s", "content-read: wait-for-event");
 			return HANDLER_WAIT_FOR_EVENT;
 		case NETWORK_STATUS_CONNECTION_CLOSE:
 			/* the connection went away before we got something back */
@@ -1146,7 +1145,6 @@ int connection_state_machine(server *srv, connection *con) {
 				/* write */
 				con->http_status = 100;
 				con->send->is_closed = 1;
-				TRACE("%s", "setting status 100");
 
 				connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
 			} else {

@@ -38,7 +38,7 @@ int proxy_http_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw,
 
 			c = raw->first;
 
-			if (c->mem->used == 0) return 0;
+			if (c == 0 || c->mem->used == 0) return 0;
 
 			chunk_len = strtol(BUF_STR(c->mem) + c->offset, &err, 16);
 			if (!(*err == ' ' || *err == '\r' || *err == ';')) {

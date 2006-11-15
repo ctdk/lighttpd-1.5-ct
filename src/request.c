@@ -415,7 +415,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			}
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("Host")))) {
 			if (request_check_hostname(ds->value)) {
-				TRACE("%s", "Host header is invalue (Status: 400)");
+				TRACE("Host header is invalid (Status: 400), was %s", BUF_STR(ds->value));
 				con->http_status = 400;
 				con->keep_alive = 0;
 

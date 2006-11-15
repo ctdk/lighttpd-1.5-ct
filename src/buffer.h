@@ -9,6 +9,7 @@
 #endif
 
 #include "settings.h"
+#include "array-static.h"
 
 typedef struct {
 	char *ptr;
@@ -146,4 +147,17 @@ BUFFER_CTYPE_FUNC(alnum)
 	
 #define UNUSED(x) ( (void)(x) )
 
+/**
+ * a pool of unused buffer * 
+ */
+
+ARRAY_STATIC_DEF(buffer_pool, buffer, );
+
+buffer_pool* buffer_pool_init();
+void buffer_pool_free(buffer_pool* );
+
+buffer *buffer_pool_get(buffer_pool *bp);
+void buffer_pool_append(buffer_pool *bp, buffer *);
+
 #endif
+

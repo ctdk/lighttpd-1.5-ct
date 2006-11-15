@@ -1114,3 +1114,43 @@ int buffer_to_upper(buffer *b) {
 
 	return 0;
 }
+
+buffer_pool *buffer_pool_init() {
+	buffer_pool *bp;
+
+	bp = calloc(1, sizeof(*bp));
+
+	return bp;
+}
+
+void buffer_pool_free(buffer_pool *bp) {
+	if (!bp) return;
+
+	FOREACH(bp, b, buffer_free(b));
+
+	free(bp);
+
+	return;
+}
+
+buffer *buffer_pool_get(buffer_pool *bp) {
+	buffer *b;
+
+	if (bp->used == 0) {
+		return buffer_init();
+	}
+
+	b = bp->ptr[--bp->used];
+
+	buffer_reset(b);
+
+	return b;
+}
+
+void buffer_pool_append(buffer_pool *bp, buffer *b) {
+	ARRAY_STATIC_PREPARE_APPEND(bp);
+
+	bp->ptr[bp->used++] = b;
+}
+
+

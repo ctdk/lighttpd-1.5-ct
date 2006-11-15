@@ -14,12 +14,6 @@ typedef struct {
 	array *headers;
 } http_resp;
 
-/**
- * a pool of unused buffer * 
- */
-
-ARRAY_STATIC_DEF(buffer_pool, buffer, );
-
 typedef struct {
 	int     ok;
 	buffer *errmsg;
@@ -34,11 +28,5 @@ void http_response_free(http_resp *resp);
 void http_response_reset(http_resp *resp);
 
 parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *http_response);
-
-buffer_pool* buffer_pool_init();
-void buffer_pool_free(buffer_pool* );
-
-buffer *buffer_pool_get(buffer_pool *bp);
-void buffer_pool_append(buffer_pool *bp, buffer *);
 
 #endif

@@ -63,10 +63,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 			break;
 		case FILE_CHUNK: {
 			ssize_t r;
-			off_t offset;
 			int rounds = 8; 
-
-			offset = c->file.start + c->offset;
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
@@ -87,6 +84,9 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				size_t toSend;
 				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
 				int file_fd;
+				off_t offset;
+			
+				offset = c->file.start + c->offset;
 
 				toSend = c->file.length - c->offset > max_toSend ?
 					max_toSend : c->file.length - c->offset;
@@ -104,11 +104,30 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						async_error = 1;
 					}
 
+					/* if we reused the previous tmp-file we get overlaps 
+					 * 
+					 *    1 ... 3904 are ok
+					 * 3905 ... 4096 are replaces by 8001 ... 8192 
+					 *
+					 * somehow the second read writes into the mmap() before 
+					 * the sendfile is finished which is very strange.
+					 *
+					 * if someone finds the reason for this, feel free to remove
+					 * this if again and number of reduce the syscalls a bit.
+					 */
+					if (-1 != c->file.copy.fd) {
+						munmap(c->file.mmap.start, c->file.mmap.length);
+
+						close(c->file.copy.fd);
+						c->file.copy.fd = -1;
+					}
+
+					/* get mmap()ed mem-block in /dev/shm */
 					if (async_error == 0 && -1 == c->file.copy.fd ) {
-						char tmpfile_name[sizeof("/dev/shm/XXXXXX")];
+						char tmpfile_name[sizeof("/dev/shm/l-XXXXXX")];
 
 						/* open a file in /dev/shm to write to */
-						strcpy(tmpfile_name, "/dev/shm/XXXXXX");
+						strcpy(tmpfile_name, "/dev/shm/l-XXXXXX");
 						if (-1 == (c->file.copy.fd = mkstemp(tmpfile_name))) {
 							async_error = 1;
 					
@@ -179,7 +198,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 					/* oops, looks like the IO-queue is full
 					 *
-					 * how do we get woken up as soon as the queue free's up ?
+					 * fall-back to blocking sendfile()
 					 */
 
 					if (c->file.mmap.start != MAP_FAILED) {

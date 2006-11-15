@@ -506,6 +506,7 @@ static void *linux_io_getevents_thread(void *_data) {
 		struct io_event event[16];
 	        struct timespec io_ts;
 		int res;
+		int waiting;
 
 		pthread_cond_wait(&getevents_cond, &getevents_mutex);
 
@@ -514,6 +515,8 @@ static void *linux_io_getevents_thread(void *_data) {
 		/* wait one second as the poll() */
 		io_ts.tv_sec = 1;
 	        io_ts.tv_nsec = 0; 
+		
+		waiting = srv->linux_io_waiting;
 
 		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
 			int i;
@@ -521,7 +524,8 @@ static void *linux_io_getevents_thread(void *_data) {
 				connection *con = event[i].data;
 
 				if ((long)event[i].res <= 0) {
-					TRACE("async-read failed with %d (%s)", event[i].res, strerror(-event[i].res));
+					TRACE("async-read failed with %d (%s), waiting: %d, was asked for %s (fd = %d)", 
+						event[i].res, strerror(-event[i].res), waiting, BUF_STR(con->uri.path), con->sock->fd);
 					connection_set_state(srv, con, CON_STATE_ERROR);
 				}
 

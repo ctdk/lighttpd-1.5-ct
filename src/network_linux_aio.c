@@ -99,6 +99,9 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					int res;
 					int async_error = 0;
 
+					size_t iocb_ndx;
+					struct iocb *iocb = NULL;
+
 					c->file.copy.offset = 0; 
 					c->file.copy.length = toSend - (toSend % page_size); /* align to page-size */
 
@@ -123,6 +126,20 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;
 					}
+
+					/* do we have a IOCB we can use ? */
+
+					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < LINUX_IO_MAX_IOCBS; iocb_ndx++) {
+						if (NULL == srv->linux_io_iocbs[iocb_ndx].data) {
+							iocb = &srv->linux_io_iocbs[iocb_ndx];
+							break;
+						}
+					}
+
+					if (iocb_ndx == LINUX_IO_MAX_IOCBS) {
+						async_error = 1;
+					}
+
 
 					/* get mmap()ed mem-block in /dev/shm */
 					if (async_error == 0 && -1 == c->file.copy.fd ) {
@@ -165,9 +182,10 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					}
 
 					/* can we be sure that offset is always aligned ? */
-        				if (((intptr_t)c->file.mmap.start) % page_size != 0 ||
-					    c->file.copy.length % page_size != 0 ||
-					    ((intptr_t)(c->file.start + c->offset)) % page_size != 0) {
+        				if (async_error == 0 &&
+					    (((intptr_t)c->file.mmap.start) % page_size != 0 ||
+					     c->file.copy.length % page_size != 0 ||
+					     ((intptr_t)(c->file.start + c->offset)) % page_size != 0)) {
 						/** 
 						 * after a fallback to sendfile() the offset might be unaligned
 						 */
@@ -178,37 +196,25 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 					/* looks like we couldn't get a temp-file [disk-full] */	
 					if (async_error == 0 && -1 != c->file.copy.fd) {
-						size_t ndx;
-						/** get a free IOCB */
+		        			struct iocb *iocbs[] = { iocb };
 
-						for (ndx = 0; ndx < LINUX_IO_MAX_IOCBS; ndx++) {
-							if (NULL == srv->linux_io_iocbs[ndx].data) {
-								break;
-							}
-						}
+						assert(c->file.copy.length > 0);
 
-						if (ndx != LINUX_IO_MAX_IOCBS) {
-							struct iocb *iocb = &srv->linux_io_iocbs[ndx];
-			        			struct iocb *iocbs[] = { iocb };
+						io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, c->file.start + c->offset);
+						iocb->data = con;
 
-							assert(c->file.copy.length > 0);
+					       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
+							srv->linux_io_waiting++;
 
-							io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, c->file.start + c->offset);
-							iocb->data = con;
+							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+						} else {
+							iocb->data = NULL;
 
-						       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
-								srv->linux_io_waiting++;
-
-								return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+							if (-res != EAGAIN) {
+								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
+									res, strerror(-res), srv->linux_io_waiting);
 							} else {
-								iocb->data = NULL;
-
-								if (-res != EAGAIN) {
-									TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
-										res, strerror(-res), srv->linux_io_waiting);
-								} else {
-									TRACE("io_submit returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
-								}
+								TRACE("io_submit returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
 							}
 						}
 					}

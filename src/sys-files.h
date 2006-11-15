@@ -63,5 +63,9 @@ buffer *pathname_unix2local(buffer *b);
 # define O_LARGEFILE 0
 #endif
 
+#ifndef O_NOATIME
+# define O_NOATIME 0
+#endif
+
 #endif
 

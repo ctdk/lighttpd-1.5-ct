@@ -70,7 +70,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
-				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT))) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | O_NOATIME))) {
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -78,8 +78,6 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 				srv->cur_fds++;
 			
-				if (offset) lseek(c->file.fd, offset, SEEK_SET);
-
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -163,7 +161,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 							assert(c->file.copy.length > 0);
 
-							io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, 0);
+							io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, c->file.start + c->offset);
 							iocb->data = con;
 
 						       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {

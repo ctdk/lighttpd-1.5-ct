@@ -476,7 +476,7 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 
 	if (S_ISREG(st.st_mode)) {
 		/* try to open the file to check if we can read it */
-		if (-1 == (fd = open(name->ptr, O_RDONLY))) {
+		if (-1 == (fd = open(name->ptr, O_RDONLY | O_NOATIME))) {
 			return HANDLER_ERROR;
 		}
 		close(fd);

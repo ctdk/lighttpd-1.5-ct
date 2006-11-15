@@ -752,6 +752,21 @@ int lighty_mainloop(server *srv) {
 			}
 		}
 
+		/* take probe to get an idea how many fds are currently open
+		 *
+		 * isn't there an easier way than calling open() ?
+		 *  */
+		if (1) {
+			int cur_max_fd;
+		       
+			if (-1 != (cur_max_fd = open("/dev/null", O_RDONLY))) {
+				close(cur_max_fd);
+				srv->cur_fds = cur_max_fd;
+			} else if (errno == EMFILE) {
+				srv->cur_fds = srv->max_fds;
+			}
+		}
+
 		if (srv->sockets_disabled) {
 			/* our server sockets are disabled, why ? */
 
@@ -801,7 +816,7 @@ int lighty_mainloop(server *srv) {
 				} else if (srv->conns->used > srv->max_conns) {
 					log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, connection limit reached");
 				} else {
-					log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, out-of-fds (you may want to raise server.max-fds)");
+					TRACE("[note] servers sockets got disabled for a while as we are out of fds. We use %d of %d right now. (you may want to raise server.max-fds)", srv->cur_fds, srv->max_fds);
 				}
 
 				srv->sockets_disabled = 1;

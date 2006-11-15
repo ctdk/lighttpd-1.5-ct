@@ -25,7 +25,11 @@ void chunkqueue_skip(chunkqueue *cq, off_t skip) {
 int proxy_http_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw, chunkqueue *decoded) {
 	chunk *c;
 
-	if (raw->first == NULL) return 0;
+	if (raw->first == NULL) {
+		if (raw->is_closed) return 1;
+
+		return 0;
+	}
 
 	if (sess->is_chunked) {
 		do {
@@ -149,7 +153,8 @@ int proxy_http_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw,
 			}
 
 		}
-	    	if (sess->bytes_read == sess->content_length) {
+
+	    	if (raw->is_closed || sess->bytes_read == sess->content_length) {
 			return 1; /* finished */
 		}
 	}

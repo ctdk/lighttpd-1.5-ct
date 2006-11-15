@@ -1083,6 +1083,7 @@ int connection_state_machine(server *srv, connection *con) {
 				switch (http_request_parse_cq(con->recv_raw, con->http_req)) {
 				case PARSE_ERROR:
 					con->http_status = 400; /* the header is broken */
+					con->keep_alive = 0;
 
 					chunkqueue_remove_finished_chunks(con->recv_raw);
 

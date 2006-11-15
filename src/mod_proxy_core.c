@@ -262,7 +262,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			data_integer *di;
 			
 			if (NULL == (di = (data_integer *)array_get_element(p->possible_balancers, BUF_STR(p->balance_buf)))) {
-				ERROR("proxy.balance has to be on of 'fair', 'round-robin', 'hash', got %s", BUF_STR(p->balance_buf));
+				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
 
 				return HANDLER_ERROR;
 			}
@@ -274,7 +274,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			data_integer *di;
 			
 			if (NULL == (di = (data_integer *)array_get_element(p->possible_protocols, BUF_STR(p->protocol_buf)))) {
-				ERROR("proxy.balance has to be on of 'fair', 'round-robin', 'hash', got %s", BUF_STR(p->protocol_buf));
+				ERROR("proxy.protocol has to be on of 'http', 'fastcgi', got %s", BUF_STR(p->protocol_buf));
 
 				return HANDLER_ERROR;
 			}

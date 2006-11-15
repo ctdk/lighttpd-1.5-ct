@@ -52,44 +52,6 @@ void http_response_free(http_resp *resp) {
 	free(resp);
 }
 
-buffer_pool *buffer_pool_init() {
-	buffer_pool *bp;
-
-	bp = calloc(1, sizeof(*bp));
-
-	return bp;
-}
-
-void buffer_pool_free(buffer_pool *bp) {
-	if (!bp) return;
-
-	FOREACH(bp, b, buffer_free(b));
-
-	free(bp);
-
-	return;
-}
-
-buffer *buffer_pool_get(buffer_pool *bp) {
-	buffer *b;
-
-	if (bp->used == 0) {
-		return buffer_init();
-	}
-
-	b = bp->ptr[--bp->used];
-
-	buffer_reset(b);
-
-	return b;
-}
-
-void buffer_pool_append(buffer_pool *bp, buffer *b) {
-	ARRAY_STATIC_PREPARE_APPEND(bp);
-
-	bp->ptr[bp->used++] = b;
-}
-
 static int http_resp_get_next_char(http_resp_tokenizer_t *t, unsigned char *c) {
 	if (t->offset == t->c->mem->used - 1) {
 		/* end of chunk, open next chunk */
@@ -253,6 +215,8 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	context.errmsg = buffer_init();
 	context.resp = resp;
 	context.unused_buffers = buffer_pool_init();
+	
+	array_reset(resp->headers);
 
 	pParser = http_resp_parserAlloc( malloc );
 	token = buffer_pool_get(context.unused_buffers);
@@ -308,6 +272,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 		ret = PARSE_SUCCESS;
 	}
 
+	buffer_pool_append(context.unused_buffers, token);
 	buffer_pool_free(context.unused_buffers);
 	buffer_free(context.errmsg);
 

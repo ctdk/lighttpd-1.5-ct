@@ -519,7 +519,15 @@ static void *linux_io_getevents_thread(void *_data) {
 			int i;
 			for (i = 0; i < res; i++) {
 				connection *con = event[i].data;
-		
+
+				if ((long)event[i].res <= 0) {
+					TRACE("async-read failed with %d (%s)", event[i].res, strerror(-event[i].res));
+					connection_set_state(srv, con, CON_STATE_ERROR);
+				}
+
+				/* free the iocb */
+				event[i].obj->data = NULL;
+
 				joblist_append(srv, con);
 				srv->linux_io_waiting--;
 			}
@@ -662,7 +670,7 @@ int lighty_mainloop(server *srv) {
 								log_error_write(srv, __FILE__, __LINE__, "sd",
 										"connection closed - read-timeout:", con->fd);
 #endif
-								TRACE("%s", "(timeout)");
+								TRACE("(initial read timeout) [%s]", BUF_STR(con->dst_addr_buf));
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
 							}
@@ -673,7 +681,7 @@ int lighty_mainloop(server *srv) {
 								log_error_write(srv, __FILE__, __LINE__, "sd",
 										"connection closed - read-timeout:", con->fd);
 #endif
-								TRACE("%s", "(timeout)");
+								TRACE("(keep-alive read timeout) [%s]", BUF_STR(con->dst_addr_buf));
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
 							}
@@ -1526,7 +1534,11 @@ int main (int argc, char **argv, char **envp) {
 #endif
 
 #ifdef HAVE_LIBAIO_H
-	io_setup(64, &(srv->linux_io_ctx));
+	if (0 != io_setup(LINUX_IO_MAX_IOCBS, &(srv->linux_io_ctx))) {
+		ERROR("io-setup() failed somehow %s", "");
+
+		return -1;
+	}
 #endif
 
 	/* get the current number of FDs */

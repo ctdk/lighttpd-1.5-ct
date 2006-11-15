@@ -94,17 +94,19 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					max_toSend : c->file.length - c->offset;
 
 				if (-1 == c->file.copy.fd || 0 == c->file.copy.length) {
-        
-					struct iocb iocb;
-			        	struct iocb *iocbs[] = { &iocb };
+					long page_size = sysconf(_SC_PAGESIZE);
 
 					int res;
 					int async_error = 0;
-				
-					c->file.copy.offset = 0; 
-					c->file.copy.length = toSend;
 
-					if (-1 == c->file.copy.fd) {
+					c->file.copy.offset = 0; 
+					c->file.copy.length = toSend - (toSend % page_size); /* align to page-size */
+
+					if (c->file.copy.length == 0) {
+						async_error = 1;
+					}
+
+					if (async_error == 0 && -1 == c->file.copy.fd ) {
 						char tmpfile_name[sizeof("/dev/shm/XXXXXX")];
 
 						/* open a file in /dev/shm to write to */
@@ -118,10 +120,13 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 							}
 						}
 
+						c->file.mmap.offset = 0;
+						c->file.mmap.length = c->file.copy.length; /* align to page-size */
+
 						if (!async_error) {
 							srv->cur_fds++;
 							unlink(tmpfile_name); /* remove the file again, we still keep it open */
-							if (0 != ftruncate(c->file.copy.fd, toSend)) {
+							if (0 != ftruncate(c->file.copy.fd, c->file.mmap.length)) {
 								/* disk full ... */
 								async_error = 1;
 								
@@ -131,9 +136,9 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						}
 
 						if (!async_error) {
-							c->file.mmap.offset = 0;
-							c->file.mmap.length = toSend;
-							c->file.mmap.start = mmap(0, c->file.mmap.length, PROT_READ | PROT_WRITE, MAP_SHARED, c->file.copy.fd, 0);
+
+							c->file.mmap.start = mmap(0, c->file.mmap.length, 
+									PROT_READ | PROT_WRITE, MAP_SHARED, c->file.copy.fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
 								async_error = 1;
 							}
@@ -143,17 +148,33 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
         
 					/* looks like we couldn't get a temp-file [disk-full] */	
 					if (async_error == 0 && -1 != c->file.copy.fd) {
-						io_prep_pread(&iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, 0);
-						iocb.data = con;
+						size_t ndx;
+						/** get a free IOCB */
 
-					       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
-							srv->linux_io_waiting++;
+						for (ndx = 0; ndx < LINUX_IO_MAX_IOCBS; ndx++) {
+							if (NULL == srv->linux_io_iocbs[ndx].data) {
+								break;
+							}
+						}
 
-							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
-						} else {
-							if (-res != EAGAIN) {
-								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
-									res, strerror(-res), srv->linux_io_waiting);
+						if (ndx != LINUX_IO_MAX_IOCBS) {
+							struct iocb *iocb = &srv->linux_io_iocbs[ndx];
+			        			struct iocb *iocbs[] = { iocb };
+
+							assert(c->file.copy.length > 0);
+
+							io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, 0);
+							iocb->data = con;
+
+						       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
+								srv->linux_io_waiting++;
+
+								return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+							} else {
+								if (-res != EAGAIN) {
+									TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
+										res, strerror(-res), srv->linux_io_waiting);
+								}
 							}
 						}
 					}

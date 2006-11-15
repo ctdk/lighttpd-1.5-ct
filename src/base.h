@@ -572,7 +572,11 @@ typedef struct server {
 #endif
 
 #ifdef HAVE_LIBAIO_H
+#define LINUX_IO_MAX_IOCBS 256
 	io_context_t linux_io_ctx;
+
+	struct iocb linux_io_iocbs[LINUX_IO_MAX_IOCBS];
+
 	int linux_io_waiting;
 #endif
 } server;

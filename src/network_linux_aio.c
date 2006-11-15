@@ -29,6 +29,8 @@
 #include "stat_cache.h"
 #include "joblist.h"
 
+#include "sys-files.h"
+
 NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 	chunk *c, *tc;
 	size_t chunks_written = 0;
@@ -67,7 +69,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
-				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | O_NOATIME))) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -162,7 +164,18 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						}
 					}
 
-        
+					/* can we be sure that offset is always aligned ? */
+        				if (((intptr_t)c->file.mmap.start) % page_size != 0 ||
+					    c->file.copy.length % page_size != 0 ||
+					    ((intptr_t)(c->file.start + c->offset)) % page_size != 0) {
+						/** 
+						 * after a fallback to sendfile() the offset might be unaligned
+						 */
+
+						async_error = 1;
+					}
+
+
 					/* looks like we couldn't get a temp-file [disk-full] */	
 					if (async_error == 0 && -1 != c->file.copy.fd) {
 						size_t ndx;
@@ -188,9 +201,13 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 								return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 							} else {
+								iocb->data = NULL;
+
 								if (-res != EAGAIN) {
 									TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
 										res, strerror(-res), srv->linux_io_waiting);
+								} else {
+									TRACE("io_submit returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
 								}
 							}
 						}

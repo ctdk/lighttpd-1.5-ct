@@ -90,6 +90,7 @@ static int config_insert(server *srv) {
 		{ "server.upload-dirs",          NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },   /* 44 */
 		{ "server.core-files",           NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 45 */
 		{ "debug.log-condition-cache-handling", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },    /* 46 */
+		{ "server.use-noatime",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 47 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -132,6 +133,8 @@ static int config_insert(server *srv) {
 
 	cv[42].destination = &(srv->srvconf.max_conns);
 	cv[12].destination = &(srv->srvconf.max_request_size);
+	cv[47].destination = &(srv->srvconf.use_noatime);
+
 	srv->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 
 	assert(srv->config_storage);
@@ -1089,7 +1092,7 @@ int config_set_defaults(server *srv) {
 	}
 
 	if (buffer_is_empty(srv->srvconf.changeroot)) {
-        pathname_unix2local(s->document_root);
+		pathname_unix2local(s->document_root);
 		if (-1 == stat(s->document_root->ptr, &st1)) {
 			log_error_write(srv, __FILE__, __LINE__, "sbs",
 					"base-docroot doesn't exist:",

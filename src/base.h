@@ -444,6 +444,8 @@ typedef struct {
 	buffer *network_backend;
 	array *modules;
 	array *upload_tempdirs;
+	
+	unsigned short use_noatime;
 
 	unsigned short max_worker;
 	unsigned short max_fds;
@@ -572,7 +574,7 @@ typedef struct server {
 #endif
 
 #ifdef HAVE_LIBAIO_H
-#define LINUX_IO_MAX_IOCBS 256
+#define LINUX_IO_MAX_IOCBS 64
 	io_context_t linux_io_ctx;
 
 	struct iocb linux_io_iocbs[LINUX_IO_MAX_IOCBS];

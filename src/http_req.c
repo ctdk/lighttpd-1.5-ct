@@ -237,9 +237,12 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 	context.ok = 1;
 	context.errmsg = buffer_init();
 	context.req = req;
+	context.unused_buffers = buffer_pool_init();
 
 	pParser = http_req_parserAlloc( malloc );
 	token = buffer_init();
+
+	array_reset(req->headers);
 
 #if 0
 	http_req_parserTrace(stderr, "http-request: "); 
@@ -248,7 +251,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 	while((1 == http_req_tokenizer(&t, &token_id, token)) && context.ok) {
 		http_req_parser(pParser, token_id, token, &context);
 
-		token = buffer_init();
+		token = buffer_pool_get(context.unused_buffers);
 
 		/* CRLF CRLF ... the header end sequence */
 		if (t.last_token_id == TK_CRLF &&
@@ -293,9 +296,11 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 		ret = PARSE_SUCCESS;
 	}
 
-	buffer_free(token);
+	buffer_pool_append(context.unused_buffers, token);
+	buffer_pool_free(context.unused_buffers);
 	buffer_free(context.errmsg);
 
 	return ret;
 }
+
 

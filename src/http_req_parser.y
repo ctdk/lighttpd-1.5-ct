@@ -31,7 +31,7 @@ request_hdr ::= method(B) STRING(C) protocol(D) CRLF headers CRLF . {
     req->method = B;
     req->protocol = D;
     buffer_copy_string_buffer(req->uri_raw, C);
-    buffer_free(C); 
+    buffer_pool_append(ctx->unused_buffers, C); 
 }
 
 request_hdr ::= method(B) STRING(C) protocol(D) CRLF CRLF . {
@@ -40,14 +40,14 @@ request_hdr ::= method(B) STRING(C) protocol(D) CRLF CRLF . {
     req->method = B;
     req->protocol = D;
     buffer_copy_string_buffer(req->uri_raw, C);
-    buffer_free(C); 
+    buffer_pool_append(ctx->unused_buffers, C); 
 }
 
 
 method(A) ::= STRING(B) . {
     A = get_http_method_key(BUF_STR(B));
 
-    buffer_free(B);
+    buffer_pool_append(ctx->unused_buffers, B); 
 }
 
 protocol(A) ::= STRING(B). {
@@ -80,7 +80,7 @@ protocol(A) ::= STRING(B). {
        }
     }
 
-    buffer_free(B);
+    buffer_pool_append(ctx->unused_buffers, B); 
 }
 
 headers ::= headers header. 
@@ -95,8 +95,8 @@ header(HDR) ::= STRING(A) COLON multiline(B). {
    
     buffer_copy_string_buffer(HDR->key, A);
     buffer_copy_string_buffer(HDR->value, B);    
-    buffer_free(A);
-    buffer_free(B);
+    buffer_pool_append(ctx->unused_buffers, A); 
+    buffer_pool_append(ctx->unused_buffers, B); 
       
     array_insert_unique(req->headers, (data_unset *)HDR);
 }
@@ -108,7 +108,7 @@ multiline(A) ::= STRING(B) CRLF TAB multiline(C). {
    A = B;
 
    B = NULL;
-   buffer_free(C);
+   buffer_pool_append(ctx->unused_buffers, C); 
 }
 
 /* the simple form */

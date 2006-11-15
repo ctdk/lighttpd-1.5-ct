@@ -422,7 +422,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 				return 0;
 			}
 
-			if (!buffer_is_empty(con->request.http_host)) {
+			if (!buffer_is_empty(con->request.http_host) && !buffer_is_equal(con->request.http_host, ds->value)) {
 				TRACE("%s", "Host header is duplicate (Status: 400)");
 				con->http_status = 400;
 

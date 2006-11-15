@@ -25,17 +25,13 @@
 %token_destructor { buffer_free($$); }
 
 /* GET ... HTTP/1.0 */
-request_hdr ::= method(B) STRING(C) protocol(D) CRLF headers(HDR) CRLF . {
+request_hdr ::= method(B) STRING(C) protocol(D) CRLF headers CRLF . {
     http_req *req = ctx->req;
     
     req->method = B;
     req->protocol = D;
     buffer_copy_string_buffer(req->uri_raw, C);
     buffer_free(C); 
-
-    array_free(req->headers);
-    
-    req->headers = HDR;
 }
 
 request_hdr ::= method(B) STRING(C) protocol(D) CRLF CRLF . {
@@ -87,36 +83,25 @@ protocol(A) ::= STRING(B). {
     buffer_free(B);
 }
 
-headers(HDRS) ::= headers(SRC) header(HDR). {
-    HDRS = SRC;
-   
-    if (HDR) { 
-      array_insert_unique(HDRS, (data_unset *)HDR);
-    }
-}
-
-headers(HDRS) ::= header(HDR). {
-    if (HDR) {
-      HDRS = array_init();
-
-      array_insert_unique(HDRS, (data_unset *)HDR);
-    }
-}
+headers ::= headers header. 
+headers ::= header.
 
 header(HDR) ::= STRING(A) COLON multiline(B). {
-    HDR = data_string_init();
-    
+    http_req *req = ctx->req;
+
+    if (NULL == (HDR = (data_string *)array_get_unused_element(req->headers, TYPE_STRING))) {
+        HDR = data_string_init();
+    }
+   
     buffer_copy_string_buffer(HDR->key, A);
     buffer_copy_string_buffer(HDR->value, B);    
     buffer_free(A);
     buffer_free(B);
+      
+    array_insert_unique(req->headers, (data_unset *)HDR);
 }
 
-header(HDR) ::= STRING COLON CRLF . {
-    /* ignore empty header fields */
-
-    HDR = NULL;
-}
+header ::= STRING COLON CRLF . 
 
 multiline(A) ::= STRING(B) CRLF TAB multiline(C). {
    buffer_append_string_buffer(B, C);

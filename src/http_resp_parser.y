@@ -25,17 +25,15 @@
 %token_destructor { buffer_free($$); }
 
 /* just headers + Status: ... */
-response_hdr ::= headers(HDR) CRLF . {
+response_hdr ::= headers CRLF . {
     http_resp *resp = ctx->resp;
     data_string *ds;
  
     resp->protocol = HTTP_VERSION_UNSET;
 
     buffer_copy_string(resp->reason, ""); /* no reason */
-    array_free(resp->headers);
-    resp->headers = HDR;
 
-    if (NULL == (ds = (data_string *)array_get_element(HDR, "Status"))) { 
+    if (NULL == (ds = (data_string *)array_get_element(resp->headers, "Status"))) { 
         resp->status = 0;
     } else {
         char *err;
@@ -49,21 +47,15 @@ response_hdr ::= headers(HDR) CRLF . {
             ctx->ok = 0;
         }
     }
-
-    HDR = NULL;
 }
 /* HTTP/1.0 <status> ... */
-response_hdr ::= protocol(B) number(C) reason(D) CRLF headers(HDR) CRLF . {
+response_hdr ::= protocol(B) number(C) reason(D) CRLF headers CRLF . {
     http_resp *resp = ctx->resp;
     
     resp->status = C;
     resp->protocol = B;
     buffer_copy_string_buffer(resp->reason, D);
-    buffer_free(D); 
-
-    array_free(resp->headers);
-    
-    resp->headers = HDR;
+    buffer_pool_append(ctx->unused_buffers, D); 
 }
 
 protocol(A) ::= STRING(B). {
@@ -77,7 +69,7 @@ protocol(A) ::= STRING(B). {
         
         ctx->ok = 0;
     }
-    buffer_free(B);
+    buffer_pool_append(ctx->unused_buffers, B); 
 }
 
 number(A) ::= STRING(B). {
@@ -90,7 +82,7 @@ number(A) ::= STRING(B). {
         
         ctx->ok = 0;
     }
-    buffer_free(B);
+    buffer_pool_append(ctx->unused_buffers, B); 
 }
 
 reason(A) ::= STRING(B). {
@@ -103,25 +95,24 @@ reason(A) ::= reason(C) STRING(B). {
     buffer_append_string(A, " ");
     buffer_append_string_buffer(A, B);
 
-    buffer_free(B); 
+    buffer_pool_append(ctx->unused_buffers, B); 
 }
 
-headers(HDRS) ::= headers(SRC) header(HDR). {
-    HDRS = SRC;
-    
-    array_insert_unique(HDRS, (data_unset *)HDR);
-}
+headers ::= headers header. 
+headers ::= header. 
 
-headers(HDRS) ::= header(HDR). {
-    HDRS = array_init();
-
-    array_insert_unique(HDRS, (data_unset *)HDR);
-}
 header(HDR) ::= STRING(A) COLON STRING(B) CRLF. {
-    HDR = data_response_init();
+    http_resp *resp = ctx->resp;
+
+    if (NULL == (HDR = (data_string *)array_get_unused_element(resp->headers, TYPE_STRING))) {
+        HDR = data_response_init();
+    }
     
     buffer_copy_string_buffer(HDR->key, A);
     buffer_copy_string_buffer(HDR->value, B);    
-    buffer_free(A);
-    buffer_free(B);
+    buffer_pool_append(ctx->unused_buffers, A); 
+    buffer_pool_append(ctx->unused_buffers, B); 
+
+    array_insert_unique(resp->headers, (data_unset *)HDR);
 }
+

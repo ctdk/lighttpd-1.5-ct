@@ -407,7 +407,7 @@ if test "$WITH_LUA" != "no"; then
  AC_SUBST(LUA_LIBS)
 fi
 
-dnl Check for memcache
+dnl Check for libaio
 AC_MSG_CHECKING(for libaio)
 AC_ARG_WITH(linux-aio, AC_HELP_STRING([--with-linux-aio],[Async IO support for Linux via libaio]),
 [WITH_LINUXLIBAIO=$withval],[WITH_LINUXLIBAIO=no])
@@ -423,6 +423,18 @@ if test "$WITH_LINUXLIBAIO" != "no"; then
  AC_SUBST(AIO_LIB)
 fi
  
+ AC_SEARCH_LIBS(aio_suspend, rt, [
+         AC_CHECK_HEADERS([aio.h],[
+       	         if test "$ac_cv_search_aio_suspend" != no; then
+                   test "$ac_cv_search_aio_suspend" = "none required" || POSIX_AIO_LIB="$ac_cv_search_aio_suspend -pthread"
+                 fi
+
+                 AC_DEFINE([HAVE_LIBRT], [1], [librt])
+		 AC_DEFINE([HAVE_AIO_H], [1], [aio.h])
+         ])
+ ])
+ AC_SUBST(POSIX_AIO_LIB)
+
 save_LIBS=$LIBS
 AC_SEARCH_LIBS(crypt,crypt,[
   AC_CHECK_HEADERS([crypt.h],[

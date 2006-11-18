@@ -444,6 +444,7 @@ typedef enum {
 
 	NETWORK_BACKEND_LINUX_SENDFILE,
 	NETWORK_BACKEND_LINUX_AIO_SENDFILE,
+	NETWORK_BACKEND_POSIX_AIO,
 
 	NETWORK_BACKEND_FREEBSD_SENDFILE,
 	NETWORK_BACKEND_SOLARIS_SENDFILEV,
@@ -469,6 +470,10 @@ int network_init(server *srv) {
 #if defined USE_LINUX_AIO_SENDFILE
 		{ NETWORK_BACKEND_LINUX_AIO_SENDFILE,   "linux-aio-sendfile" },
 #endif
+#if defined USE_POSIX_AIO
+		{ NETWORK_BACKEND_POSIX_AIO,            "posix-aio" },
+#endif
+
 #if defined USE_FREEBSD_SENDFILE
 		{ NETWORK_BACKEND_FREEBSD_SENDFILE,     "freebsd-sendfile" },
 #endif
@@ -506,7 +511,7 @@ int network_init(server *srv) {
 	srv->network_ssl_backend_write = network_write_chunkqueue_openssl;
 #endif
 
-	/* get a usefull default */
+	/* get a useful default */
 	backend = network_backends[0].nb;
 
 	/* match name against known types */
@@ -570,6 +575,12 @@ int network_init(server *srv) {
 		SET_NETWORK_BACKEND(read, linuxaiosendfile);
 		break;
 #endif
+#ifdef USE_POSIX_AIO
+	case NETWORK_BACKEND_POSIX_AIO:
+		SET_NETWORK_BACKEND(read, posixaio);
+		break;
+#endif
+
 #ifdef USE_FREEBSD_SENDFILE
 	case NETWORK_BACKEND_FREEBSD_SENDFILE:
 		SET_NETWORK_BACKEND(read, freebsdsendfile);

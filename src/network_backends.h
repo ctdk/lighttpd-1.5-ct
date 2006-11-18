@@ -17,6 +17,11 @@
 # endif
 #endif
 
+#if defined HAVE_AIO_H
+#define USE_POSIX_AIO
+#include <aio.h>
+#endif
+
 #if defined HAVE_SYS_UIO_H && defined HAVE_SENDFILE && defined HAVE_WRITEV && defined(__FreeBSD__)
 # define USE_FREEBSD_SENDFILE
 # include <sys/uio.h>
@@ -76,6 +81,7 @@ NETWORK_BACKEND_WRITE(write);
 NETWORK_BACKEND_WRITE(writev);
 NETWORK_BACKEND_WRITE(linuxsendfile);
 NETWORK_BACKEND_WRITE(linuxaiosendfile);
+NETWORK_BACKEND_WRITE(posixaio);
 NETWORK_BACKEND_WRITE(freebsdsendfile);
 NETWORK_BACKEND_WRITE(solarissendfilev);
 

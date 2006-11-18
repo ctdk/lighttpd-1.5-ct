@@ -2,7 +2,7 @@
 
 #include "network_backends.h"
 
-#ifdef USE_LINUX_AIO_SENDFILE
+#ifdef USE_POSIX_AIO
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -21,7 +21,7 @@
 #include <fcntl.h>
 #include <assert.h>
 
-#include <libaio.h>
+#include <aio.h>
 
 #include "network.h"
 #include "fdevent.h"
@@ -31,7 +31,7 @@
 
 #include "sys-files.h"
 
-NETWORK_BACKEND_WRITE(linuxaiosendfile) {
+NETWORK_BACKEND_WRITE(posixaio) {
 	chunk *c, *tc;
 	size_t chunks_written = 0;
 
@@ -100,7 +100,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					int async_error = 0;
 
 					size_t iocb_ndx;
-					struct iocb *iocb = NULL;
+					
 
 					c->file.copy.offset = 0; 
 					c->file.copy.length = toSend - (toSend % page_size); /* align to page-size */
@@ -129,14 +129,13 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 					/* do we have a IOCB we can use ? */
 
-					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < LINUX_IO_MAX_IOCBS; iocb_ndx++) {
-						if (NULL == srv->linux_io_iocbs[iocb_ndx].data) {
-							iocb = &srv->linux_io_iocbs[iocb_ndx];
+					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < POSIX_AIO_MAX_IOCBS; iocb_ndx++) {
+						if (NULL == srv->posix_aio_data[iocb_ndx]) {
 							break;
 						}
 					}
 
-					if (iocb_ndx == LINUX_IO_MAX_IOCBS) {
+					if (iocb_ndx == POSIX_AIO_MAX_IOCBS) {
 						async_error = 1;
 					}
 
@@ -196,25 +195,34 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 					/* looks like we couldn't get a temp-file [disk-full] */	
 					if (async_error == 0 && -1 != c->file.copy.fd) {
-		        			struct iocb *iocbs[] = { iocb };
+						struct aiocb *iocb = NULL;
 
 						assert(c->file.copy.length > 0);
 
-						io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, c->file.start + c->offset);
-						iocb->data = con;
+						iocb = &srv->posix_aio_iocbs[iocb_ndx];
 
-					       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
+						iocb->aio_fildes = c->file.fd;
+						iocb->aio_buf = c->file.mmap.start;
+						iocb->aio_nbytes = c->file.copy.length;
+						iocb->aio_offset = c->file.start + c->offset;
+
+						srv->posix_aio_data[iocb_ndx] = con;
+
+					       	if (0 == aio_read(iocb)) {
 							srv->have_aio_waiting++;
+
+							srv->posix_aio_iocbs_watch[iocb_ndx] = iocb;
 
 							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 						} else {
-							iocb->data = NULL;
 
-							if (-res != EAGAIN) {
-								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
-									res, strerror(-res), srv->have_aio_waiting);
+							srv->posix_aio_data[iocb_ndx] = NULL;
+
+							if (errno != EAGAIN) {
+								TRACE("aio_read returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
+									errno, strerror(errno), srv->have_aio_waiting);
 							} else {
-								TRACE("io_submit returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
+								TRACE("aio_read returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
 							}
 						}
 					}
@@ -322,8 +330,4 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 }
 
 #endif
-#if 0
-network_linuxsendfile_init(void) {
-	p->write = network_linuxsendfile_write_chunkset;
-}
-#endif
+

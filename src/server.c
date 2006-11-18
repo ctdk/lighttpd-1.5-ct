@@ -205,8 +205,6 @@ static server *server_init(void) {
 	srv->linux_io_ctx = NULL;
 	/**
 	 * we can't call io_setup before the fork() in daemonize()
-	 *
-	 * so we call it in fdevent_reset() instead, as for the kqueue-init
 	 */
 #endif
 
@@ -516,7 +514,7 @@ static void *linux_io_getevents_thread(void *_data) {
 		io_ts.tv_sec = 1;
 	        io_ts.tv_nsec = 0; 
 		
-		waiting = srv->linux_io_waiting;
+		waiting = srv->have_aio_waiting;
 
 		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
 			int i;
@@ -533,7 +531,7 @@ static void *linux_io_getevents_thread(void *_data) {
 				event[i].obj->data = NULL;
 
 				joblist_append(srv, con);
-				srv->linux_io_waiting--;
+				srv->have_aio_waiting--;
 			}
 
 			/* interrupt the poll() */
@@ -547,13 +545,94 @@ static void *linux_io_getevents_thread(void *_data) {
 
 	return NULL;
 }
+
+static void *posix_aio_getevents_thread(void *_data) {
+	server *srv = _data;
+
+	while (!srv_shutdown) {
+		struct io_event event[16];
+	        struct timespec io_ts;
+		int waiting;
+
+		pthread_cond_wait(&getevents_cond, &getevents_mutex);
+
+		if (srv_shutdown) break;
+
+		/* wait one second as the poll() */
+		io_ts.tv_sec = 1;
+	        io_ts.tv_nsec = 0; 
+		
+		waiting = srv->have_aio_waiting;
+
+		if (0 == aio_suspend(srv->posix_aio_iocbs_watch, POSIX_AIO_MAX_IOCBS, &io_ts)) {
+			int i;
+
+			for (i = 0; i < POSIX_AIO_MAX_IOCBS && srv->have_aio_waiting > 0; i++) {
+				connection *con;
+				struct aio_iocb *iocb;
+				int res;
+
+				if (srv->posix_aio_iocbs_watch[i] == NULL) continue;
+			       
+				con = srv->posix_aio_data[i];
+				iocb = srv->posix_aio_iocbs_watch[i];
+
+				res = aio_error(iocb);
+
+				if (res != EINPROGRESS) {
+					switch (res) {
+					case ECANCELED:
+						connection_set_state(srv, con, CON_STATE_ERROR);
+
+						TRACE("aio-op was canceled, waiting: %d, was asked for %s (fd = %d)", 
+							waiting, BUF_STR(con->uri.path), con->sock->fd);
+						connection_set_state(srv, con, CON_STATE_ERROR);
+						break;
+					case 0:
+						break;
+					default:
+						connection_set_state(srv, con, CON_STATE_ERROR);
+
+						TRACE("aio-op failed with %d (%s), waiting: %d, was asked for %s (fd = %d)", 
+							errno, strerror(errno), waiting, BUF_STR(con->uri.path), con->sock->fd);
+						connection_set_state(srv, con, CON_STATE_ERROR);
+						break;
+					}
+
+					if ((res = aio_return(iocb)) < 0) {
+						/* we have an error */
+	
+						TRACE("aio-return returned %d (%s), waiting: %d, was asked for %s (fd = %d)", 
+							errno, strerror(errno), waiting, BUF_STR(con->uri.path), con->sock->fd);
+						connection_set_state(srv, con, CON_STATE_ERROR);
+					}
+
+					/* free the iocb */
+					srv->posix_aio_data[i] = NULL;
+					srv->posix_aio_iocbs_watch[i] = NULL;
+
+					joblist_append(srv, con);
+					srv->have_aio_waiting--;
+				}
+			}
+
+			/* interrupt the poll() */
+			kill(getpid(), SIGUSR1);
+		}
+
+		pthread_mutex_unlock(&getevents_mutex);
+	}
+
+	return NULL;
+}
+
 #endif
 
 int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
 	int poll_errno;
 
-#ifdef HAVE_LIBAIO_H
+#if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
 	/* the getevents and the poll() have to run in parallel
 	 * as soon as one has data, it has to interrupt the otherone */
 
@@ -562,7 +641,11 @@ int lighty_mainloop(server *srv) {
 
 	pthread_mutex_lock(&getevents_mutex);
 
-	pthread_create(&getevents_thread, NULL, linux_io_getevents_thread, srv);
+	if (srv->network_backend_write == network_write_chunkqueue_linuxaiosendfile) {
+		pthread_create(&getevents_thread, NULL, linux_io_getevents_thread, srv);
+	} else if (srv->network_backend_write == network_write_chunkqueue_posixaio) {
+		pthread_create(&getevents_thread, NULL, posix_aio_getevents_thread, srv);
+	}
 #endif
 	/* main-loop */
 	while (!srv_shutdown) {
@@ -838,8 +921,8 @@ int lighty_mainloop(server *srv) {
 			}
 		}
 
-#ifdef HAVE_LIBAIO_H
-		if (srv->linux_io_waiting) {
+#if defined(HAVE_LIBAIO_H) || defined (HAVE_AIO_H)
+		if (srv->have_aio_waiting) {
 			pthread_mutex_unlock(&getevents_mutex);
 			pthread_cond_signal(&getevents_cond);
 

@@ -39,6 +39,10 @@
 # include <libaio.h>
 #endif
 
+#ifdef HAVE_AIO_H
+# include <aio.h>
+#endif
+
 #ifndef O_BINARY
 # define O_BINARY 0
 #endif
@@ -573,14 +577,23 @@ typedef struct server {
 	gid_t gid;
 #endif
 
+	int have_aio_waiting;
+
 #ifdef HAVE_LIBAIO_H
 #define LINUX_IO_MAX_IOCBS 64
 	io_context_t linux_io_ctx;
 
 	struct iocb linux_io_iocbs[LINUX_IO_MAX_IOCBS];
 
-	int linux_io_waiting;
 #endif
+#ifdef HAVE_AIO_H
+#define POSIX_AIO_MAX_IOCBS 64
+	struct aiocb posix_aio_iocbs[POSIX_AIO_MAX_IOCBS];
+	struct aiocb * posix_aio_iocbs_watch[POSIX_AIO_MAX_IOCBS];
+
+	void *posix_aio_data[POSIX_AIO_MAX_IOCBS];
+#endif
+	
 } server;
 
 

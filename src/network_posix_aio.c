@@ -69,7 +69,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
-				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -85,7 +85,6 @@ NETWORK_BACKEND_WRITE(posixaio) {
 			do {
 				size_t toSend;
 				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
-				int file_fd;
 				off_t offset;
 			
 				offset = c->file.start + c->offset;
@@ -93,9 +92,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 				toSend = c->file.length - c->offset > max_toSend ?
 					max_toSend : c->file.length - c->offset;
 
-				if (-1 == c->file.copy.fd || 0 == c->file.copy.length) {
-					long page_size = sysconf(_SC_PAGESIZE);
-
+				if (0 == c->file.copy.length) {
 					int res;
 					int async_error = 0;
 
@@ -103,7 +100,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					
 
 					c->file.copy.offset = 0; 
-					c->file.copy.length = toSend - (toSend % page_size); /* align to page-size */
+					c->file.copy.length = toSend;
 
 					if (c->file.copy.length == 0) {
 						async_error = 1;
@@ -142,15 +139,14 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					/* get mmap()ed mem-block in /dev/shm */
 					if (async_error == 0 && -1 == c->file.copy.fd ) {
-						char tmpfile_name[sizeof("/dev/shm/l-XXXXXX")];
+						int mmap_fd = -1;
 
 						/* open a file in /dev/shm to write to */
-						strcpy(tmpfile_name, "/dev/shm/l-XXXXXX");
-						if (-1 == (c->file.copy.fd = mkstemp(tmpfile_name))) {
+						if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 							async_error = 1;
 					
 							if (errno != EMFILE) {	
-								TRACE("mkstemp returned: %d (%s), open fds: %d, falling back to sync-io", 
+								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d, falling back to sync-io", 
 									errno, strerror(errno), srv->cur_fds);
 							}
 						}
@@ -159,63 +155,41 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						c->file.mmap.length = c->file.copy.length; /* align to page-size */
 
 						if (!async_error) {
-							srv->cur_fds++;
-							unlink(tmpfile_name); /* remove the file again, we still keep it open */
-							if (0 != ftruncate(c->file.copy.fd, c->file.mmap.length)) {
-								/* disk full ... */
-								async_error = 1;
-								
-								TRACE("ftruncate returned: %d (%s), open fds: %d, falling back to sync-io", 
-									errno, strerror(errno), srv->cur_fds);
-							}
-						}
-
-						if (!async_error) {
-
 							c->file.mmap.start = mmap(0, c->file.mmap.length, 
-									PROT_READ | PROT_WRITE, MAP_SHARED, c->file.copy.fd, 0);
+									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
 								async_error = 1;
 							}
+
+							close(mmap_fd);
+							mmap_fd = -1;
 						}
-					}
-
-					/* can we be sure that offset is always aligned ? */
-        				if (async_error == 0 &&
-					    (((intptr_t)c->file.mmap.start) % page_size != 0 ||
-					     c->file.copy.length % page_size != 0 ||
-					     ((intptr_t)(c->file.start + c->offset)) % page_size != 0)) {
-						/** 
-						 * after a fallback to sendfile() the offset might be unaligned
-						 */
-
-						async_error = 1;
 					}
 
 
 					/* looks like we couldn't get a temp-file [disk-full] */	
-					if (async_error == 0 && -1 != c->file.copy.fd) {
+					if (async_error == 0 && c->file.mmap.start != MAP_FAILED) {
 						struct aiocb *iocb = NULL;
 
 						assert(c->file.copy.length > 0);
 
 						iocb = &srv->posix_aio_iocbs[iocb_ndx];
 
+						memset(iocb, 0, sizeof(*iocb));
+
 						iocb->aio_fildes = c->file.fd;
 						iocb->aio_buf = c->file.mmap.start;
 						iocb->aio_nbytes = c->file.copy.length;
 						iocb->aio_offset = c->file.start + c->offset;
 
-						srv->posix_aio_data[iocb_ndx] = con;
-
 					       	if (0 == aio_read(iocb)) {
 							srv->have_aio_waiting++;
 
 							srv->posix_aio_iocbs_watch[iocb_ndx] = iocb;
+							srv->posix_aio_data[iocb_ndx] = con;
 
 							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 						} else {
-
 							srv->posix_aio_data[iocb_ndx] = NULL;
 
 							if (errno != EAGAIN) {
@@ -226,70 +200,62 @@ NETWORK_BACKEND_WRITE(posixaio) {
 							}
 						}
 					}
+					/* we don't support fallbacks yet */
+					assert(0);
 
-					/* oops, looks like the IO-queue is full
-					 *
-					 * fall-back to blocking sendfile()
-					 */
-
-					if (c->file.mmap.start != MAP_FAILED) {
-						munmap(c->file.mmap.start, c->file.mmap.length);
-						c->file.mmap.start = MAP_FAILED;
-					}
-					if (c->file.copy.fd != -1) {
-						close(c->file.copy.fd);
-						srv->cur_fds--;
-						c->file.copy.fd = -1;
-					}
-
-					c->file.copy.length = 0;
-					c->file.copy.offset = 0;
 				} else if (c->file.copy.offset == 0) {
-					/* we are finished */
-				}
+					size_t iocb_ndx;
+					struct aiocb *iocb = NULL;
 
-				if (c->file.copy.fd == -1) {
-					file_fd = c->file.fd;
-				} else {
-					file_fd = c->file.copy.fd;
+					/* the aio_read() is finished, send it */
 
-					offset = c->file.copy.offset;
-					toSend = c->file.copy.length - offset;
-				}
+					/* do we have a IOCB we can use ? */
 
-				/* send the tmp-file from /dev/shm/ */
-				if (-1 == (r = sendfile(sock->fd, file_fd, &offset, toSend))) {
-					switch (errno) {
-					case EAGAIN:
-					case EINTR:
-						return NETWORK_STATUS_WAIT_FOR_EVENT;
-					case EPIPE:
-					case ECONNRESET:
-						return NETWORK_STATUS_CONNECTION_CLOSE;
-					default:
-						log_error_write(srv, __FILE__, __LINE__, "ssd",
-								"sendfile failed:", strerror(errno), sock->fd);
-						return NETWORK_STATUS_FATAL_ERROR;
+					for (iocb_ndx = 0; iocb_ndx < POSIX_AIO_MAX_IOCBS; iocb_ndx++) {
+						if (NULL == srv->posix_aio_data[iocb_ndx]) {
+							break;
+						}
 					}
-				}
 
-				if (r == 0) {
-					/* ... ooops */
-					return NETWORK_STATUS_CONNECTION_CLOSE;
-				}
+					assert(iocb_ndx != POSIX_AIO_MAX_IOCBS);
 
-				c->offset += r; /* global offset in the file */
-				cq->bytes_out += r;
+					iocb = &srv->posix_aio_iocbs[iocb_ndx];
+					memset(iocb, 0, sizeof(*iocb));
 
-				if (c->file.copy.fd == -1) {
-					/* ... */
-				} else {
-					c->file.copy.offset += r; /* local offset in the mmap file */
+					iocb->aio_fildes = sock->fd;
+					iocb->aio_buf = c->file.mmap.start;
+					iocb->aio_nbytes = c->file.copy.length;
+					iocb->aio_offset = 0;
 
-					if (c->file.copy.offset == c->file.copy.length) {
-						c->file.copy.length = 0; /* reset the length and let the next round fetch a new item */
+					/* the write should only return when it is finished */
+					fcntl(sock->fd, F_SETFL, fcntl(sock->fd, F_GETFL) & ~O_NONBLOCK);
+					
+					if (0 != aio_write(iocb)) { 
+						TRACE("aio-write failed: %d (%s)", errno, strerror(errno));
+
+						return HANDLER_ERROR;
 					}
-				}
+
+					srv->have_aio_waiting++;
+
+					srv->posix_aio_iocbs_watch[iocb_ndx] = iocb;
+					srv->posix_aio_data[iocb_ndx] = con;
+
+					/* in case we come back: we have written everything */
+					c->file.copy.offset =  c->file.copy.length;
+
+					return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+				} 
+
+				c->offset += c->file.copy.offset; /* global offset in the file */
+				cq->bytes_out += c->file.copy.offset;
+
+				munmap(c->file.mmap.start, c->file.mmap.length);
+				c->file.mmap.start = MAP_FAILED;
+				c->file.copy.length = 0;
+
+				/* return as soon as possible again */
+				fcntl(sock->fd, F_SETFL, fcntl(sock->fd, F_GETFL) | O_NONBLOCK);
 
 				if (c->offset == c->file.length) {
 					chunk_finished = 1;

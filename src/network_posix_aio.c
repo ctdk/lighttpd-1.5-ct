@@ -233,7 +233,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					if (0 != aio_write(iocb)) { 
 						TRACE("aio-write failed: %d (%s)", errno, strerror(errno));
 
-						return HANDLER_ERROR;
+						return NETWORK_STATUS_FATAL_ERROR;
 					}
 
 					srv->have_aio_waiting++;

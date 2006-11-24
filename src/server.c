@@ -594,7 +594,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 						connection_set_state(srv, con, CON_STATE_ERROR);
 
 						TRACE("aio-op failed with %d (%s), waiting: %d, was asked for %s (fd = %d)", 
-							errno, strerror(errno), waiting, BUF_STR(con->uri.path), con->sock->fd);
+							res, strerror(res), waiting, BUF_STR(con->uri.path), con->sock->fd);
 						connection_set_state(srv, con, CON_STATE_ERROR);
 						break;
 					}
@@ -603,7 +603,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 						/* we have an error */
 	
 						TRACE("aio-return returned %d (%s), waiting: %d, was asked for %s (fd = %d)", 
-							errno, strerror(errno), waiting, BUF_STR(con->uri.path), con->sock->fd);
+							res, strerror(res), waiting, BUF_STR(con->uri.path), con->sock->fd);
 						connection_set_state(srv, con, CON_STATE_ERROR);
 					}
 

@@ -97,8 +97,30 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 
 	if (0 == strncmp(BUF_STR(name), "unix:", 5)) {
 		/* a unix domain socket */
+#ifdef HAVE_SYS_UN_H
+		proxy_address *a = proxy_address_init();
+
+		/* setup AF_UNIX sockaddr */
+		a->addr.un.sun_family = AF_UNIX;
+		strcpy(a->addr.un.sun_path, BUF_STR(name) + 5);
+		a->addrlen = sizeof(a->addr.un);
+/*
+#ifdef SUN_LEN
+		a->addrlen = SUN_LEN(&(a->addr.un));
+#else
+		a->addrlen = (name->used - 5) + sizeof(a->addr.un.sun_family);
+#endif
+*/
+
+		a->state = PROXY_ADDRESS_STATE_ACTIVE;
+		buffer_copy_string_buffer(a->name, name);
+
+		proxy_address_pool_add(address_pool, a);
+		return 0;
+#else
 		ERROR("unix: scheme is not supported for %s", BUF_STR(name));
 		return -1;
+#endif
 	} else if (name->ptr[0] == '[') {
 		if (name->ptr[name->used - 1] == ']') {
 			/* no port-number attached */
@@ -151,6 +173,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 		proxy_address *a = proxy_address_init();
 
 		memcpy(&(a->addr), cur->ai_addr, cur->ai_addrlen);
+		a->addrlen = cur->ai_addrlen;
 
 		a->state = PROXY_ADDRESS_STATE_ACTIVE;
 		buffer_prepare_copy(a->name, 128);

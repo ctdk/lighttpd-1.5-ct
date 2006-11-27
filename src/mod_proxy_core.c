@@ -447,6 +447,8 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 	int fd;
 
 	if (-1 == (fd = socket(con->address->addr.plain.sa_family, SOCK_STREAM, 0))) {
+		ERROR("socket failed: %s", strerror(errno));
+		return HANDLER_ERROR;
 	}
 
 	fcntl(fd, F_SETFL, O_NONBLOCK | O_RDWR);
@@ -455,7 +457,7 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 	con->sock->fde_ndx = -1;
 	con->sock->type = IOSOCKET_TYPE_SOCKET;
 
-	if (-1 == connect(fd, &(con->address->addr.plain), sizeof(con->address->addr))) {
+	if (-1 == connect(fd, &(con->address->addr.plain), con->address->addrlen)) {
 		switch(errno) {
 		case EINPROGRESS:
 		case EALREADY:
@@ -465,6 +467,7 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 			close(fd);
 			con->sock->fd = -1;
 
+			ERROR("connect failed: %s", strerror(errno));
 			return HANDLER_ERROR;
 		}
 	}
@@ -1189,6 +1192,9 @@ SUBREQUEST_FUNC(mod_proxy_core_check_extension) {
 		con->plugin_ctx[p->id] = sess;
 		con->mode = p->id;
 
+		if (con->conf.log_request_handling) {
+			ERROR("handling it in mod_proxy_core: uri.path=%s", BUF_STR(con->uri.path));
+		}
 		sess->remote_con = con;
 	}
 
@@ -1560,6 +1566,7 @@ int mod_proxy_core_plugin_init(plugin *p) {
 	p->cleanup      = mod_proxy_core_free;
 	p->set_defaults = mod_proxy_core_set_defaults;
 	p->handle_physical         = mod_proxy_core_check_extension;
+	p->handle_start_backend = mod_proxy_core_check_extension;
 	p->handle_send_request_content = mod_proxy_send_request_content;
 	p->handle_read_response_content = mod_proxy_core_start_backend;
 	p->connection_reset        = mod_proxy_connection_reset;

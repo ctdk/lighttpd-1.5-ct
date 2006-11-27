@@ -205,6 +205,9 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 
 		/* fce is already set up a few lines above */
 
+		/* need to reset condition cache since uri.path changed. */
+		config_cond_cache_reset(srv, con);
+
 		return HANDLER_GO_ON;
 	}
 

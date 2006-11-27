@@ -14,6 +14,7 @@ typedef enum {
 
 typedef struct {
 	sock_addr addr;
+	socklen_t addrlen;
 
 	buffer *name; /* a inet_ntoa() prepresentation of the address */
 

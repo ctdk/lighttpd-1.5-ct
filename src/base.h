@@ -580,14 +580,14 @@ typedef struct server {
 	int have_aio_waiting;
 
 #ifdef HAVE_LIBAIO_H
-#define LINUX_IO_MAX_IOCBS 64
+#define LINUX_IO_MAX_IOCBS 128
 	io_context_t linux_io_ctx;
 
 	struct iocb linux_io_iocbs[LINUX_IO_MAX_IOCBS];
 
 #endif
 #ifdef HAVE_AIO_H
-#define POSIX_AIO_MAX_IOCBS 64
+#define POSIX_AIO_MAX_IOCBS 128
 	struct aiocb posix_aio_iocbs[POSIX_AIO_MAX_IOCBS];
 	struct aiocb * posix_aio_iocbs_watch[POSIX_AIO_MAX_IOCBS];
 

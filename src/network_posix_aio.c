@@ -69,7 +69,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
-				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | /* O_DIRECT | */ (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;

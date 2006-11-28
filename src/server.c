@@ -82,7 +82,7 @@ static volatile sig_atomic_t graceful_restart = 0;
 static volatile sig_atomic_t handle_sig_alarm = 1;
 static volatile sig_atomic_t handle_sig_hup = 0;
 
-#ifdef HAVE_LIBAIO_H
+#if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
 #include <pthread.h>
 #endif
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
@@ -475,7 +475,7 @@ static void show_help (void) {
 	}
 }
 
-#ifdef HAVE_LIBAIO_H
+#if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
 
 static pthread_mutex_t getevents_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
@@ -497,6 +497,7 @@ static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
  *
  * If no io-event is pending, linux_io_getevents_thread() won't be activated
  */
+#if defined(HAVE_LIBAIO_H)
 static void *linux_io_getevents_thread(void *_data) {
 	server *srv = _data;
 
@@ -545,12 +546,13 @@ static void *linux_io_getevents_thread(void *_data) {
 
 	return NULL;
 }
+#endif
 
+#if defined(HAVE_AIO_H)
 static void *posix_aio_getevents_thread(void *_data) {
 	server *srv = _data;
 
 	while (!srv_shutdown) {
-		struct io_event event[16];
 	        struct timespec io_ts;
 		int waiting;
 
@@ -569,7 +571,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 
 			for (i = 0; i < POSIX_AIO_MAX_IOCBS && srv->have_aio_waiting > 0; i++) {
 				connection *con;
-				struct aio_iocb *iocb;
+				struct aiocb *iocb;
 				int res;
 
 				if (srv->posix_aio_iocbs_watch[i] == NULL) continue;
@@ -625,7 +627,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 
 	return NULL;
 }
-
+#endif
 #endif
 
 int lighty_mainloop(server *srv) {
@@ -638,13 +640,30 @@ int lighty_mainloop(server *srv) {
 
 	pthread_t getevents_thread;
 	int is_unlocked = 0;
+	int aio_backend = 0;
 
 	pthread_mutex_lock(&getevents_mutex);
 
-	if (srv->network_backend_write == network_write_chunkqueue_linuxaiosendfile) {
+#if defined(HAVE_LIBAIO_H)
+	if (!aio_backend) aio_backend = (srv->network_backend_write == network_write_chunkqueue_linuxaiosendfile) << 0;
+#endif
+#if defined(HAVE_AIO_H)
+	if (!aio_backend) aio_backend = (srv->network_backend_write == network_write_chunkqueue_posixaio) << 1;
+#endif
+
+	switch (aio_backend) {
+#if defined(HAVE_LIBAIO_H)
+	case 1:
 		pthread_create(&getevents_thread, NULL, linux_io_getevents_thread, srv);
-	} else if (srv->network_backend_write == network_write_chunkqueue_posixaio) {
+		break;
+#endif
+#if defined(HAVE_AIO_H)
+	case 2:
 		pthread_create(&getevents_thread, NULL, posix_aio_getevents_thread, srv);
+		break;
+#endif
+	default:
+		break;
 	}
 #endif
 	/* main-loop */

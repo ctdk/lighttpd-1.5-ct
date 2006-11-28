@@ -69,7 +69,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
-				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -137,8 +137,12 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					}
 
 
-					/* get mmap()ed mem-block in /dev/shm */
-					if (async_error == 0 && -1 == c->file.copy.fd ) {
+					/* get mmap()ed mem-block in /dev/shm
+					 *
+					 * in case we don't have a iocb available, we still need the mmap() for the blocking
+					 * read()
+					 *  */
+					if (-1 == c->file.copy.fd ) {
 						int mmap_fd = -1;
 
 						/* open a file in /dev/shm to write to */
@@ -149,12 +153,10 @@ NETWORK_BACKEND_WRITE(posixaio) {
 								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d, falling back to sync-io", 
 									errno, strerror(errno), srv->cur_fds);
 							}
-						}
+						} else {
+							c->file.mmap.offset = 0;
+							c->file.mmap.length = c->file.copy.length; /* align to page-size */
 
-						c->file.mmap.offset = 0;
-						c->file.mmap.length = c->file.copy.length; /* align to page-size */
-
-						if (!async_error) {
 							c->file.mmap.start = mmap(0, c->file.mmap.length, 
 									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
@@ -200,10 +202,45 @@ NETWORK_BACKEND_WRITE(posixaio) {
 							}
 						}
 					}
-					/* we don't support fallbacks yet */
-					assert(0);
+
+					/* fall back to a blocking read */
+
+					if (c->file.mmap.start != MAP_FAILED) {
+						lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
+
+						if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
+							switch(errno) {
+							default:
+								ERROR("reading file failed: %d (%s)", errno, strerror(errno));
+
+								return NETWORK_STATUS_FATAL_ERROR;
+							}
+						}
+
+						if (r == 0) {
+							ERROR("read() returned 0 ... not good: %s", "");
+
+							return NETWORK_STATUS_FATAL_ERROR;
+						}
+
+						if (r != c->file.copy.length) {
+							ERROR("read() returned %d instead of %d", r, c->file.copy.length);
+
+							return NETWORK_STATUS_FATAL_ERROR;
+						}
+					} else {
+						ERROR("the mmap() failed, no way for a fallback: %s", "");
+
+						return NETWORK_STATUS_FATAL_ERROR;
+					}
 
 				} else if (c->file.copy.offset == 0) {
+#if 0
+					/**
+					 * aio_write only creates extra-trouble
+					 *
+					 * instead we use the classic non-blocking-io write() call on the socket
+					 */
 					size_t iocb_ndx;
 					struct aiocb *iocb = NULL;
 
@@ -245,17 +282,40 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					c->file.copy.offset =  c->file.copy.length;
 
 					return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
-				} 
+#endif
+				}
 
-				c->offset += c->file.copy.offset; /* global offset in the file */
-				cq->bytes_out += c->file.copy.offset;
+				if (-1 == (r = write(sock->fd, c->file.mmap.start + c->file.copy.offset, c->file.copy.length - c->file.copy.offset))) {
+					switch (errno) {
+					case EINTR:
+					case EAGAIN:
+						return NETWORK_STATUS_WAIT_FOR_EVENT;
+					case ECONNRESET:
+						return NETWORK_STATUS_CONNECTION_CLOSE;
+					default:
+						ERROR("write failed: %d (%s)", errno, strerror(errno));
+						return NETWORK_STATUS_FATAL_ERROR;
+					}
+				}
 
-				munmap(c->file.mmap.start, c->file.mmap.length);
-				c->file.mmap.start = MAP_FAILED;
-				c->file.copy.length = 0;
+				if (r == 0) {
+					return NETWORK_STATUS_CONNECTION_CLOSE;
+				}
 
+				c->file.copy.offset += r; /* offset in the copy-chunk */
+
+				c->offset += r; /* global offset in the file */
+				cq->bytes_out += r;
+
+				if (c->file.mmap.length == c->file.copy.offset) {
+					munmap(c->file.mmap.start, c->file.mmap.length);
+					c->file.mmap.start = MAP_FAILED;
+					c->file.copy.length = 0;
+				}
+#if 0
 				/* return as soon as possible again */
 				fcntl(sock->fd, F_SETFL, fcntl(sock->fd, F_GETFL) | O_NONBLOCK);
+#endif
 
 				if (c->offset == c->file.length) {
 					chunk_finished = 1;

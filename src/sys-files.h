@@ -49,8 +49,8 @@ buffer *pathname_unix2local(buffer *b);
 
 #define DIR_SEPERATOR DIR_SEPERATOR_UNIX
 
-#define filename_unix2local(x) (x)
-#define pathname_unix2local(x) (x)
+#define filename_unix2local(x) /* (x) */
+#define pathname_unix2local(x) /* (x) */
 #endif
 
 #define PATHNAME_APPEND_SLASH(x) \

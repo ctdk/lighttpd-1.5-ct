@@ -205,6 +205,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	parse_status_t ret = PARSE_UNSET;
 	int last_token_id = 0;
 
+	if(!cq->first) return PARSE_NEED_MORE;
 	t.cq = cq;
 	t.c = cq->first;
 	t.offset = t.c->offset;
@@ -250,6 +251,9 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	http_resp_parser(pParser, 0, token, &context);
 	http_resp_parserFree(pParser, free);
 
+		if (!buffer_is_empty(context.errmsg)) {
+			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+		}
 	if (context.ok == 0) {
 		/* we are missing the some tokens */
 
@@ -265,9 +269,11 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 
 		for (c = cq->first; c != t.c; c = c->next) {
 			c->offset = c->mem->used - 1;
+			cq->bytes_out += c->mem->used - 1;
 		}
 
 		c->offset = t.offset;
+		cq->bytes_out += t.offset;
 
 		ret = PARSE_SUCCESS;
 	}

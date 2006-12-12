@@ -134,23 +134,6 @@ typedef struct {
 
 data_integer *data_integer_init(void);
 
-typedef struct {
-	DATA_UNSET;
-
-	buffer *host;
-
-	unsigned short port;
-
-	time_t disable_ts;
-	int is_disabled;
-	size_t balance;
-
-	int usage; /* fair-balancing needs the no. of connections active on this host */
-	int last_used_ndx; /* round robin */
-} data_fastcgi;
-
-data_fastcgi *data_fastcgi_init(void);
-
 array *array_init(void);
 array *array_init_array(array *a);
 void array_free(array *a);
@@ -160,6 +143,8 @@ data_unset *array_pop(array *a);
 int array_print(array *a, int depth);
 data_unset *array_get_unused_element(array *a, data_type_t t);
 data_unset *array_get_element(array *a, const char *key);
+void array_set_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
+void array_append_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
 data_unset *array_replace(array *a, data_unset *du);
 int array_strcasecmp(const char *a, size_t a_len, const char *b, size_t b_len);
 void array_print_indent(int depth);

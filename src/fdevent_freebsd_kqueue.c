@@ -117,7 +117,7 @@ static int fdevent_freebsd_kqueue_poll(fdevents *ev, int timeout_ms) {
 static int fdevent_freebsd_kqueue_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
 	size_t ndx;
 
-	for (ndx = 0; ndx < ev->used; ndx++) {
+	for (ndx = 0; ndx < event_count; ndx++) {
 		int events = 0, e;
 
 		e = ev->kq_results[ndx].filter;

@@ -458,7 +458,6 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
  */
 CONNECTION_FUNC(mod_staticfile_dev_null) {
 	chunk *c;
-	off_t offset;
 	chunkqueue *in = con->recv;
 	
 	if (con->mode != DIRECT) return HANDLER_GO_ON;

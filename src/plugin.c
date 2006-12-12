@@ -436,7 +436,7 @@ handler_t plugins_call_init(server *srv) {
 #undef PLUGIN_TO_SLOT
 
 		if (p->init) {
-			if (NULL == (p->data = p->init())) {
+			if (NULL == (p->data = p->init(srv))) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
 						"plugin-init failed for module", p->name);
 				return HANDLER_ERROR;

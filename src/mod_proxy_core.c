@@ -16,10 +16,10 @@
 #include "inet_ntop_cache.h"
 #include "crc32.h"
 #include "configfile.h"
+#include "stat_cache.h"
 
 #include "mod_proxy_core.h"
-#include "mod_proxy_backend_http.h"
-#include "mod_proxy_backend_fastcgi.h"
+#include "mod_proxy_core_protocol.h"
 
 #define CONFIG_PROXY_CORE_BALANCER "proxy-core.balancer"
 #define CONFIG_PROXY_CORE_PROTOCOL "proxy-core.protocol"
@@ -30,6 +30,7 @@
 #define CONFIG_PROXY_CORE_ALLOW_X_SENDFILE "proxy-core.allow-x-sendfile"
 #define CONFIG_PROXY_CORE_ALLOW_X_REWRITE "proxy-core.allow-x-rewrite"
 #define CONFIG_PROXY_CORE_MAX_POOL_SIZE "proxy-core.max-pool-size"
+#define CONFIG_PROXY_CORE_CHECK_LOCAL "proxy-core.check-local"
 
 static int mod_proxy_wakeup_connections(server *srv, plugin_config *p);
 
@@ -47,8 +48,19 @@ int array_insert_int(array *a, const char *key, int val) {
 	return 0;
 }
 
+proxy_protocol *mod_proxy_core_register_protocol(const char *name) {
+	proxy_protocol *protocol = proxy_protocol_init();
+
+	protocol->name         = buffer_init_string(name);
+
+	proxy_protocols_register(protocol);
+	return protocol;
+}
+
 INIT_FUNC(mod_proxy_core_init) {
 	plugin_data *p;
+
+	proxy_protocols_init();
 
 	p = calloc(1, sizeof(*p));
 
@@ -59,11 +71,7 @@ INIT_FUNC(mod_proxy_core_init) {
 	array_insert_int(p->possible_balancers, "carp", PROXY_BALANCE_CARP);
 	array_insert_int(p->possible_balancers, "round-robin", PROXY_BALANCE_RR);
 
-	p->possible_protocols = array_init();
-	array_insert_int(p->possible_protocols, "http", PROXY_PROTOCOL_HTTP);
-	array_insert_int(p->possible_protocols, "fastcgi", PROXY_PROTOCOL_FASTCGI);
-	array_insert_int(p->possible_protocols, "scgi", PROXY_PROTOCOL_SCGI);
-	array_insert_int(p->possible_protocols, "https", PROXY_PROTOCOL_HTTPS);
+	p->proxy_register_protocol = mod_proxy_core_register_protocol;
 
 	p->balance_buf = buffer_init();
 	p->protocol_buf = buffer_init();
@@ -72,7 +80,6 @@ INIT_FUNC(mod_proxy_core_init) {
 
 	p->tmp_buf = buffer_init();
 
-	p->resp = http_response_init();
 #if 0
 	/**
 	 * create a small pool of session objects
@@ -111,7 +118,6 @@ FREE_FUNC(mod_proxy_core_free) {
 		free(p->config_storage);
 	}
 
-	array_free(p->possible_protocols);
 	array_free(p->possible_balancers);
 	array_free(p->backends_arr);
 
@@ -120,12 +126,13 @@ FREE_FUNC(mod_proxy_core_free) {
 	buffer_free(p->replace_buf);
 	buffer_free(p->tmp_buf);
 	
-	http_response_free(p->resp);
 #if 0
 	proxy_session_pool_free(p->session_pool);
 #endif
 
 	free(p);
+
+	proxy_protocols_free();
 
 	return HANDLER_GO_ON;
 }
@@ -218,6 +225,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		{ CONFIG_PROXY_CORE_ALLOW_X_SENDFILE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },   /* 6 */
 		{ CONFIG_PROXY_CORE_ALLOW_X_REWRITE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 7 */
 		{ CONFIG_PROXY_CORE_MAX_POOL_SIZE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },        /* 8 */
+		{ CONFIG_PROXY_CORE_CHECK_LOCAL, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -235,11 +243,12 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		s = calloc(1, sizeof(plugin_config));
 		s->debug     = 0;
 		s->balancer  = PROXY_BALANCE_UNSET;
-		s->protocol  = PROXY_PROTOCOL_UNSET;
+		s->protocol  = NULL;
 		s->backends  = proxy_backends_init();
 		s->backlog   = proxy_backlog_init();
 		s->response_rewrites   = proxy_rewrites_init();
 		s->request_rewrites   = proxy_rewrites_init();
+		s->check_local = 0;
 
 		cv[0].destination = p->backends_arr;
 		cv[1].destination = &(s->debug);
@@ -248,6 +257,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		cv[6].destination = &(s->allow_x_sendfile);
 		cv[7].destination = &(s->allow_x_rewrite);
 		cv[8].destination = &(s->max_pool_size);
+		cv[9].destination = &(s->check_local);
 
 		buffer_reset(p->balance_buf);
 
@@ -271,15 +281,13 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		}
 
 		if (!buffer_is_empty(p->protocol_buf)) {
-			data_integer *di;
-			
-			if (NULL == (di = (data_integer *)array_get_element(p->possible_protocols, BUF_STR(p->protocol_buf)))) {
-				ERROR("proxy.protocol has to be on of 'http', 'fastcgi', got %s", BUF_STR(p->protocol_buf));
-
+			proxy_protocol *protocol = NULL;
+			if (NULL == (protocol = proxy_get_protocol(p->protocol_buf))) {
+				ERROR("proxy.protocol has to be on of { %s } got %s", proxy_available_protocols(),
+						BUF_STR(p->protocol_buf));
 				return HANDLER_ERROR;
 			}
-
-			s->protocol = di->value;
+			s->protocol = protocol;
 		}
 
 		if (p->backends_arr->used) {
@@ -321,13 +329,16 @@ proxy_session *proxy_session_init(void) {
 	sess = calloc(1, sizeof(*sess));
 
 	sess->state = PROXY_STATE_UNSET;
+	sess->request_uri = buffer_init();
 	sess->request_headers = array_init();
 	sess->env_headers = array_init();
+
+	sess->resp = http_response_init();
+	sess->protocol_data = NULL;
 
 	sess->recv = chunkqueue_init();
 	sess->recv_raw = chunkqueue_init();
 	sess->send_raw = chunkqueue_init();
-	sess->send = chunkqueue_init();
 
 	sess->is_chunked = 0;
 	sess->send_response_content = 1;
@@ -338,13 +349,17 @@ proxy_session *proxy_session_init(void) {
 void proxy_session_reset(proxy_session *sess) {
 	if (!sess) return;
 
+	buffer_reset(sess->request_uri);
 	array_reset(sess->request_headers);
 	array_reset(sess->env_headers);
+
+	http_response_reset(sess->resp);
+	sess->protocol_data = NULL;
+	sess->p = NULL;
 
 	chunkqueue_reset(sess->recv);
 	chunkqueue_reset(sess->recv_raw);
 	chunkqueue_reset(sess->send_raw);
-	chunkqueue_reset(sess->send);
 
 	sess->state = PROXY_STATE_UNSET;
 
@@ -367,15 +382,79 @@ void proxy_session_reset(proxy_session *sess) {
 void proxy_session_free(proxy_session *sess) {
 	if (!sess) return;
 
+	buffer_free(sess->request_uri);
 	array_free(sess->request_headers);
 	array_free(sess->env_headers);
+
+	http_response_free(sess->resp);
+	sess->protocol_data = NULL;
+	sess->p = NULL;
 
 	chunkqueue_free(sess->recv);
 	chunkqueue_free(sess->recv_raw);
 	chunkqueue_free(sess->send_raw);
-	chunkqueue_free(sess->send);
 
 	free(sess);
+}
+
+/**
+ * Copy decoded response content to client connection.
+ */
+int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
+	chunk *c;
+	int we_have = 0;
+
+	chunkqueue_remove_finished_chunks(sess->recv);
+	/* copy the content to the next cq */
+	for (c = sess->recv->first; c; c = c->next) {
+		if (c->mem->used == 0) continue;
+
+		we_have = c->mem->used - c->offset - 1;
+		sess->recv->bytes_out += we_have;
+		if (sess->send_response_content) {
+			con->send->bytes_in += we_have;
+			/* X-Sendfile ignores the content-body */
+			if (c->offset == 0) {
+				/* steal the buffer from the previous queue */
+
+				chunkqueue_steal_chunk(con->send, c);
+			} else {
+				chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
+		
+				c->offset = c->mem->used - 1; /* mark the incoming side as read */
+			}
+		} else {
+			/* discard the data */
+			c->offset = c->mem->used - 1; /* mark the incoming side as read */
+		}
+	}
+	chunkqueue_remove_finished_chunks(sess->recv);
+
+	return 0;
+}
+
+/**
+ * Initialize protocol stream.
+ *
+ */
+int proxy_stream_init(server *srv, proxy_session *sess) {
+	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	if(protocol && protocol->proxy_stream_init) {
+		return (protocol->proxy_stream_init)(srv, sess);
+	}
+	return 1;
+}
+
+/**
+ * Cleanup protocol state data.
+ *
+ */
+int proxy_stream_cleanup(server *srv, proxy_session *sess) {
+	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	if(protocol && protocol->proxy_stream_cleanup) {
+		return (protocol->proxy_stream_cleanup)(srv, sess);
+	}
+	return 1;
 }
 
 /**
@@ -389,16 +468,14 @@ void proxy_session_free(proxy_session *sess) {
  */
 
 int proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	switch (sess->proxy_backend->protocol) {
-	case PROXY_PROTOCOL_HTTP:
-		return proxy_http_stream_decoder(srv, sess, in, out);
-	case PROXY_PROTOCOL_FASTCGI:
-		return proxy_fastcgi_stream_decoder(srv, sess, in, out);
-	default:
-		ERROR("protocol %d is not supported yet", sess->proxy_backend->protocol);
-		return -1;
+	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	if(protocol && protocol->proxy_stream_decoder) {
+		return (protocol->proxy_stream_decoder)(srv, sess, in, out);
 	}
+	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+	return -1;
 }
+
 /**
  * encode the content for the protocol
  *
@@ -406,42 +483,223 @@ int proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *in, chunk
  * @param out chunkqueue for the encoded, protocol specific data
  */
 int proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	switch (sess->proxy_backend->protocol) {
-	case PROXY_PROTOCOL_HTTP:
-		return proxy_http_stream_encoder(srv, sess, in, out);
-	case PROXY_PROTOCOL_FASTCGI:
-		return proxy_fastcgi_stream_encoder(srv, sess, in, out);
-	default:
-		ERROR("protocol %d is not supported yet", sess->proxy_backend->protocol);
-		return -1;
+	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	if(protocol && protocol->proxy_stream_encoder) {
+		return (protocol->proxy_stream_encoder)(srv, sess, in, out);
 	}
+	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+	return -1;
 }
 
-int proxy_get_request_chunk(server *srv, connection *con, plugin_data *p, proxy_session *sess, chunkqueue *cq) {
-	switch (sess->proxy_backend->protocol) {
-	case PROXY_PROTOCOL_HTTP:
-		return proxy_http_get_request_chunk(srv, con, p, sess, cq);
-	case PROXY_PROTOCOL_FASTCGI:
-		return proxy_fastcgi_get_request_chunk(srv, con, p, sess, cq);
-	default:
-		ERROR("protocol %d is not supported yet", sess->proxy_backend->protocol);
-		return -1;
+/**
+ * encode the request for the protocol
+ *
+ * @param in chunkqueue with the content to (no encoding)
+ * @param out chunkqueue for the encoded, protocol specific data
+ */
+int proxy_get_request_chunk(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	if(protocol && protocol->proxy_get_request_chunk) {
+		return (protocol->proxy_get_request_chunk)(srv, sess, in, out);
 	}
+	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+	return -1;
 }
 
+parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_data *p,
+	                                         proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	int have_content_length = 0;
+	size_t i;
 
-parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_data *p, proxy_session *sess, chunkqueue *cq) {
-	switch (sess->proxy_backend->protocol) {
-	case PROXY_PROTOCOL_HTTP:
-		return proxy_http_parse_response_header(srv, con, p, sess, cq);
-	case PROXY_PROTOCOL_FASTCGI:
-		return proxy_fastcgi_parse_response_header(srv, con, p, sess, cq);
-	default:
-		ERROR("protocol %d is not supported yet", sess->proxy_backend->protocol);
+	if(!protocol || !(protocol->proxy_parse_response_header)) {
+		ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+		return -1;
+	}
+
+	/* parse response from backend */
+	switch((protocol->proxy_parse_response_header)(srv, sess, in, out)) {
+	case PARSE_ERROR:
+		/* parsing failed */
+
 		return PARSE_ERROR;
+	case PARSE_NEED_MORE:
+		return PARSE_NEED_MORE;
+	case PARSE_SUCCESS:
+		break;
+	default:
+		return PARSE_SUCCESS;
 	}
-}
 
+	sess->content_length = -1;
+
+	/* finished parsing http response headers from backend, now prepare http response headers
+	 * for client response.
+	 */
+	con->http_status = sess->resp->status;
+
+	chunkqueue_remove_finished_chunks(in);
+	chunkqueue_remove_finished_chunks(out);
+
+	/* copy the http-headers */
+	for (i = 0; i < sess->resp->headers->used; i++) {
+		const char *ign[] = { "Status", NULL };
+		size_t j, k;
+		data_string *ds;
+
+		data_string *header = (data_string *)sess->resp->headers->data[i];
+
+		/* some headers are ignored by default */
+		for (j = 0; ign[j]; j++) {
+			if (0 == strcasecmp(ign[j], header->key->ptr)) break;
+		}
+		if (ign[j]) continue;
+
+		if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Location"))) {
+			/* CGI/1.1 rev 03 - 7.2.1.2 */
+			if (con->http_status == 0) con->http_status = 302;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Content-Length"))) {
+			have_content_length = 1;
+
+			sess->content_length = strtol(header->value->ptr, NULL, 10);
+
+			if (sess->content_length < 0) {
+				return PARSE_ERROR;
+			}
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Sendfile")) ||
+			   0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-Sendfile"))) {
+			if (p->conf.allow_x_sendfile) {
+				sess->send_response_content = 0;
+				sess->do_internal_redirect = 1;
+				
+				/* don't try to rewrite this request through mod_proxy_core again */
+				sess->internal_redirect_count = MAX_INTERNAL_REDIRECTS; 
+
+				buffer_copy_string_buffer(con->physical.path, header->value);
+
+				/* as we want to support ETag and friends we set the physical path for the file
+				 * and hope mod_staticfile catches up */
+			}
+
+			continue;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-send-tempfile"))) {
+			if (p->conf.allow_x_sendfile && !buffer_is_empty(header->value)) {
+				stat_cache_entry *sce = NULL;
+				
+				if (HANDLER_ERROR != stat_cache_get_entry(srv, con, header->value, &sce)) {
+					chunk *c;
+					sess->send_response_content = 0;
+
+					if(sce->st.st_size > 0) {
+						chunkqueue_append_file(con->send, header->value, 0, sce->st.st_size);
+						con->send->bytes_in += sce->st.st_size;
+						c = con->send->last;
+						c->file.is_temp = 1;
+					} else {
+						if(unlink(BUF_STR(header->value)) < 0) {
+							ERROR("Failed to delete empty tempfile: file=%s, error: %s", BUF_STR(header->value), strerror(errno));
+						}
+					}
+					con->response.content_length = sce->st.st_size;
+					have_content_length = 1;
+					con->send->is_closed = 1;
+				} else {
+					ERROR("Failed to send tempfile: file=%s, error: %s", BUF_STR(header->value), strerror(errno));
+				}
+			}
+
+			continue;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-URI"))) { 
+			if (p->conf.allow_x_rewrite) {
+				sess->send_response_content = 0;
+				sess->do_internal_redirect = 1;
+
+				buffer_copy_string_buffer(con->request.uri, header->value);
+				buffer_reset(con->physical.path);
+
+				config_cond_cache_reset(srv, con);
+			}
+
+			continue;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-Host"))) { 
+			if (p->conf.allow_x_rewrite) {
+				sess->send_response_content = 0;
+				sess->do_internal_redirect = 1;
+
+				buffer_copy_string_buffer(con->request.http_host, header->value);
+				buffer_reset(con->physical.path);
+
+				config_cond_cache_reset(srv, con);
+			}
+
+			continue;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Transfer-Encoding"))) {
+			if (strstr(header->value->ptr, "chunked")) {
+				sess->is_chunked = 1;
+			}
+			/* ignore the header */
+			continue;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Connection"))) {
+			if (strstr(header->value->ptr, "close")) {
+				sess->is_closing = 1;
+			}
+			/* ignore the header */
+			continue;
+
+		}
+		
+		if (NULL == (ds = (data_string *)array_get_unused_element(con->response.headers, TYPE_STRING))) {
+			ds = data_response_init();
+		}
+
+
+		buffer_copy_string_buffer(ds->key, header->key);
+
+		for (k = 0; k < p->conf.response_rewrites->used; k++) {
+			proxy_rewrite *rw = p->conf.response_rewrites->ptr[k];
+
+			if (buffer_is_equal(rw->header, header->key)) {
+				int ret;
+
+				if ((ret = pcre_replace(rw->regex, rw->replace, header->value, p->replace_buf)) < 0) {
+					switch (ret) {
+					case PCRE_ERROR_NOMATCH:
+						/* hmm, ok. no problem */
+						buffer_append_string_buffer(ds->value, header->value);
+						break;
+					default:
+						TRACE("oops, pcre_replace failed with: %d", ret);
+						break;
+					}
+				} else {
+					buffer_append_string_buffer(ds->value, p->replace_buf);
+				}
+
+				break;
+			}
+		}
+
+		if (k == p->conf.response_rewrites->used) {
+			buffer_copy_string_buffer(ds->value, header->value);
+		}
+
+		array_insert_unique(con->response.headers, (data_unset *)ds);
+	}
+
+	/* we are finished decoding the response content. */
+	if(out->is_closed) {
+		proxy_copy_response(srv, con, sess);
+	} else {
+		/* We don't have all the response content try to enable chunked encoding. */
+		/* does the client allow us to send chunked encoding ? */
+		if (con->request.http_version == HTTP_VERSION_1_1 &&
+		    !have_content_length) {
+			con->response.transfer_encoding = HTTP_TRANSFER_ENCODING_CHUNKED;
+		}
+	}
+
+	return PARSE_SUCCESS; /* we have a full header */
+}
 
 handler_t proxy_connection_connect(proxy_connection *con) {
 	int fd;
@@ -568,46 +826,18 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 			/* let the getsockopt() catch this */
 			joblist_append(srv, con);
 			break;
+		case PROXY_STATE_READ_RESPONSE_HEADER:
 		case PROXY_STATE_READ_RESPONSE_BODY:
 			/* the keep-alive race-condition */
 			break;
 		default:
-			ERROR("oops, unexpected state for fdevent-hup %d", sess->state);
+			ERROR("oops, unexpected state for fdevent-hup state=%d, revents=%d", sess->state, revents);
 			break;
 		}
 	}
 
 	return HANDLER_GO_ON;
 }
-void proxy_set_header(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len) {
-	data_string *ds_dst;
-
-	if (NULL != (ds_dst = (data_string *)array_get_element(hdrs, key))) {
-		buffer_copy_string_len(ds_dst->value, value, val_len);
-		return;
-	}
-
-	if (NULL == (ds_dst = (data_string *)array_get_unused_element(hdrs, TYPE_STRING))) {
-		ds_dst = data_string_init();
-	}
-
-	buffer_copy_string_len(ds_dst->key, key, key_len);
-	buffer_copy_string_len(ds_dst->value, value, val_len);
-	array_insert_unique(hdrs, (data_unset *)ds_dst);
-}
-
-void proxy_append_header(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len) {
-	data_string *ds_dst;
-
-	if (NULL == (ds_dst = (data_string *)array_get_unused_element(hdrs, TYPE_STRING))) {
-		ds_dst = data_string_init();
-	}
-
-	buffer_copy_string_len(ds_dst->key, key, key_len);
-	buffer_copy_string_len(ds_dst->value, value, val_len);
-	array_insert_unique(hdrs, (data_unset *)ds_dst);
-}
-
 
 /**
  * build the request-header array and call the backend specific request formater
@@ -619,18 +849,18 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 	size_t i;
 
 	remote_ip = inet_ntop_cache_get_ip(srv, &(con->dst_addr));
-	proxy_append_header(sess->request_headers, CONST_STR_LEN("X-Forwarded-For"), remote_ip, strlen(remote_ip));
+	array_append_key_value(sess->request_headers, CONST_STR_LEN("X-Forwarded-For"), remote_ip, strlen(remote_ip));
 
 	/* http_host is NOT is just a pointer to a buffer
 	 * which is NULL if it is not set */
 	if (con->request.http_host &&
 	    !buffer_is_empty(con->request.http_host)) {
-		proxy_set_header(sess->request_headers, CONST_STR_LEN("X-Host"), CONST_BUF_LEN(con->request.http_host));
+		array_set_key_value(sess->request_headers, CONST_STR_LEN("X-Host"), CONST_BUF_LEN(con->request.http_host));
 	}
 	if (con->conf.is_ssl) {
-		proxy_set_header(sess->request_headers, CONST_STR_LEN("X-Forwarded-Proto"), CONST_STR_LEN("https"));
+		array_set_key_value(sess->request_headers, CONST_STR_LEN("X-Forwarded-Proto"), CONST_STR_LEN("https"));
 	} else {
-		proxy_set_header(sess->request_headers, CONST_STR_LEN("X-Forwarded-Proto"), CONST_STR_LEN("http"));
+		array_set_key_value(sess->request_headers, CONST_STR_LEN("X-Forwarded-Proto"), CONST_STR_LEN("http"));
 	}
 
 	/* request header */
@@ -656,14 +886,14 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 					switch (ret) {
 					case PCRE_ERROR_NOMATCH:
 						/* hmm, ok. no problem */
-						proxy_set_header(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
+						array_set_key_value(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
 						break;
 					default:
 						TRACE("oops, pcre_replace failed with: %d", ret);
 						break;
 					}
 				} else {
-					proxy_set_header(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(p->replace_buf));
+					array_set_key_value(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(p->replace_buf));
 				}
 
 				break;
@@ -671,11 +901,41 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 		}
 
 		if (k == p->conf.request_rewrites->used) {
-			proxy_set_header(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
+			array_set_key_value(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
 		}
 	}
 
-	proxy_get_request_chunk(srv, con, p, sess, sess->send_raw);
+	/* check if we want to rewrite the uri */
+
+	for (i = 0; i < p->conf.request_rewrites->used; i++) {
+		proxy_rewrite *rw = p->conf.request_rewrites->ptr[i];
+
+		if (buffer_is_equal_string(rw->header, CONST_STR_LEN("_uri"))) {
+			int ret;
+
+			if ((ret = pcre_replace(rw->regex, rw->replace, con->request.uri, p->replace_buf)) < 0) {
+				switch (ret) {
+				case PCRE_ERROR_NOMATCH:
+					/* hmm, ok. no problem */
+					buffer_append_string_buffer(sess->request_uri, con->request.uri);
+					break;
+				default:
+					TRACE("oops, pcre_replace failed with: %d", ret);
+					break;
+				}
+			} else {
+				buffer_append_string_buffer(sess->request_uri, p->replace_buf);
+			}
+
+			break;
+		}
+	}
+
+	if (i == p->conf.request_rewrites->used) {
+		buffer_append_string_buffer(sess->request_uri, con->request.uri);
+	}
+
+	proxy_get_request_chunk(srv, sess, con->recv, sess->send_raw);
 
 	return 0;
 }
@@ -694,9 +954,9 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
  *  */
 handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	/* do we have a connection ? */
-	chunk *c;
 
-	if (sess->state == PROXY_STATE_UNSET) {
+	switch (sess->state) {
+	case PROXY_STATE_UNSET:
 		/* we are not started yet */
 		sess->connect_start_ts = srv->cur_ts;
 		switch(proxy_connection_connect(sess->proxy_con)) {
@@ -723,86 +983,69 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			return HANDLER_ERROR;
 		
 		}
-	} else if (sess->state == PROXY_STATE_CONNECTING) {
-		int socket_error;
-		socklen_t socket_error_len = sizeof(socket_error);
 
-		fdevent_event_del(srv->ev, sess->proxy_con->sock);
+		/* fall through */
+	case PROXY_STATE_CONNECTING:
+		/* skip if already connected */
+		if (sess->state == PROXY_STATE_CONNECTING) {
+			int socket_error;
+			socklen_t socket_error_len = sizeof(socket_error);
 
-		if (0 != getsockopt(sess->proxy_con->sock->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
-			ERROR("getsockopt failed:", strerror(errno));
+			fdevent_event_del(srv->ev, sess->proxy_con->sock);
 
-			return HANDLER_ERROR;
-		}
-		if (socket_error != 0) {
-			switch (socket_error) {
-			case ECONNREFUSED:
-				/* there is no-one on the other side */
-				sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
+			if (0 != getsockopt(sess->proxy_con->sock->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
+				ERROR("getsockopt failed:", strerror(errno));
 
-				TRACE("address %s refused us, disabling for 2 sec", sess->proxy_con->address->name->ptr);
-				break;
-			case EHOSTUNREACH:
-				/* there is no-one on the other side */
-				sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+				return HANDLER_ERROR;
+			}
+			if (socket_error != 0) {
+				switch (socket_error) {
+				case ECONNREFUSED:
+					/* there is no-one on the other side */
+					sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
 
-				TRACE("host %s is unreachable, disabling for 60 sec", sess->proxy_con->address->name->ptr);
-				break;
-			default:
-				sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+					TRACE("address %s refused us, disabling for 2 sec", sess->proxy_con->address->name->ptr);
+					break;
+				case EHOSTUNREACH:
+					/* there is no-one on the other side */
+					sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
 
-				TRACE("connected finally failed: %s (%d)", strerror(socket_error), socket_error);
+					TRACE("host %s is unreachable, disabling for 60 sec", sess->proxy_con->address->name->ptr);
+					break;
+				default:
+					sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
 
-				TRACE("connect to address %s failed and I don't know why, disabling for 10 sec", sess->proxy_con->address->name->ptr);
+					TRACE("connected finally failed: %s (%d)", strerror(socket_error), socket_error);
 
-				break;
+					TRACE("connect to address %s failed and I don't know why, disabling for 10 sec", sess->proxy_con->address->name->ptr);
+
+					break;
+				}
+
+				sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
+				sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
+				return HANDLER_COMEBACK;
 			}
 
-			sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
-			sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
-			return HANDLER_COMEBACK;
+			sess->state = PROXY_STATE_CONNECTED;
+			sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
 		}
 
-		sess->state = PROXY_STATE_CONNECTED;
-		sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
-	}
+		/* fall through */
+	case PROXY_STATE_CONNECTED:
+		/* initialize stream. */
+		proxy_stream_init(srv, sess);
 
-	if (sess->state == PROXY_STATE_CONNECTED) {
+		sess->state = PROXY_STATE_WRITE_REQUEST_HEADER;
+
+		/* fall through */
+	case PROXY_STATE_WRITE_REQUEST_HEADER:
 		/* build the header */
 		proxy_get_request_header(srv, con, p, sess);
 
-		sess->state = PROXY_STATE_WRITE_REQUEST_HEADER;
-	}
-
-	switch (sess->state) {
-	case PROXY_STATE_WRITE_REQUEST_HEADER:
-#if 0
-		/* create the request-packet */	
-		fdevent_event_del(srv->ev, sess->proxy_con->sock);
-
-		switch (srv->network_backend_write(srv, con, sess->proxy_con->sock, sess->send_raw)) {
-		case NETWORK_STATUS_SUCCESS:
-			sess->state = PROXY_STATE_WRITE_REQUEST_BODY;
-			break;
-		case NETWORK_STATUS_WAIT_FOR_EVENT:
-			fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_OUT);
-
-			return HANDLER_WAIT_FOR_EVENT;
-		case NETWORK_STATUS_CONNECTION_CLOSE:
-			sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
-
-			/* this connection is closed, restart the request with a new connection */
-
-			return HANDLER_COMEBACK;
-		default:
-			return HANDLER_ERROR;
-		}
-#endif
 		/* send the header together with the body */
 		sess->state = PROXY_STATE_WRITE_REQUEST_BODY;
 
-		chunkqueue_remove_finished_chunks(sess->send_raw);
-		
 		/* fall through */
 	case PROXY_STATE_WRITE_REQUEST_BODY:
 		/* do we have a content-body to send up to the backend ? */
@@ -819,8 +1062,10 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			    con->recv->bytes_in == con->recv->bytes_out &&  /* everything is encoded */
 			    sess->send_raw->bytes_in == sess->send_raw->bytes_out) { /* everything is sent */
 				sess->state = PROXY_STATE_READ_RESPONSE_HEADER;
+				break;
 			}
-			break;
+
+			/** fall through, still have data to write. */
 		case NETWORK_STATUS_WAIT_FOR_EVENT:
 			fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_OUT);
 
@@ -851,7 +1096,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		case NETWORK_STATUS_SUCCESS:
 			/* we read everything from the socket, do we have a full header ? */
 
-			switch (proxy_parse_response_header(srv, con, p, sess, sess->recv_raw)) {
+			switch (proxy_parse_response_header(srv, con, p, sess, sess->recv_raw, sess->recv)) {
 			case PARSE_ERROR:
 				con->http_status = 502; /* bad gateway */
 
@@ -927,7 +1172,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 		if (!sess->recv_raw->is_closed &&
 		    (sess->recv_raw->first == NULL || 
-		     sess->recv_raw->bytes_in == sess->recv_raw->bytes_out)) {
+				 sess->recv_raw->bytes_in == sess->recv_raw->bytes_out)) {
 			/* we have to read more data */
 
 			switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
@@ -962,7 +1207,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		case -1:
 			TRACE("stream-decode: %s", "-1");
 			/* error */
-			break;
+			return HANDLER_ERROR;
 		case 1:
 			/* we are done, close the decoded queue */
 			sess->recv->is_closed = 1;
@@ -975,37 +1220,15 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		}
 		chunkqueue_remove_finished_chunks(sess->recv_raw);
 
-
-		/* copy the content to the next cq */
-		for (c = sess->recv->first; c; c = c->next) {
-			if (c->mem->used == 0) continue;
-
-			if (sess->send_response_content) {
-				/* X-Sendfile ignores the content-body */
-				if (c->offset == 0) {
-					/* steal the buffer from the previous queue */
-
-					chunkqueue_steal_chunk(con->send, c);
-				} else {
-					chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-			
-					c->offset = c->mem->used - 1; /* mark the incoming side as read */
-				}
-			} else {
-				/* discard the data */
-				c->offset = c->mem->used - 1; /* mark the incoming side as read */
-			}
-
-
-		}
-		chunkqueue_remove_finished_chunks(sess->recv);
-
+		proxy_copy_response(srv, con, sess);
 
 		/* we wrote something into the the send-buffers, 
 		 * call the connection-handler to push it to the client */
 
 		joblist_append(srv, con);
 		
+		break;
+	default:
 		break;
 	}
 
@@ -1136,6 +1359,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(response_rewrites);
 	PATCH_OPTION(allow_x_sendfile);
 	PATCH_OPTION(allow_x_rewrite);
+	PATCH_OPTION(check_local);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -1166,6 +1390,8 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(allow_x_sendfile);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_ALLOW_X_REWRITE))) {
 				PATCH_OPTION(allow_x_rewrite);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_CHECK_LOCAL))) {
+				PATCH_OPTION(check_local);
 			}
 		}
 	}
@@ -1173,32 +1399,49 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	return 0;
 }
 
-SUBREQUEST_FUNC(mod_proxy_core_check_extension) {
-	plugin_data *p = p_d;
-	proxy_session *sess = con->plugin_ctx[p->id]; /* if this is the second round, sess is already prepared */
+static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data *p, int file_match) {
+	proxy_session *sess = con->plugin_ctx[p->id];
+	buffer *path;
+
+	/* if this is the second round, sess is already prepared */
+	if (sess) return HANDLER_GO_ON;
+
+	path = file_match ? con->physical.path : con->uri.path;
+	if (buffer_is_empty(path)) return HANDLER_GO_ON;
 
 	/* check if we have a matching conditional for this request */
-
-	if (buffer_is_empty(con->uri.path)) return HANDLER_GO_ON;
-
 	mod_proxy_core_patch_connection(srv, con, p);
 
+	/* no proxy backends to handle this request. */
 	if (p->conf.backends->used == 0) return HANDLER_GO_ON;
+
+	/* if check_local is enabled, then wait for file match. */
+	if (file_match != p->conf.check_local) return HANDLER_GO_ON;
 
 	if (!sess) {
 		/* a session lives for a single request */
 		sess = proxy_session_init();
+		sess->p = p;
 
 		con->plugin_ctx[p->id] = sess;
 		con->mode = p->id;
 
 		if (con->conf.log_request_handling) {
-			ERROR("handling it in mod_proxy_core: uri.path=%s", BUF_STR(con->uri.path));
+			TRACE("handling it in mod_proxy_core: %s.path=%s",
+					file_match ? "physical" : "uri", BUF_STR(path));
 		}
 		sess->remote_con = con;
 	}
 
 	return HANDLER_GO_ON;
+}
+
+SUBREQUEST_FUNC(mod_proxy_core_match_url) {
+	return mod_proxy_core_check_match(srv, con, p_d, 0);
+}
+
+SUBREQUEST_FUNC(mod_proxy_core_match_local_file) {
+	return mod_proxy_core_check_match(srv, con, p_d, 1);
 }
 
 CONNECTION_FUNC(mod_proxy_core_start_backend) {
@@ -1221,7 +1464,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	assert(sess);
 
 	if (sess->do_internal_redirect) {
-	       if (sess->internal_redirect_count > MAX_INTERNAL_REDIRECTS) {
+		if (sess->internal_redirect_count > MAX_INTERNAL_REDIRECTS) {
 			/* we already handled this request and sent it to the static file handling */
 
 			return HANDLER_GO_ON;
@@ -1462,6 +1705,8 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 	}
 	
 
+	/* cleanup protocol stream and proxy session */
+	proxy_stream_cleanup(srv, sess);
 	proxy_session_free(sess);
 
 	con->plugin_ctx[p->id] = NULL;
@@ -1565,8 +1810,8 @@ int mod_proxy_core_plugin_init(plugin *p) {
 	p->init         = mod_proxy_core_init;
 	p->cleanup      = mod_proxy_core_free;
 	p->set_defaults = mod_proxy_core_set_defaults;
-	p->handle_physical         = mod_proxy_core_check_extension;
-	p->handle_start_backend = mod_proxy_core_check_extension;
+	p->handle_physical         = mod_proxy_core_match_url;
+	p->handle_start_backend = mod_proxy_core_match_local_file;
 	p->handle_send_request_content = mod_proxy_send_request_content;
 	p->handle_read_response_content = mod_proxy_core_start_backend;
 	p->connection_reset        = mod_proxy_connection_reset;

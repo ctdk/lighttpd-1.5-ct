@@ -13,6 +13,8 @@
 
 #define MAX_INTERNAL_REDIRECTS 8
 
+struct proxy_protocol;
+
 typedef struct {
 	proxy_backends *backends;
 
@@ -25,18 +27,18 @@ typedef struct {
 	unsigned short allow_x_rewrite;
 	unsigned short debug;
 	unsigned short max_pool_size;
+	unsigned short check_local;
 
 	proxy_balance_t balancer;
-	proxy_protocol_t protocol;
+	struct proxy_protocol *protocol;
 } plugin_config;
 
 typedef struct {
 	PLUGIN_DATA;
 
-	http_resp *resp;
-
 	array *possible_balancers;
-	array *possible_protocols;
+	/*array *possible_protocols; */
+	struct proxy_protocol *(*proxy_register_protocol) (const char *name); /* register new protocol */
 
 	/* for parsing only */
 	array *backends_arr;
@@ -50,8 +52,9 @@ typedef struct {
 	plugin_config **config_storage;
 
 	plugin_config conf;
-} plugin_data;
+} mod_proxy_core_plugin_data;
 
+#define plugin_data mod_proxy_core_plugin_data
 
 typedef enum {
 	PROXY_STATE_UNSET,
@@ -69,8 +72,16 @@ typedef struct {
 
 	connection *remote_con;
 
+	buffer *request_uri;
 	array *request_headers;    /** the con->request.headers without the hop-to-hop headers */
 	array *env_headers;        /** transformed request-headers for the backend */
+
+	/* TODO: move http_resp into protocol_data.  Some protocols can't use the http_resp for parsing */
+	http_resp *resp;           /** response http headers from backend. */
+	/* TODO: move protocol_data into proxy_connection.  Don't need to init/free this data for each session */
+	void *protocol_data;       /** protocol handler's state data for parsing response from backend. */
+
+	plugin_data *p;            /** used by proxy_xxx_get_request_chunk protocol callbacks */
 
 	int is_chunked;            /** is the incoming content chunked (for HTTP) */
 	int is_closing;            /** our connection will close when we are done */
@@ -80,16 +91,14 @@ typedef struct {
 	
 	/**
 	 * chunkqueues
-	 * - the encoded_rb is the raw network stuff
-	 * - the rb is filtered through the stream decoder
+	 * - recv_raw     is the raw byte stream that need to be decoded
+	 * - recv         is the decoded response headers and content
 	 *
-	 * - wb is the normal bytes stream
-	 * - encoded_wb is encoded for the network by the stream encoder
+	 * - send_raw     is the raw byte stream that has been encoded
 	 */
 	chunkqueue *recv;
 	chunkqueue *recv_raw;
 	chunkqueue *send_raw;
-	chunkqueue *send;
 	
 	off_t bytes_read;
 	off_t content_length;
@@ -100,7 +109,5 @@ typedef struct {
 
 	int sent_to_backlog;
 } proxy_session;
-
-void proxy_set_header(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
 
 #endif

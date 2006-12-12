@@ -4,10 +4,19 @@
 
 #include "inet_ntop_cache.h"
 #include "mod_proxy_core.h"
+#include "mod_proxy_core_protocol.h"
 #include "buffer.h"
 #include "log.h"
 #include "fastcgi.h"
+#include "array.h"
 
+#define CORE_PLUGIN "mod_proxy_core"
+
+typedef struct {
+	PLUGIN_DATA;
+
+	proxy_protocol *protocol;
+} protocol_plugin_data;
 
 /** 
  * we aren't supporting multiplexing
@@ -19,9 +28,62 @@
 #define PROXY_FASTCGI_USE_KEEP_ALIVE 1
 #endif
 
-int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
-	buffer *b;
+typedef struct {
+	size_t   len;
+	off_t    offset;
+	int      type;
+	int      padding;
+	size_t   request_id;
+} fastcgi_packet;
 
+/**
+ * The fastcgi protocol decoder will use this struct for storing state variables
+ * used in decoding the stream
+ */
+typedef struct {
+	buffer          *buf; /* holds raw header bytes or used to buffer STDERR */
+	fastcgi_packet  packet; /* parsed info about current packet. */
+} fcgi_state_data;
+
+fcgi_state_data *fcgi_state_data_init(void) {
+	fcgi_state_data *data;
+
+	data = calloc(1, sizeof(*data));
+	data->buf = buffer_init();
+
+	return data;
+}
+
+void fcgi_state_data_free(fcgi_state_data *data) {
+	buffer_free(data->buf);
+	free(data);
+}
+
+void fcgi_state_data_reset(fcgi_state_data *data) {
+	buffer_reset(data->buf);
+	data->packet.len = 0;
+	data->packet.offset = 0;
+	data->packet.type = 0;
+	data->packet.padding = 0;
+	data->packet.request_id = 0;
+}
+
+SESSION_FUNC(proxy_fastcgi_init) {
+	if(!sess->protocol_data) {
+		sess->protocol_data = fcgi_state_data_init();
+	}
+	return 1;
+}
+
+SESSION_FUNC(proxy_fastcgi_cleanup) {
+	if(sess->protocol_data) {
+		fcgi_state_data_free((fcgi_state_data *)sess->protocol_data);
+		sess->protocol_data = NULL;
+	}
+	return 1;
+}
+
+int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	char buf[32];
 	const char *s;
 	server_socket *srv_sock = con->srv_socket;
@@ -32,10 +94,10 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 	sock_addr our_addr;
 	socklen_t our_addr_len;
 
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("SERVER_SOFTWARE"), CONST_STR_LEN(PACKAGE_NAME"/"PACKAGE_VERSION));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_SOFTWARE"), CONST_STR_LEN(PACKAGE_NAME"/"PACKAGE_VERSION));
 
 	if (con->server_name->used) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("SERVER_NAME"), CONST_BUF_LEN(con->server_name));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_NAME"), CONST_BUF_LEN(con->server_name));
 	} else {
 #ifdef HAVE_IPV6
 		s = inet_ntop(srv_sock->addr.plain.sa_family,
@@ -46,10 +108,10 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 #else
 		s = inet_ntoa(srv_sock->addr.ipv4.sin_addr);
 #endif
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("SERVER_NAME"), s, strlen(s));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_NAME"), s, strlen(s));
 	}
 
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("GATEWAY_INTERFACE"), CONST_STR_LEN("CGI/1.1"));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("GATEWAY_INTERFACE"), CONST_STR_LEN("CGI/1.1"));
 
 	ltostr(buf,
 #ifdef HAVE_IPV6
@@ -59,7 +121,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 #endif
 	       );
 
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("SERVER_PORT"), buf, strlen(buf));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_PORT"), buf, strlen(buf));
 
 	/* get the server-side of the connection to the client */
 	our_addr_len = sizeof(our_addr);
@@ -69,7 +131,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 	} else {
 		s = inet_ntop_cache_get_ip(srv, &(our_addr));
 	}
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("SERVER_ADDR"), s, strlen(s));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_ADDR"), s, strlen(s));
 
 	ltostr(buf,
 #ifdef HAVE_IPV6
@@ -79,13 +141,13 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 #endif
 	       );
 
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("REMOTE_PORT"), buf, strlen(buf));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("REMOTE_PORT"), buf, strlen(buf));
 
 	s = inet_ntop_cache_get_ip(srv, &(con->dst_addr));
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("REMOTE_ADDR"), s, strlen(s));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("REMOTE_ADDR"), s, strlen(s));
 
 	if (!buffer_is_empty(con->authed_user)) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("REMOTE_USER"),
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("REMOTE_USER"),
 			     CONST_BUF_LEN(con->authed_user));
 	}
 
@@ -94,7 +156,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 
 		/* request.content_length < SSIZE_MAX, see request.c */
 		ltostr(buf, con->request.content_length);
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("CONTENT_LENGTH"), buf, strlen(buf));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("CONTENT_LENGTH"), buf, strlen(buf));
 	}
 
 	
@@ -105,18 +167,18 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 	 * For AUTHORIZER mode these headers should be omitted.
 	 */
 
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("SCRIPT_NAME"), CONST_BUF_LEN(con->uri.path));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("SCRIPT_NAME"), CONST_BUF_LEN(con->uri.path));
 
 	if (!buffer_is_empty(con->request.pathinfo)) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("PATH_INFO"), CONST_BUF_LEN(con->request.pathinfo));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("PATH_INFO"), CONST_BUF_LEN(con->request.pathinfo));
 
 		/* PATH_TRANSLATED is only defined if PATH_INFO is set */
 
 		buffer_copy_string_buffer(p->tmp_buf, con->physical.doc_root);
 		buffer_append_string_buffer(p->tmp_buf, con->request.pathinfo);
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("PATH_TRANSLATED"), CONST_BUF_LEN(p->tmp_buf));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("PATH_TRANSLATED"), CONST_BUF_LEN(p->tmp_buf));
 	} else {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("PATH_INFO"), CONST_STR_LEN(""));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("PATH_INFO"), CONST_STR_LEN(""));
 	}
 
 	/*
@@ -128,30 +190,30 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 	 */
 
 	if (1) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("SCRIPT_FILENAME"), CONST_BUF_LEN(con->physical.path));
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("DOCUMENT_ROOT"), CONST_BUF_LEN(con->physical.doc_root));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("SCRIPT_FILENAME"), CONST_BUF_LEN(con->physical.path));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("DOCUMENT_ROOT"), CONST_BUF_LEN(con->physical.doc_root));
 	}
 
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("REQUEST_URI"), CONST_BUF_LEN(con->request.orig_uri));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("REQUEST_URI"), CONST_BUF_LEN(con->request.orig_uri));
 
-	if (!buffer_is_equal(con->request.uri, con->request.orig_uri)) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("REDIRECT_URI"), CONST_BUF_LEN(con->request.uri));
+	if (!buffer_is_equal(sess->request_uri, con->request.orig_uri)) {
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("REDIRECT_URI"), CONST_BUF_LEN(sess->request_uri));
 	}
 	if (!buffer_is_empty(con->uri.query)) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("QUERY_STRING"), CONST_BUF_LEN(con->uri.query));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("QUERY_STRING"), CONST_BUF_LEN(con->uri.query));
 	} else {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("QUERY_STRING"), CONST_STR_LEN(""));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("QUERY_STRING"), CONST_STR_LEN(""));
 	}
 
 	s = get_http_method_name(con->request.http_method);
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("REQUEST_METHOD"), s, strlen(s));
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("REDIRECT_STATUS"), CONST_STR_LEN("200")); /* if php is compiled with --force-redirect */
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("REQUEST_METHOD"), s, strlen(s));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("REDIRECT_STATUS"), CONST_STR_LEN("200")); /* if php is compiled with --force-redirect */
 	s = get_http_version_name(con->request.http_version);
-	proxy_set_header(sess->env_headers, CONST_STR_LEN("SERVER_PROTOCOL"), s, strlen(s));
+	array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_PROTOCOL"), s, strlen(s));
 
 #ifdef USE_OPENSSL
 	if (srv_sock->is_ssl) {
-		proxy_set_header(sess->env_headers, CONST_STR_LEN("HTTPS"), CONST_STR_LEN("on"));
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("HTTPS"), CONST_STR_LEN("on"));
 	}
 #endif
 
@@ -195,7 +257,7 @@ int proxy_fastcgi_get_env_request(server *srv, connection *con, plugin_data *p, 
 		}
 		p->tmp_buf->ptr[p->tmp_buf->used++] = '\0';
 
-		proxy_set_header(sess->env_headers, CONST_BUF_LEN(p->tmp_buf), CONST_BUF_LEN(ds->value));
+		array_set_key_value(sess->env_headers, CONST_BUF_LEN(p->tmp_buf), CONST_BUF_LEN(ds->value));
 	}
 
 	return 0;
@@ -261,11 +323,13 @@ static int fcgi_header(FCGI_Header * header, unsigned char type, size_t request_
 }
 
 
-int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p, proxy_session *sess, chunkqueue *out) {
+STREAM_IN_OUT_FUNC(proxy_fastcgi_get_request_chunk) {
+	connection *con = sess->remote_con;
 	buffer *b, *packet;
 	size_t i;
 	FCGI_BeginRequestRecord beginRecord;
 	FCGI_Header header;
+	plugin_data *p = sess->p;
 
 	b = chunkqueue_get_append_buffer(out);
 	/* send FCGI_BEGIN_REQUEST */
@@ -317,147 +381,139 @@ int proxy_fastcgi_get_request_chunk(server *srv, connection *con, plugin_data *p
 	return 0;
 }
 
-
-typedef struct {
-	buffer  *b;
-	size_t   len;
-	int      type;
-	int      padding;
-	size_t   request_id;
-} fastcgi_response_packet;
-
-static int proxy_fastcgi_stream_decoder_internal(server *srv, proxy_session *sess, chunkqueue *raw, chunkqueue *decoded) {
-	chunk *	c;
-	size_t offset = 0;
-	size_t toread = 0;
+STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
+	fcgi_state_data *data = (fcgi_state_data *)sess->protocol_data;
 	FCGI_Header *header;
-	fastcgi_response_packet packet;
-	buffer *b;
+	off_t we_have = 0, we_need = 0;
+	int rc = 0;
+	chunk *c;
 
 	/* no data ? */
+	if (!in->first) return 0;
 
-	if (!raw->first) return 0;
+	/* parse the packet header. */
+	we_need = (FCGI_HEADER_LEN - data->packet.offset);
+	if(we_need > 0) {
+		/* copy fastcgi header to buffer */
+		buffer_prepare_append(data->buf, we_need);
+		for (c = in->first; c && we_need > 0; c = c->next) {
+			if(c->mem->used == 0) continue;
 
-	packet.b = buffer_init();
-	packet.len = 0;
-	packet.type = 0;
-	packet.padding = 0;
-	packet.request_id = 0;
+			we_have = c->mem->used - c->offset - 1;
+			if (we_have == 0) continue;
+			if (we_have > we_need) we_have = we_need;
 
-	/* get at least the FastCGI header */
-	for (c = raw->first; c; c = c->next) {
-		if (packet.b->used == 0) {
-			buffer_copy_string_len(packet.b, c->mem->ptr + c->offset, c->mem->used - c->offset - 1);
-		} else {
-			buffer_append_string_len(packet.b, c->mem->ptr + c->offset, c->mem->used - c->offset - 1);
+			buffer_append_string_len(data->buf, c->mem->ptr + c->offset, we_have);
+			data->packet.offset += we_have;
+			c->offset += we_have;
+			in->bytes_out += we_have;
+			we_need -= we_have;
 		}
-
-		if (packet.b->used >= sizeof(*header) + 1) break;
-	}
-
-	if ((packet.b->used == 0) ||
-	    (packet.b->used - 1 < sizeof(FCGI_Header))) {
-		/* no header */
-		buffer_free(packet.b);
-
-		ERROR("%s", "FastCGI: header too small");
-		return -1;
-	}
-
-	/* we have at least a header, now check how much me have to fetch */
-	header = (FCGI_Header *)(packet.b->ptr);
-
-	packet.len = (header->contentLengthB0 | (header->contentLengthB1 << 8)) + header->paddingLength;
-	packet.request_id = (header->requestIdB0 | (header->requestIdB1 << 8));
-	packet.type = header->type;
-	packet.padding = header->paddingLength;
-
-	/* the first bytes in packet->b are the header */
-	offset = sizeof(*header);
-
-	buffer_copy_string(packet.b, "");
-
-	if (packet.len) {
-		/* copy the content */
-		for (; c && (packet.b->used < packet.len + 1); c = c->next) {
-			size_t weWant = packet.len - (packet.b->used - 1);
-			size_t weHave = c->mem->used - c->offset - offset - 1;
-	
-			if (weHave > weWant) weHave = weWant;
-	
-			buffer_append_string_len(packet.b, c->mem->ptr + c->offset + offset, weHave);
-	
-			/* we only skipped the first 8 bytes as they are the fcgi header */
-			offset = 0;
-		}
-	
-		if (packet.b->used < packet.len + 1) {
-			/* we didn't got the full packet */
-	
-			buffer_free(packet.b);
-	
-			TRACE("%s", "need more");
-	
+		/* make sure we have the full fastcgi header. */
+		if(we_need > 0) {
+			/* we need more data to parse the header. */
 			return 0;
 		}
-	
-		packet.b->used -= packet.padding;
-		packet.b->ptr[packet.b->used - 1] = '\0';
-	}
-	
-	/* tag the chunks as read */
-	toread = packet.len + sizeof(FCGI_Header);
-	raw->bytes_out += toread;
+		/* parse raw header. */
+		header = (FCGI_Header *)(data->buf->ptr);
 
-	for (c = raw->first; c && toread; c = c->next) {
-		if (c->mem->used - c->offset - 1 <= toread) {
-			/* we read this whole buffer, move it to unused */
-			toread -= c->mem->used - c->offset - 1;
-			c->offset = c->mem->used - 1; /* everthing has been written */
-		} else {
-			c->offset += toread;
-			toread = 0;
-		}
+		data->packet.len = (header->contentLengthB0 | (header->contentLengthB1 << 8));
+		data->packet.request_id = (header->requestIdB0 | (header->requestIdB1 << 8));
+		data->packet.type = header->type;
+		data->packet.padding = header->paddingLength;
+
+		/* Finished parsing raw header bytes. */
+		buffer_reset(data->buf);
 	}
-	
-	chunkqueue_remove_finished_chunks(raw);
-	
-	/* we are still here ? */
-	switch (packet.type) {
+
+	/* proccess the packet's contents. */
+	we_need = data->packet.len - (data->packet.offset - FCGI_HEADER_LEN);
+	switch (data->packet.type) {
 	case FCGI_STDOUT:
-		b = chunkqueue_get_append_buffer(decoded);
-		buffer_copy_string_buffer(b, packet.b);
-		buffer_free(packet.b);
-		return 0;
-	case FCGI_STDERR:
-		if (!buffer_is_empty(packet.b)) {
-			TRACE("(fastcgi-stderr) %s", BUF_STR(packet.b));
+		if (we_need > 0) {
+			/* copy packet contents */
+			we_have = chunkqueue_steal_chunks_len(out, in->first, we_need);
+			data->packet.offset += we_have;
+			we_need -= we_have;
+			in->bytes_out += we_have;
+			out->bytes_in += we_have;
+		} else {
+			out->is_closed = 1;
 		}
-		buffer_free(packet.b);
-		return 0;
+		rc = 0;
+		break;
+	case FCGI_STDERR:
+		if(we_need > 0) {
+			buffer *b = buffer_init();
+			buffer_prepare_append(b, we_need);
+			for (c = in->first; c && we_need > 0; c = c->next) {
+				if (c->mem->used == 0) continue;
+
+				we_have = c->mem->used - c->offset - 1;
+				if (we_have == 0) continue;
+				if (we_have > we_need) we_have = we_need;
+
+				buffer_append_string_len(b, c->mem->ptr + c->offset, we_have);
+				data->packet.offset += we_have;
+				c->offset += we_have;
+				in->bytes_out += we_have;
+				we_need -= we_have;
+			}
+			TRACE("(fastcgi-stderr) %s", BUF_STR(b));
+			buffer_free(b);
+		}
+		rc = 0;
+		break;
 	case FCGI_END_REQUEST:
+		/* ignore packet content. */
+		if(we_need > 0) {
+			we_have = chunkqueue_skip(in, we_need);
+			data->packet.offset += we_have;
+			we_need -= we_have;
+			in->bytes_out += we_have;
+		}
+		if(we_need == 0) {
 #ifndef PROXY_FASTCGI_USE_KEEP_ALIVE
-		sess->is_closing = 1;
+			sess->is_closing = 1;
 #endif
-		buffer_free(packet.b);
-		return 1;
+			in->is_closed = 1;
+			out->is_closed = 1;
+			rc = 1;
+		}
+		break;
 	default:
-		buffer_free(packet.b);
-	
-		TRACE("unknown packet.type: %d", packet.type);
-		return -1;
+		TRACE("unknown packet.type: %d", data->packet.type);
+		rc = -1;
+		break;
 	}
 
-	return 0;
+	/* skip packet padding, once content has been processed. */
+	if(we_need == 0 && data->packet.padding > 0) {
+		we_have = chunkqueue_skip(in, data->packet.padding);
+		data->packet.padding -= we_have;
+		in->bytes_out += we_have;
+	}
+
+	if(we_need == 0 && data->packet.padding == 0) {
+		/* packet finished, reset state for next packet */
+		fcgi_state_data_reset(data);
+	}
+
+	chunkqueue_remove_finished_chunks(in);
+
+	return rc;
 }
 
-int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *raw, chunkqueue *decoded) {
+STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder) {
 	int res;
 
+	if(out->is_closed) return 1;
+	/* decode the whole packet stream */
 	do {
-		res = proxy_fastcgi_stream_decoder_internal(srv, sess, raw, decoded);
-	} while (raw->first && res == 0);
-
+		/* decode the packet */
+		res = proxy_fastcgi_stream_decoder_internal(srv, sess, in, out);
+	} while (in->first && res == 0);
+	
 	return res;
 }
 
@@ -466,7 +522,7 @@ int proxy_fastcgi_stream_decoder(server *srv, proxy_session *sess, chunkqueue *r
  *
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
-int proxy_fastcgi_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_encoder) {
 	chunk *c;
 	buffer *b;
 	FCGI_Header header;
@@ -569,120 +625,56 @@ int proxy_fastcgi_stream_encoder(server *srv, proxy_session *sess, chunkqueue *i
 /**
  * parse the response header
  *
- * NOTE: this can be used by all backends as they all send a HTTP-Response a clean block
  * - fastcgi needs some decoding for the protocol
  */
-parse_status_t proxy_fastcgi_parse_response_header(server *srv, connection *con, plugin_data *p, proxy_session *sess, chunkqueue *cq) {
-	int have_content_length = 0;
-	size_t i;
-	off_t old_len;
+STREAM_IN_OUT_FUNC(proxy_fastcgi_parse_response_header) {
 
-	http_response_reset(p->resp);
+	int res;
 
-	/* decode the whole packet stream */
-	do {
-		old_len = chunkqueue_length(sess->recv);
-		/* decode the packet */
-		switch (proxy_fastcgi_stream_decoder_internal(srv, sess, cq, sess->recv)) {
-		case 0: /* STDERR + STDOUT */
-			break;
-		case 1: /* the FIN packet was catched too, we parse all in one */
-			con->send->is_closed = 1;
-			break;
-		case -1:
-			return PARSE_ERROR;
-		}
-	} while (chunkqueue_length(sess->recv) == old_len);
-	
-	switch (http_response_parse_cq(sess->recv, p->resp)) {
-	case PARSE_ERROR:
-		/* parsing failed */
+	res = proxy_fastcgi_stream_decoder(srv, sess, in, out);
+	if(res < 0) return res;
 
-		return PARSE_ERROR;
-	case PARSE_NEED_MORE:
-		return PARSE_NEED_MORE;
-	case PARSE_SUCCESS:
-		con->http_status = p->resp->status;
-
-		chunkqueue_remove_finished_chunks(cq);
-
-		sess->content_length = -1;
-
-		/* copy the http-headers */
-		for (i = 0; i < p->resp->headers->used; i++) {
-			const char *ign[] = { "Status", "Connection", NULL };
-			size_t j, k;
-			data_string *ds;
-
-			data_string *header = (data_string *)p->resp->headers->data[i];
-
-			/* some headers are ignored by default */
-			for (j = 0; ign[j]; j++) {
-				if (0 == strcasecmp(ign[j], header->key->ptr)) break;
-			}
-			if (ign[j]) continue;
-
-			if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Location"))) {
-				/* CGI/1.1 rev 03 - 7.2.1.2 */
-				if (con->http_status == 0) con->http_status = 302;
-			} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Content-Length"))) {
-				have_content_length = 1;
-
-				sess->content_length = strtol(header->value->ptr, NULL, 10);
-
-				if (sess->content_length < 0) {
-					return PARSE_ERROR;
-				}
-			} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Transfer-Encoding"))) {
-				if (strstr(header->value->ptr, "chunked")) {
-					sess->is_chunked = 1;
-				}
-				/* ignore the header */
-				continue;
-			}
-			
-			if (NULL == (ds = (data_string *)array_get_unused_element(con->response.headers, TYPE_STRING))) {
-				ds = data_response_init();
-			}
-
-
-			buffer_copy_string_buffer(ds->key, header->key);
-
-			for (k = 0; k < p->conf.response_rewrites->used; k++) {
-				proxy_rewrite *rw = p->conf.response_rewrites->ptr[k];
-
-				if (buffer_is_equal(rw->header, header->key)) {
-					int ret;
-	
-					if ((ret = pcre_replace(rw->regex, rw->replace, header->value, p->replace_buf)) < 0) {
-						switch (ret) {
-						case PCRE_ERROR_NOMATCH:
-							/* hmm, ok. no problem */
-							buffer_append_string_buffer(ds->value, header->value);
-							break;
-						default:
-							TRACE("oops, pcre_replace failed with: %d", ret);
-							break;
-						}
-					} else {
-						buffer_append_string_buffer(ds->value, p->replace_buf);
-					}
-
-					break;
-				}
-			}
-
-			if (k == p->conf.response_rewrites->used) {
-				buffer_copy_string_buffer(ds->value, header->value);
-			}
-
-			array_insert_unique(con->response.headers, (data_unset *)ds);
-		}
-
-		break;
-	}
-
-	return PARSE_SUCCESS; /* we have a full header */
+	http_response_reset(sess->resp);
+	return http_response_parse_cq(out, sess->resp);
 }
 
+INIT_FUNC(mod_proxy_backend_fastcgi_init) {
+	mod_proxy_core_plugin_data *core_data;
+	protocol_plugin_data *p;
+
+	/* get the plugin_data of the core-plugin */
+	core_data = plugin_get_config(srv, CORE_PLUGIN);
+	if(!core_data) return NULL;
+
+	p = calloc(1, sizeof(*p));
+
+	/* define protocol handler callbacks */
+	p->protocol = core_data->proxy_register_protocol("fastcgi");
+
+	p->protocol->proxy_stream_init = proxy_fastcgi_init;
+	p->protocol->proxy_stream_cleanup = proxy_fastcgi_cleanup;
+	p->protocol->proxy_stream_decoder = proxy_fastcgi_stream_decoder;
+	p->protocol->proxy_stream_encoder = proxy_fastcgi_stream_encoder;
+	p->protocol->proxy_get_request_chunk = proxy_fastcgi_get_request_chunk;
+	p->protocol->proxy_parse_response_header = proxy_fastcgi_parse_response_header;
+
+	return p;
+}
+
+int mod_proxy_backend_fastcgi_plugin_init(plugin *p) {
+	data_string *ds;
+
+	p->version      = LIGHTTPD_VERSION_ID;
+	p->name         = buffer_init_string("mod_proxy_backend_fastcgi");
+
+	p->init         = mod_proxy_backend_fastcgi_init;
+
+	p->data         = NULL;
+
+	ds = data_string_init();
+	buffer_copy_string(ds->value, CORE_PLUGIN);
+	array_insert_unique(p->required_plugins, (data_unset *)ds);
+
+	return 0;
+}
 

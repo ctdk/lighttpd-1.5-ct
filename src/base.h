@@ -559,6 +559,7 @@ typedef struct server {
 
 	connections *conns;
 	connections *joblist;
+	connections *joblist_prev;
 	connections *fdwaitqueue;
 
 	stat_cache  *stat_cache;

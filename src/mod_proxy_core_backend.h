@@ -31,14 +31,6 @@ typedef enum {
 	PROXY_BALANCE_RR
 } proxy_balance_t;
 
-typedef enum {
-	PROXY_PROTOCOL_UNSET,
-	PROXY_PROTOCOL_HTTP,
-	PROXY_PROTOCOL_HTTPS,
-	PROXY_PROTOCOL_FASTCGI,
-	PROXY_PROTOCOL_SCGI
-} proxy_protocol_t;
-
 typedef struct {
 	buffer *url;
 
@@ -47,7 +39,7 @@ typedef struct {
 
 	proxy_address_pool *address_pool; /* possible destination-addresses, disabling is done here */
 	proxy_balance_t balancer; /* how to choose a address from the address-pool */
-	proxy_protocol_t protocol; /* how to choose a address from the address-pool */
+	struct proxy_protocol *protocol; /* protocol handler */
 } proxy_backend;
 
 ARRAY_STATIC_DEF(proxy_backends, proxy_backend, );

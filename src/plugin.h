@@ -11,7 +11,7 @@
 		static handler_t x(server *srv, connection *con, void *p_d)
 
 #define INIT_FUNC(x) \
-		static void *x()
+		static void *x(server *srv)
 /*
  * The PATCH_OPTION() macro is used in the patch_connection() functions
  * of the modules to update the config object for the current request.
@@ -45,7 +45,7 @@ typedef struct {
 
 	buffer *name; /* name of the plugin */
 
-	void *(* init)                       ();
+	void *(* init)                       (server *srv);
 	handler_t (* set_defaults)           (server *srv, void *p_d);
 	handler_t (* cleanup)                (server *srv, void *p_d);
 	                                                                                   /* is called ... */

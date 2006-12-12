@@ -191,6 +191,9 @@ static server *server_init(void) {
 	srv->joblist = calloc(1, sizeof(*srv->joblist));
 	assert(srv->joblist);
 
+	srv->joblist_prev = calloc(1, sizeof(*srv->joblist));
+	assert(srv->joblist_prev);
+
 	srv->fdwaitqueue = calloc(1, sizeof(*srv->fdwaitqueue));
 	assert(srv->fdwaitqueue);
 
@@ -287,6 +290,7 @@ static void server_free(server *srv) {
 #undef CLEAN
 
 	joblist_free(srv, srv->joblist);
+	joblist_free(srv, srv->joblist_prev);
 	fdwaitqueue_free(srv, srv->fdwaitqueue);
 
 	if (srv->stat_cache) {
@@ -1033,10 +1037,21 @@ int lighty_mainloop(server *srv) {
 					strerror(errno));
 		}
 
-		for (ndx = 0; ndx < srv->joblist->used; ndx++) {
-			connection *con = srv->joblist->ptr[ndx];
+		/*
+		 * Note: Two joblist's are needed so a connection can be added back into the joblist
+		 * without getting stuck inside the for loop.
+		 */
+		if(srv->joblist->used > 0) {
+			connections *joblist = srv->joblist;
+			/* switch joblist queues. */
+			srv->joblist = srv->joblist_prev;
+			srv->joblist_prev = joblist;
+		}
+		for (ndx = 0; ndx < srv->joblist_prev->used; ndx++) {
+			connection *con = srv->joblist_prev->ptr[ndx];
 			handler_t r;
 		
+			con->in_joblist = 0;
 			connection_state_machine(srv, con);
 
 			switch(r = plugins_call_handle_joblist(srv, con)) {
@@ -1047,11 +1062,9 @@ int lighty_mainloop(server *srv) {
 				log_error_write(srv, __FILE__, __LINE__, "d", r);
 				break;
 			}
-
-			con->in_joblist = 0;
 		}
 
-		srv->joblist->used = 0;
+		srv->joblist_prev->used = 0;
 	}
 
 	fdevent_revents_free(revents);

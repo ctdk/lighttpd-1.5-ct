@@ -69,7 +69,18 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
-				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | O_DIRECT | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
+				mode_t mode = O_RDONLY;
+				/*
+				 * Note: can't use O_DIRECT on files in "/dev/shm/".  I hope all tempfiles
+				 * will be in shared memory filesystem.  Also use O_NOATIME on tempfiles
+				 * since they will be deleted anyways.
+				 */
+				if(c->file.is_temp) {
+					mode |= O_NOATIME;
+				} else {
+					mode |= (O_DIRECT | (srv->srvconf.use_noatime ? O_NOATIME : 0));
+				}
+				if (-1 == (c->file.fd = open(c->file.name->ptr, mode))) {
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -93,7 +104,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				toSend = c->file.length - c->offset > max_toSend ?
 					max_toSend : c->file.length - c->offset;
 
-				if (-1 == c->file.copy.fd || 0 == c->file.copy.length) {
+				if (!c->file.is_temp && (-1 == c->file.copy.fd || 0 == c->file.copy.length)) {
 					long page_size = sysconf(_SC_PAGESIZE);
 
 					int res;

@@ -52,7 +52,7 @@ common_src=buffer.c log.c \
       stream.c fdevent.c \
       stat_cache.c plugin.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
-      data_integer.c md5.c data_fastcgi.c \
+      data_integer.c md5.c \
       fdevent_select.c fdevent_linux_rtsig.c \
       fdevent_poll.c fdevent_linux_sysepoll.c \
       fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c \
@@ -136,16 +136,6 @@ mod_sql_vhost_core_la_SOURCES = mod_sql_vhost_core.c
 mod_sql_vhost_core_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_sql_vhost_core_la_LIBADD = $(common_libadd)
 
-#lib_LTLIBRARIES += mod_cgi.la
-#mod_cgi_la_SOURCES = mod_cgi.c 
-#mod_cgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-#mod_cgi_la_LIBADD = $(common_libadd)
-
-#lib_LTLIBRARIES += mod_scgi.la
-#mod_scgi_la_SOURCES = mod_scgi.c 
-#mod_scgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-#mod_scgi_la_LIBADD = $(common_libadd)
-
 lib_LTLIBRARIES += mod_staticfile.la
 mod_staticfile_la_SOURCES = mod_staticfile.c 
 mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
@@ -186,18 +176,28 @@ mod_usertrack_la_SOURCES = mod_usertrack.c
 mod_usertrack_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_usertrack_la_LIBADD = $(common_libadd)
 
-#lib_LTLIBRARIES += mod_proxy.la
-#mod_proxy_la_SOURCES = mod_proxy.c
-#mod_proxy_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-#mod_proxy_la_LIBADD = $(common_libadd)
-
 lib_LTLIBRARIES += mod_proxy_core.la
 mod_proxy_core_la_SOURCES = mod_proxy_core.c mod_proxy_core_pool.c \
 			    mod_proxy_core_backend.c mod_proxy_core_address.c \
 			    mod_proxy_core_backlog.c mod_proxy_core_rewrites.c \
-			    mod_proxy_backend_http.c mod_proxy_backend_fastcgi.c
+			    mod_proxy_core_protocol.c
 mod_proxy_core_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_proxy_core_la_LIBADD = $(common_libadd) $(PCRE_LIB)
+
+lib_LTLIBRARIES += mod_proxy_backend_http.la
+mod_proxy_backend_http_la_SOURCES = mod_proxy_backend_http.c
+mod_proxy_backend_http_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_proxy_backend_http_la_LIBADD = $(common_libadd) $(PCRE_LIB)
+
+lib_LTLIBRARIES += mod_proxy_backend_fastcgi.la
+mod_proxy_backend_fastcgi_la_SOURCES = mod_proxy_backend_fastcgi.c
+mod_proxy_backend_fastcgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_proxy_backend_fastcgi_la_LIBADD = $(common_libadd) $(PCRE_LIB)
+
+lib_LTLIBRARIES += mod_proxy_backend_scgi.la
+mod_proxy_backend_scgi_la_SOURCES = mod_proxy_backend_scgi.c
+mod_proxy_backend_scgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_proxy_backend_scgi_la_LIBADD = $(common_libadd) $(PCRE_LIB)
 
 
 lib_LTLIBRARIES += mod_ssi.la
@@ -230,11 +230,6 @@ mod_simple_vhost_la_SOURCES = mod_simple_vhost.c
 mod_simple_vhost_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_simple_vhost_la_LIBADD = $(common_libadd)
 		
-#lib_LTLIBRARIES += mod_fastcgi.la
-#mod_fastcgi_la_SOURCES = mod_fastcgi.c
-#mod_fastcgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-#mod_fastcgi_la_LIBADD = $(common_libadd)
-
 lib_LTLIBRARIES += mod_access.la
 mod_access_la_SOURCES = mod_access.c
 mod_access_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
@@ -291,8 +286,6 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       mod_proxy_core.h  \
       mod_proxy_core_pool.h \
       mod_proxy_core_rewrites.h \
-      mod_proxy_backend_http.h \
-      mod_proxy_backend_fastcgi.h \
       status_counter.h \
       http_req.h \
       http_req_parser.h \

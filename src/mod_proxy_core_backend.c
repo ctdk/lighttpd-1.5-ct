@@ -18,8 +18,8 @@ proxy_backend *proxy_backend_init(void) {
 void proxy_backend_free(proxy_backend *backend) {
 	if (!backend) return;
 
-	proxy_address_pool_free(backend->address_pool);
 	proxy_connection_pool_free(backend->pool);
+	proxy_address_pool_free(backend->address_pool);
 	
 	free(backend);
 }
@@ -33,7 +33,7 @@ proxy_backends *proxy_backends_init(void) {
 }
 
 void proxy_backends_free(proxy_backends *backends) {
-	FOREACH(backends, element, proxy_backend_free(element))
+	FOREACH(backends, proxy_backend, element, proxy_backend_free(element))
 
 	if (backends->ptr) free(backends->ptr);
 

@@ -240,7 +240,66 @@ int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c) {
 	return 0;
 }
 
+/*
+ * copy/steal max_len bytes from chunk chain.  return total bytes copied/stolen.
+ *
+ */
+int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len) {
+	size_t total = 0;
+	off_t we_have = 0, we_want = 0;
+	buffer *b;
 
+	if (!cq || !c) return 0;
+
+	/* copy/steal chunks */
+	for (; c && max_len > 0; c = c->next) {
+		/* skip empty chunks */
+		if (c->mem->used == 0) continue;
+
+		we_have = c->mem->used - c->offset - 1;
+		if (we_have == 0) continue;
+
+		we_want = we_have < max_len ? we_have : max_len;
+
+		if (c->offset == 0 && we_have == we_want) {
+			/* steal whole chunk */
+			chunkqueue_steal_chunk(cq, c);
+		} else {
+			/* copy unused data from chunk */
+			b = chunkqueue_get_append_buffer(cq);
+			buffer_copy_string_len(b, c->mem->ptr + c->offset, we_want);
+			c->offset += we_want;
+		}
+		total += we_want;
+		max_len -= we_want;
+	}
+	return total;
+}
+
+int chunkqueue_skip(chunkqueue *cq, off_t skip) {
+	size_t total = 0;
+	off_t we_have = 0, we_want = 0;
+	chunk *c;
+
+	if (!cq) return 0;
+
+	/* consume chunks */
+	for (c = cq->first; c && skip > 0; c = c->next) {
+		/* skip empty chunks */
+		if (c->mem->used == 0) continue;
+
+		we_have = c->mem->used - c->offset - 1;
+		if (we_have == 0) continue;
+
+		we_want = we_have < skip ? we_have : skip;
+
+		c->offset += we_want;
+		total += we_want;
+		skip -= we_want;
+	}
+	return total;
+}
+ 
 int chunkqueue_append_buffer(chunkqueue *cq, buffer *mem) {
 	chunk *c;
 

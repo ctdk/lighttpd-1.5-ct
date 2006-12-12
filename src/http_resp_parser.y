@@ -39,7 +39,7 @@ response_hdr ::= headers CRLF . {
         char *err;
         resp->status = strtol(ds->value->ptr, &err, 10);
    
-        if (*err != '\0' && *err != ' ') {
+        if (*err != '\0' && *err != ' ' && *err != '\r') {
             buffer_copy_string(ctx->errmsg, "expected a number: ");
             buffer_append_string_buffer(ctx->errmsg, ds->value);
             buffer_append_string(ctx->errmsg, err);

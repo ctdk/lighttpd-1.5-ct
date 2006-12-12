@@ -964,10 +964,11 @@ static int http_chunk_append_len(chunkqueue *cq, size_t len) {
 
 	buffer_append_string(b, "\r\n");
 	chunkqueue_append_buffer(cq, b);
+	len = b->used - 1;
 
 	buffer_free(b);
 
-	return 0;
+	return len;
 }
 
 
@@ -977,7 +978,10 @@ static int http_chunk_append_len(chunkqueue *cq, size_t len) {
 int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue *out) {
 	chunk *c;
 	int is_chunked;
+	int we_have = 0;
 
+	/* no more data to encode. */
+	if (out->is_closed) return 0;
 	/**/
 
 	is_chunked = (con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED);
@@ -988,28 +992,47 @@ int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue
 			case MEM_CHUNK:
 				if (c->mem->used == 0) continue;
 
-				http_chunk_append_len(out, c->mem->used - 1);
+				we_have = c->mem->used - c->offset - 1;
+				in->bytes_out += we_have;
+				if(we_have == 0) continue;
+				we_have += http_chunk_append_len(out, we_have);
 				chunkqueue_append_buffer(out, c->mem);
 				c->offset = c->mem->used - 1;
 				break;
 			case FILE_CHUNK:
 				if (c->file.length == 0) continue;
 
-				http_chunk_append_len(out, c->file.length);
-				chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
+				we_have = c->file.length;
+				in->bytes_out += we_have;
+				we_have += http_chunk_append_len(out, c->file.length);
+				if(c->file.is_temp) {
+					chunkqueue_steal_tempfile(out, c);
+				} else {
+					chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
+				}
 
 				c->offset = c->file.length;
 				break;
+			case UNUSED_CHUNK:
+				break;
 			}
 			chunkqueue_append_mem(out, "\r\n", 2 + 1);
+			we_have += 2;
+			out->bytes_in += we_have;
 		}
-		if (in->is_closed) chunkqueue_append_mem(out, "0\r\n\r\n", 5 + 1);
+		if (in->is_closed) {
+			chunkqueue_append_mem(out, "0\r\n\r\n", 5 + 1);
+			out->bytes_in += 5;
+		}
 	} else {
 		for (c = in->first; c; c = c->next) {
 			switch (c->type) {
 			case MEM_CHUNK:
 				if (c->mem->used == 0) continue;
 
+				we_have = c->mem->used - c->offset - 1;
+				in->bytes_out += we_have;
+				if(we_have == 0) continue;
 				if (c->offset == 0) {
 					chunkqueue_steal_chunk(out, c);
 				} else {
@@ -1020,16 +1043,30 @@ int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue
 			case FILE_CHUNK:
 				if (c->file.length == 0) continue;
 
-				chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
+				we_have = c->file.length;
+				in->bytes_out += we_have;
+				if(c->file.is_temp) {
+					chunkqueue_steal_tempfile(out, c);
+				} else {
+					chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
+				}
 
 				c->offset = c->file.length;
 				break;
+			case UNUSED_CHUNK:
+				break;
 			}
+			in->bytes_out += we_have;
+			out->bytes_in += we_have;
 		}
 	}
 
 	chunkqueue_remove_finished_chunks(in);
 
+	if (in->is_closed) {
+		/* mark the output queue as finished. */
+		out->is_closed = 1;
+	}
 	return 0;
 }
 
@@ -1222,6 +1259,9 @@ int connection_state_machine(server *srv, connection *con) {
 
 					connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
 
+					/* need to reset condition cache since request uri changed. */
+					config_cond_cache_reset(srv, con);
+
 					done = -1;
 					break;
 				} else if (con->in_error_handler) {
@@ -1352,7 +1392,7 @@ int connection_state_machine(server *srv, connection *con) {
 			switch(network_write_chunkqueue(srv, con, con->send_raw)) {
 			case NETWORK_STATUS_SUCCESS:
 				/* we send everything from the chunkqueue and the chunkqueue-sender signaled it is finished */
-				if (con->send->is_closed) {
+				if (con->send_raw->is_closed) {
 					if (con->http_status == 100) {
 						/* send out the 100 Continue header and handle the request as normal afterwards */
 						con->http_status = 0;
@@ -1361,6 +1401,10 @@ int connection_state_machine(server *srv, connection *con) {
 					} else {
 						connection_set_state(srv, con, CON_STATE_RESPONSE_END);
 					}
+				} else {
+					/* still have data to send in send_raw queue */
+					fdevent_event_add(srv->ev, con->sock, FDEVENT_OUT);
+					return HANDLER_WAIT_FOR_EVENT;
 				}
 				break;
 			case NETWORK_STATUS_FATAL_ERROR: /* error on our side */
@@ -1377,6 +1421,7 @@ int connection_state_machine(server *srv, connection *con) {
 
 				return HANDLER_WAIT_FOR_EVENT;
 			case NETWORK_STATUS_INTERRUPTED:
+			case NETWORK_STATUS_UNSET:
 				break;
 			}
 

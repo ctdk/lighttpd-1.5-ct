@@ -1126,7 +1126,7 @@ buffer_pool *buffer_pool_init() {
 void buffer_pool_free(buffer_pool *bp) {
 	if (!bp) return;
 
-	FOREACH(bp, b, buffer_free(b));
+	ARRAY_STATIC_FREE(bp, buffer, b, buffer_free(b));
 
 	free(bp);
 

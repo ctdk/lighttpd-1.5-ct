@@ -108,6 +108,7 @@ int http_response_write_header(server *srv, connection *con, chunkqueue *raw) {
 
 
 	con->bytes_header = b->used - 1;
+	raw->bytes_in += b->used - 1;
 
 	if (con->conf.log_response_header) {
 		log_error_write(srv, __FILE__, __LINE__, "sSb", "Response-Header:", "\n", b);

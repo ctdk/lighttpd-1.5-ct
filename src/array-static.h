@@ -23,11 +23,16 @@ typedef struct { \
 		a->ptr = realloc(a->ptr, a->size * sizeof(*(a->ptr))); \
 	}
 	
-#define FOREACH(array, element, func) \
-do { size_t _i; for (_i = 0; _i < array->used; _i++) { void *element = array->ptr[_i]; func; } } while(0);
+#define FOREACH(array, type, element, func) \
+do { size_t _i; for (_i = 0; _i < array->used; _i++) { type *element = array->ptr[_i]; func; } } while(0);
 
 #define STRUCT_INIT(type, var) \
 	type *var;\
 	var = calloc(1, sizeof(*var))
+
+#define ARRAY_STATIC_FREE(array, type, element, func) \
+	FOREACH(array, type, element, func); \
+	if(array->ptr) free(array->ptr); \
+	array->ptr = NULL;
 
 #endif

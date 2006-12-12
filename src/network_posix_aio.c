@@ -93,7 +93,6 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					max_toSend : c->file.length - c->offset;
 
 				if (0 == c->file.copy.length) {
-					int res;
 					int async_error = 0;
 
 					size_t iocb_ndx;

@@ -10,6 +10,8 @@
 
 #include "plugin.h"
 
+#include "configfile.h"
+
 #include "stat_cache.h"
 
 #include "sys-strings.h"

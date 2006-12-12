@@ -61,6 +61,8 @@ SESSION_FUNC(proxy_http_init) {
 */
 
 SESSION_FUNC(proxy_http_cleanup) {
+	UNUSED(srv);
+
 	if(sess->protocol_data) {
 		protocol_state_data_free((protocol_state_data *)sess->protocol_data);
 		sess->protocol_data = NULL;
@@ -78,6 +80,8 @@ int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chun
 	chunk *c;
 	char ch = '\0';
 	int finished = 0;
+
+	UNUSED(srv);
 
 	for (c = in->first; c && !finished;) {
 		if(c->mem->used == 0) {
@@ -240,6 +244,9 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_decoder) {
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
 STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
+	UNUSED(srv);
+	UNUSED(sess);
+
 	chunk *c;
 
 	/* there is nothing that we have to send out anymore */
@@ -299,6 +306,9 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
  *
  */
 STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
+	UNUSED(srv);
+	UNUSED(in);
+
 	connection *con = sess->remote_con;
 	buffer *b;
 	size_t i;
@@ -343,6 +353,8 @@ STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
  * - fastcgi needs some decoding for the protocol
  */
 STREAM_IN_OUT_FUNC(proxy_http_parse_response_header) {
+	UNUSED(srv);
+	UNUSED(out);
 
 	http_response_reset(sess->resp);
 

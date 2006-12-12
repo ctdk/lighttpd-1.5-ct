@@ -51,6 +51,8 @@ static void handler_ctx_free(handler_ctx *hctx) {
 INIT_FUNC(mod_rewrite_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->match_buf = buffer_init();

@@ -1107,6 +1107,8 @@ int main (int argc, char **argv, char **envp) {
 	interval.it_value.tv_usec = 0;
 #endif
 
+	UNUSED(envp);
+
 	log_init();
 	status_counter_init();
 

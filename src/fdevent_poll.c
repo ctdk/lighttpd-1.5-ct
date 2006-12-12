@@ -113,6 +113,8 @@ static int fdevent_poll_poll(fdevents *ev, int timeout_ms) {
 static int fdevent_poll_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
 	size_t ndx;
 
+	UNUSED(event_count);
+
 	for (ndx = 0; ndx < ev->used; ndx++) {
 		if (ev->pollfds[ndx].revents) {
 			if (ev->pollfds[ndx].revents & POLLNVAL) {

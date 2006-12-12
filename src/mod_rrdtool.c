@@ -50,6 +50,8 @@ typedef struct {
 INIT_FUNC(mod_rrd_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->resp = buffer_init();

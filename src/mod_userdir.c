@@ -39,6 +39,8 @@ typedef struct {
 INIT_FUNC(mod_userdir_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->username = buffer_init();

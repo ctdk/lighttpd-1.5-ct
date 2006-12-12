@@ -56,6 +56,8 @@ INIT_FUNC(mod_status_init) {
 	plugin_data *p;
 	size_t i;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->traffic_out = p->requests = 0;
@@ -585,6 +587,8 @@ static handler_t mod_status_handle_server_statistics(server *srv, connection *co
 	buffer *b;
 	size_t i;
 	array *st = status_counter_get_array();
+
+	UNUSED(p_d);
 
 	if (0 == st->used) {
 		/* we have nothing to send */

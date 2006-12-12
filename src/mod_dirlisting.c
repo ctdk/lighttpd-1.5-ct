@@ -152,6 +152,8 @@ void excludes_buffer_free(excludes_buffer *exb) {
 INIT_FUNC(mod_dirlisting_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->tmp_buf = buffer_init();

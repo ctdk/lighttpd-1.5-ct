@@ -32,6 +32,8 @@ handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s);
 INIT_FUNC(mod_auth_init) {
 	mod_auth_plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->tmp_buf = buffer_init();

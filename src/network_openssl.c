@@ -32,6 +32,8 @@ NETWORK_BACKEND_READ(openssl) {
 	int read_something = 0;
 	off_t max_read = 256 * 1024;
 
+	UNUSED(srv);
+	UNUSED(con);
 	off_t start_bytes_in = cq->bytes_in;
 	do {
 		b = chunkqueue_get_append_buffer(cq);

@@ -159,6 +159,8 @@ static int fdevent_linux_rtsig_poll(fdevents *ev, int timeout_ms) {
 }
 
 static int fdevent_linux_rtsig_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
+	UNUSED(event_count);
+
 	if (ev->in_sigio == 1) {
 		/* only one event */
 

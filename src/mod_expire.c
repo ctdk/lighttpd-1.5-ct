@@ -39,6 +39,8 @@ typedef struct {
 INIT_FUNC(mod_expire_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->expire_tstmp = buffer_init();

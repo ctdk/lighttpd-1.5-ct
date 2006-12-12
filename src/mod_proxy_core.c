@@ -60,6 +60,8 @@ proxy_protocol *mod_proxy_core_register_protocol(const char *name) {
 INIT_FUNC(mod_proxy_core_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	proxy_protocols_init();
 
 	p = calloc(1, sizeof(*p));
@@ -403,6 +405,8 @@ void proxy_session_free(proxy_session *sess) {
 int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 	chunk *c;
 	int we_have = 0;
+
+	UNUSED(srv);
 
 	chunkqueue_remove_finished_chunks(sess->recv);
 	/* copy the content to the next cq */
@@ -1238,6 +1242,9 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 proxy_backend *proxy_get_backend(server *srv, connection *con, plugin_data *p) {
 	size_t i;
 
+	UNUSED(srv);
+	UNUSED(con);
+
 	for (i = 0; i < p->conf.backends->used; i++) {
 		proxy_backend *backend = p->conf.backends->ptr[i];
 
@@ -1259,6 +1266,8 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 	proxy_address *address = NULL, *cur_address = NULL;
 	int active_addresses = 0, rand_ndx;
 	size_t min_used;
+
+	UNUSED(srv);
 
 	switch(backend->balancer) {
 	case PROXY_BALANCE_CARP:
@@ -1649,7 +1658,9 @@ CONNECTION_FUNC(mod_proxy_send_request_content) {
  */
 REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 	plugin_data *p = p_d;
-	
+
+	UNUSED(srv);
+
 	if (con->mode != p->id) return HANDLER_GO_ON;
 
 	return HANDLER_GO_ON;

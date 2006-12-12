@@ -980,6 +980,8 @@ int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue
 	int is_chunked;
 	int we_have = 0;
 
+	UNUSED(srv);
+
 	/* no more data to encode. */
 	if (out->is_closed) return 0;
 	/**/

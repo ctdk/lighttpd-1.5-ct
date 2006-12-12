@@ -40,6 +40,8 @@ typedef struct {
 INIT_FUNC(mod_simple_vhost_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->doc_root = buffer_init();

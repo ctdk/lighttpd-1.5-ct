@@ -21,6 +21,8 @@
 INIT_FUNC(mod_sql_vhost_core_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->docroot = buffer_init();

@@ -49,6 +49,8 @@ static void handler_ctx_free(handler_ctx *hctx) {
 INIT_FUNC(mod_setenv_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	return p;

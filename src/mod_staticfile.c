@@ -44,6 +44,8 @@ typedef struct {
 INIT_FUNC(mod_staticfile_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->range_buf = buffer_init();
@@ -459,7 +461,10 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 CONNECTION_FUNC(mod_staticfile_dev_null) {
 	chunk *c;
 	chunkqueue *in = con->recv;
-	
+
+	UNUSED(srv);
+	UNUSED(p_d);
+
 	if (con->mode != DIRECT) return HANDLER_GO_ON;
 
 	/* there is nothing that we have to send out anymore */

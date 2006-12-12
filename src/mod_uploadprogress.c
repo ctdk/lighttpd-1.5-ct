@@ -154,6 +154,8 @@ int connection_map_remove_connection(connection_map *cm, connection *con) {
 INIT_FUNC(mod_uploadprogress_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->con_map = connection_map_init();

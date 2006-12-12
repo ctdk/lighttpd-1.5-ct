@@ -201,6 +201,8 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 	va_list ap;
 	time_t t;
 
+	UNUSED(srv);
+
 	errorlog *err = myconfig;
 
 	switch(err->mode) {

@@ -151,6 +151,8 @@ typedef struct {
 INIT_FUNC(mod_accesslog_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	return p;

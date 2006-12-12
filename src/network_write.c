@@ -45,6 +45,9 @@ NETWORK_BACKEND_READ(read) {
 	 */
 	int read_something = 0;
 
+	UNUSED(srv);
+	UNUSED(con);
+
 	start_bytes_in = cq->bytes_in;
 	
 	/* use a chunk-size of 16k */

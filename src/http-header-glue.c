@@ -233,6 +233,8 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 	data_string *http_if_none_match;
 	data_string *http_if_modified_since;
 
+	UNUSED(srv);
+
 	/*
 	 * 14.26 If-None-Match
 	 *    [...]

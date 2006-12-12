@@ -55,6 +55,8 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost);
 INIT_FUNC(mod_mysql_vhost_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->tmp_buf = buffer_init();
@@ -226,6 +228,8 @@ static int mod_mysql_vhost_patch_connection(server *srv, connection *con, plugin
  */
 SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 	plugin_data *p = p_d;
+
+	UNUSED(host);
 
 	unsigned  cols;
 	MYSQL_ROW row;

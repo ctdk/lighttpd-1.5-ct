@@ -83,6 +83,8 @@ static int fdevent_select_get_revents(fdevents *ev, size_t event_count, fdevent_
 
 	int ndx = 0;
 
+	UNUSED(event_count);
+
 	for (ndx = 0; ndx < ev->select_max_fd; ndx++) {
 		int events = 0;
 

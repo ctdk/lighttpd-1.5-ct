@@ -63,6 +63,8 @@ typedef struct {
 INIT_FUNC(mod_compress_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->ofn = buffer_init();

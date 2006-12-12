@@ -35,6 +35,8 @@ typedef struct {
 INIT_FUNC(mod_flv_streaming_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->query_str = buffer_init();

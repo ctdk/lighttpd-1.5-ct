@@ -61,6 +61,7 @@ NETWORK_BACKEND_WRITE_CHUNK(writev_mem) {
 	chunk *tc; /* transfer chunks */
 	size_t num_bytes = 0;
 
+	UNUSED(con);
 	/* we can't send more then SSIZE_MAX bytes in one chunk */
 
 	/* build writev list

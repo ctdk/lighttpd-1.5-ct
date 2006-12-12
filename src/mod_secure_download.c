@@ -54,6 +54,8 @@ typedef struct {
 INIT_FUNC(mod_secdownload_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->md5 = buffer_init();

@@ -25,6 +25,8 @@ typedef struct {
 INIT_FUNC(mod_access_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	return p;

@@ -92,6 +92,8 @@ typedef struct {
 INIT_FUNC(mod_webdav_init) {
 	plugin_data *p;
 
+	UNUSED(srv);
+
 	p = calloc(1, sizeof(*p));
 
 	p->tmp_buf = buffer_init();
@@ -660,6 +662,7 @@ static int webdav_copy_file(server *srv, connection *con, plugin_data *p, physic
 	int status = 0, ofd;
 
 	UNUSED(con);
+	UNUSED(srv);
 
 	if (stream_open(&s, src->path)) {
 		return 403;
@@ -1146,6 +1149,8 @@ int webdav_lockdiscovery(server *srv, connection *con,
  */
 int webdav_has_lock(server *srv, connection *con, plugin_data *p, buffer *uri) {
 	int has_lock = 1;
+
+	UNUSED(srv);
 
 #ifdef USE_LOCKS
 	data_string *ds;
@@ -2199,7 +2204,7 @@ propmatch_cleanup:
 
 				if (0 == xmlStrcmp(rootnode->name, BAD_CAST "lockinfo")) {
 					xmlNode *lockinfo;
-					const xmlChar *lockscope = NULL, *locktype = NULL, *owner = NULL;
+					const xmlChar *lockscope = NULL, *locktype = NULL; /* unused variable: , *owner = NULL; */
 
 					for (lockinfo = rootnode->children; lockinfo; lockinfo = lockinfo->next) {
 						if (0 == xmlStrcmp(lockinfo->name, BAD_CAST "lockscope")) {

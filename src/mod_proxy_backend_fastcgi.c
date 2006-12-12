@@ -69,6 +69,8 @@ void fcgi_state_data_reset(fcgi_state_data *data) {
 }
 
 SESSION_FUNC(proxy_fastcgi_init) {
+	UNUSED(srv);
+
 	if(!sess->protocol_data) {
 		sess->protocol_data = fcgi_state_data_init();
 	}
@@ -76,6 +78,8 @@ SESSION_FUNC(proxy_fastcgi_init) {
 }
 
 SESSION_FUNC(proxy_fastcgi_cleanup) {
+	UNUSED(srv);
+
 	if(sess->protocol_data) {
 		fcgi_state_data_free((fcgi_state_data *)sess->protocol_data);
 		sess->protocol_data = NULL;
@@ -225,6 +229,10 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
  */
 int proxy_fastcgi_get_env_request(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	size_t i;
+
+	UNUSED(srv);
+	UNUSED(con);
+
 	/* the request header got already copied into the sess->request_headers for us
 	 * no extra filter is needed
 	 *
@@ -331,6 +339,9 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_get_request_chunk) {
 	FCGI_Header header;
 	plugin_data *p = sess->p;
 
+	UNUSED(srv);
+	UNUSED(in);
+
 	b = chunkqueue_get_append_buffer(out);
 	/* send FCGI_BEGIN_REQUEST */
 
@@ -387,6 +398,8 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 	off_t we_have = 0, we_need = 0;
 	int rc = 0;
 	chunk *c;
+
+	UNUSED(srv);
 
 	/* no data ? */
 	if (!in->first) return 0;
@@ -526,6 +539,9 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_encoder) {
 	chunk *c;
 	buffer *b;
 	FCGI_Header header;
+
+	UNUSED(srv);
+	UNUSED(sess);
 
 	/* there is nothing that we have to send out anymore */
 	for (c = in->first; in->bytes_out < in->bytes_in; ) {

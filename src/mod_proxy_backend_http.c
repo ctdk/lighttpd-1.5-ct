@@ -244,10 +244,10 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_decoder) {
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
 STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
+	chunk *c;
+
 	UNUSED(srv);
 	UNUSED(sess);
-
-	chunk *c;
 
 	/* there is nothing that we have to send out anymore */
 	if (in->bytes_in == in->bytes_out && 
@@ -306,13 +306,13 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
  *
  */
 STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
-	UNUSED(srv);
-	UNUSED(in);
-
 	connection *con = sess->remote_con;
 	buffer *b;
 	size_t i;
 	
+	UNUSED(srv);
+	UNUSED(in);
+
 	b = chunkqueue_get_append_buffer(out);
 
 	/* request line */

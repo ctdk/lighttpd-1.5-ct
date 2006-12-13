@@ -196,11 +196,11 @@ static int proxy_scgi_get_env_scgi(server *srv, proxy_session *sess, buffer *env
  * transform the HTTP-Request headers into CGI notation
  */
 static int proxy_scgi_get_env_request(server *srv, proxy_session *sess, buffer *env_headers) {
-	UNUSED(srv);
-
 	connection *con = sess->remote_con;
 	plugin_data *p = sess->p;
 	size_t i;
+
+	UNUSED(srv);
 
 	/* the request header got already copied into the sess->request_headers for us
 	 * no extra filter is needed
@@ -269,11 +269,11 @@ static int proxy_scgi_get_env_request(server *srv, proxy_session *sess, buffer *
 }
 
 STREAM_IN_OUT_FUNC(proxy_scgi_get_request_chunk) {
-	UNUSED(in);
-
 	size_t headers_len = 0;
 	buffer *len_buf;
 	buffer *env_headers;
+
+	UNUSED(in);
 
 	/* get buffer to write headers length into */
 	len_buf = chunkqueue_get_append_buffer(out);
@@ -300,9 +300,9 @@ STREAM_IN_OUT_FUNC(proxy_scgi_get_request_chunk) {
 }
 
 STREAM_IN_OUT_FUNC(proxy_scgi_stream_decoder) {
-	UNUSED(srv);
-
 	chunk *c;
+
+	UNUSED(srv);
 
 	if (in->first == NULL) {
 		if (in->is_closed) return 1;
@@ -352,10 +352,10 @@ STREAM_IN_OUT_FUNC(proxy_scgi_stream_decoder) {
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
 STREAM_IN_OUT_FUNC(proxy_scgi_stream_encoder) {
+	chunk *c;
+
 	UNUSED(srv);
 	UNUSED(sess);
-
-	chunk *c;
 
 	/* there is nothing that we have to send out anymore */
 	if (in->bytes_in == in->bytes_out && 

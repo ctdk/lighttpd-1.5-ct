@@ -531,7 +531,7 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder) {
 }
 
 /**
- * transform the content-stream into a valid HTTP-content-stream
+ * transform the content-stream into a valid FastCGI STDIN content-stream
  *
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
@@ -539,35 +539,39 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_encoder) {
 	chunk *c;
 	buffer *b;
 	FCGI_Header header;
+	off_t we_need = 0, we_have = 0;
 
 	UNUSED(srv);
 	UNUSED(sess);
 
 	/* there is nothing that we have to send out anymore */
 	for (c = in->first; in->bytes_out < in->bytes_in; ) {
-		off_t weWant = in->bytes_in - in->bytes_out > FCGI_MAX_LENGTH ? FCGI_MAX_LENGTH : in->bytes_in - in->bytes_out;
-		off_t weHave = 0;
-
-		/* we announce toWrite octects
-		 * now take all the request_content chunk that we need to fill this request
+		/*
+		 * write fcgi header
 		 */
-		b = chunkqueue_get_append_buffer(out);
-		fcgi_header(&(header), FCGI_STDIN, PROXY_FASTCGI_REQUEST_ID, weWant, 0);
-		buffer_copy_memory(b, (const char *)&header, sizeof(header) + 1);
-		out->bytes_in += sizeof(header);
+		if(we_need == 0) {
+			we_need = in->bytes_in - in->bytes_out;
+			if(we_need > FCGI_MAX_LENGTH) we_need = FCGI_MAX_LENGTH;
+
+			b = chunkqueue_get_append_buffer(out);
+			fcgi_header(&(header), FCGI_STDIN, PROXY_FASTCGI_REQUEST_ID, we_need, 0);
+			buffer_copy_memory(b, (const char *)&header, sizeof(header) + 1);
+			out->bytes_in += sizeof(header);
+		}
 
 		switch (c->type) {
 		case FILE_CHUNK:
-			weHave = c->file.length - c->offset;
+			we_have = c->file.length - c->offset;
+			if (we_have == 0) break;
 
-			if (weHave > weWant) weHave = weWant;
+			if (we_have > we_need) we_have = we_need;
 
-			chunkqueue_append_file(out, c->file.name, c->offset, weHave);
+			chunkqueue_append_file(out, c->file.name, c->offset, we_have);
 
-			c->offset += weHave;
-			in->bytes_out += weHave;
-
-			out->bytes_in += weHave;
+			c->offset += we_have;
+			in->bytes_out += we_have;
+			out->bytes_in += we_have;
+			we_need -= we_have;
 
 			/* steal the tempfile
 			 *
@@ -600,18 +604,19 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_encoder) {
 			break;
 		case MEM_CHUNK:
 			/* append to the buffer */
-			weHave = c->mem->used - 1 - c->offset;
+			we_have = c->mem->used - 1 - c->offset;
+			if (we_have == 0) break;
 
-			if (weHave > weWant) weHave = weWant;
+			if (we_have > we_need) we_have = we_need;
 
 			b = chunkqueue_get_append_buffer(out);
-			buffer_append_memory(b, c->mem->ptr + c->offset, weHave);
+			buffer_append_memory(b, c->mem->ptr + c->offset, we_have);
 			b->used++; /* add virtual \0 */
 
-			c->offset += weHave;
-			in->bytes_out += weHave;
-
-			out->bytes_in += weHave;
+			c->offset += we_have;
+			in->bytes_out += we_have;
+			out->bytes_in += we_have;
+			we_need -= we_have;
 
 			if (c->offset == c->mem->used - 1) {
 				c = c->next;

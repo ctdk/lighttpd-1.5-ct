@@ -1523,6 +1523,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 
 			if (NULL == (sess->proxy_backend = proxy_get_backend(srv, con, p))) {
 				/* no connection pool for this location */
+				ERROR("%s", "Couldn't find a backend.");
 				SEGFAULT();
 			}
 

@@ -1072,7 +1072,9 @@ int lighty_mainloop(server *srv) {
 #ifdef HAVE_LIBAIO_H
 	pthread_mutex_unlock(&getevents_mutex);
 	pthread_cond_signal(&getevents_cond); /* set the thread shutdown */
-	pthread_join(getevents_thread, NULL);
+	if (aio_backend) {
+		pthread_join(getevents_thread, NULL);
+	}
 #endif
 	return 0;
 }

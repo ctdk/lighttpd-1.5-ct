@@ -285,8 +285,11 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		if (!buffer_is_empty(p->protocol_buf)) {
 			proxy_protocol *protocol = NULL;
 			if (NULL == (protocol = proxy_get_protocol(p->protocol_buf))) {
-				ERROR("proxy.protocol has to be on of { %s } got %s", proxy_available_protocols(),
-						BUF_STR(p->protocol_buf));
+				ERROR("proxy.protocol has to be on of { %s } got %s, you might have to load 'mod_proxy_backend_%s'", 
+						proxy_available_protocols(),
+						BUF_STR(p->protocol_buf),
+						BUF_STR(p->protocol_buf)
+						);
 				return HANDLER_ERROR;
 			}
 			s->protocol = protocol;

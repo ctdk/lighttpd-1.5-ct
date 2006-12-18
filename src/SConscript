@@ -9,7 +9,7 @@ common_src = Split("buffer.c log.c \
       stream.c fdevent.c \
       stat_cache.c plugin.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
-      data_integer.c md5.c data_fastcgi.c \
+      data_integer.c md5.c  \
       fdevent_select.c fdevent_linux_rtsig.c \
       fdevent_poll.c fdevent_linux_sysepoll.c \
       fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c \
@@ -105,10 +105,12 @@ modules = {
 		'mod_proxy_core_backend.c', 
 		'mod_proxy_core_address.c', 
 		'mod_proxy_core_backlog.c', 
-		'mod_proxy_core_rewrites.c', 
-		'mod_proxy_backend_http.c',
-		'mod_proxy_backend_fastcgi.c'
-	 ] },
+		'mod_proxy_core_protocol.c', 
+		'mod_proxy_core_rewrites.c' ] }, 
+	'mod_proxy_backend_http' : { 'src' : [ 'mod_proxy_backend_http.c' ] },
+	'mod_proxy_backend_fastcgi' : { 'src' : [ 'mod_proxy_backend_fastcgi.c'] },
+	'mod_proxy_backend_scgi' : { 'src' : [ 'mod_proxy_backend_scgi.c'] },
+	'mod_proxy_backend_ajp13' : { 'src' : [ 'mod_proxy_backend_ajp13.c'] },
 	'mod_userdir' : { 'src' : [ 'mod_userdir.c' ] },
 	'mod_secdownload' : { 'src' : [ 'mod_secure_download.c' ] },
 	'mod_accesslog' : { 'src' : [ 'mod_accesslog.c' ] },

@@ -298,7 +298,9 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       http_req_range_parser.h \
       http_resp.h \
       http_resp_parser.h \
-      http_parser.h
+      http_parser.h \
+      ajp13.h \
+      mod_proxy_core_protocol.h
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 

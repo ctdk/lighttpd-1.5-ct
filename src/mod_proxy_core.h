@@ -76,7 +76,6 @@ typedef struct {
 	array *request_headers;    /** the con->request.headers without the hop-to-hop headers */
 	array *env_headers;        /** transformed request-headers for the backend */
 
-	/* TODO: move http_resp into protocol_data.  Some protocols can't use the http_resp for parsing */
 	http_resp *resp;           /** response http headers from backend. */
 	/* TODO: move protocol_data into proxy_connection.  Don't need to init/free this data for each session */
 	void *protocol_data;       /** protocol handler's state data for parsing response from backend. */

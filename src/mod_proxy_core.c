@@ -442,7 +442,7 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
  *
  */
 int proxy_stream_init(server *srv, proxy_session *sess) {
-	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_init) {
 		return (protocol->proxy_stream_init)(srv, sess);
 	}
@@ -454,7 +454,7 @@ int proxy_stream_init(server *srv, proxy_session *sess) {
  *
  */
 int proxy_stream_cleanup(server *srv, proxy_session *sess) {
-	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_cleanup) {
 		return (protocol->proxy_stream_cleanup)(srv, sess);
 	}
@@ -472,7 +472,7 @@ int proxy_stream_cleanup(server *srv, proxy_session *sess) {
  */
 
 int proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_decoder) {
 		return (protocol->proxy_stream_decoder)(srv, sess, in, out);
 	}
@@ -487,7 +487,7 @@ int proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *in, chunk
  * @param out chunkqueue for the encoded, protocol specific data
  */
 int proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_encoder) {
 		return (protocol->proxy_stream_encoder)(srv, sess, in, out);
 	}
@@ -502,7 +502,7 @@ int proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, chunk
  * @param out chunkqueue for the encoded, protocol specific data
  */
 int proxy_get_request_chunk(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_get_request_chunk) {
 		return (protocol->proxy_get_request_chunk)(srv, sess, in, out);
 	}
@@ -512,7 +512,7 @@ int proxy_get_request_chunk(server *srv, proxy_session *sess, chunkqueue *in, ch
 
 parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_data *p,
 	                                         proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	proxy_protocol *protocol = sess->proxy_backend->protocol;
+	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	int have_content_length = 0;
 	size_t i;
 

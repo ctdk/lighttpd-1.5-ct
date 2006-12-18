@@ -199,6 +199,11 @@ mod_proxy_backend_scgi_la_SOURCES = mod_proxy_backend_scgi.c
 mod_proxy_backend_scgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_proxy_backend_scgi_la_LIBADD = $(common_libadd) $(PCRE_LIB)
 
+lib_LTLIBRARIES += mod_proxy_backend_ajp13.la
+mod_proxy_backend_ajp13_la_SOURCES = mod_proxy_backend_ajp13.c
+mod_proxy_backend_ajp13_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_proxy_backend_ajp13_la_LIBADD = $(common_libadd) $(PCRE_LIB)
+
 
 lib_LTLIBRARIES += mod_ssi.la
 mod_ssi_la_SOURCES = mod_ssi_exprparser.c mod_ssi_expr.c mod_ssi.c 

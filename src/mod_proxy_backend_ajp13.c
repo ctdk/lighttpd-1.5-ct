@@ -80,7 +80,9 @@ static keyvalue request_headers[] = {
 	{ AJP13_REQ_HOST,              "HOST" },
 	{ AJP13_REQ_PRAGMA,            "PRAGMA" },
 	{ AJP13_REQ_REFERER,           "REFERER" },
-	{ AJP13_REQ_USER_AGENT,        "USER-AGENT" }
+	{ AJP13_REQ_USER_AGENT,        "USER-AGENT" },
+
+	{ -1, NULL }
 };
 
 /*
@@ -99,7 +101,8 @@ static keyvalue response_headers[] = {
 	{ AJP13_RESP_SET_COOKIE2,      "Set-Cookie2" },
 	{ AJP13_RESP_SERVLET_ENGINE,   "Servlet-Engine" },
 	{ AJP13_RESP_STATUS,           "Status" },
-	{ AJP13_RESP_WWW_AUTHENTICATE, "WWW-Authenticate" }
+	{ AJP13_RESP_WWW_AUTHENTICATE, "WWW-Authenticate" },
+	{ -1, NULL }
 };
 
 

@@ -363,8 +363,11 @@ int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *ses
 	str = get_http_version_name(con->request.http_version);
 	len += ajp13_encode_string(packet, str, strlen(str));
 
-	/* request uri */
-	len += ajp13_encode_string(packet, CONST_BUF_LEN(sess->request_uri));
+	/* request uri
+	 * 
+	 * the docs where unspecific here, but it looks like tomcat wants to get 
+	 * the uri without the query-string here */
+	len += ajp13_encode_string(packet, CONST_BUF_LEN(con->uri.path));
 
 	/* remote address */
 	str = inet_ntop_cache_get_ip(srv, &(con->dst_addr));

@@ -2,10 +2,10 @@ INCLUDE(UsePkgConfig)
 INCLUDE(CheckIncludeFiles)
 INCLUDE(CheckFunctionExists)
 INCLUDE(CheckVariableExists)
+INCLUDE(CheckTypeSize)
 INCLUDE(CMakeDetermineCCompiler)
 INCLUDE(FindThreads)
 INCLUDE(CPack)
-INCLUDE(CTest)
 
 ## our modules are without the "lib" prefix
 SET(CMAKE_SHARED_LIBRARY_PREFIX "")
@@ -18,7 +18,12 @@ MACRO(CHECK_INCLUDE_FILES_ADD_DEF FILENAME DEFINESTR)
 ENDMACRO(CHECK_INCLUDE_FILES_ADD_DEF)
 	
 MACRO(CHECK_TYPE_EXISTS_ADD_DEF SYMNAME DEFINESTR)
-  ADD_DEFINITIONS(-D${DEFINESTR})
+  SET(CMAKE_EXTRA_INCLUDE_FILES sys/socket.h)
+  CHECK_TYPE_SIZE("${SYMNAME}" ${DEFINESTR}) 
+  SET(CMAKE_EXTRA_INCLUDE_FILES)
+  IF (${DEFINESTR})
+    ADD_DEFINITIONS(-D${DEFINESTR})
+  ENDIF(${DEFINESTR})
 ENDMACRO(CHECK_TYPE_EXISTS_ADD_DEF)
  
 MACRO(CHECK_FUNCTION_EXISTS_ADD_DEF FUNCNAME DEFINESTR)
@@ -147,13 +152,7 @@ ADD_AND_INSTALL_LIBRARY(mod_indexfile mod_indexfile.c)
 ADD_AND_INSTALL_LIBRARY(mod_setenv mod_setenv.c)
 ADD_AND_INSTALL_LIBRARY(mod_rrdtool mod_rrdtool.c)
 ADD_AND_INSTALL_LIBRARY(mod_usertrack mod_usertrack.c)
-ADD_AND_INSTALL_LIBRARY(mod_proxy_core 	mod_proxy_core.c
-		mod_proxy_core_pool.c
-		mod_proxy_core_backend.c
-		mod_proxy_core_address.c
-		mod_proxy_core_backlog.c
-		mod_proxy_core_protocol.c
-		mod_proxy_core_rewrites.c) 
+ADD_AND_INSTALL_LIBRARY(mod_proxy_core 	"mod_proxy_core.c;mod_proxy_core_pool.c;mod_proxy_core_backend.c;mod_proxy_core_address.c;mod_proxy_core_backlog.c;mod_proxy_core_protocol.c;mod_proxy_core_rewrites.c") 
 ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_http mod_proxy_backend_http.c)
 ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_fastcgi mod_proxy_backend_fastcgi.c)
 ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_scgi mod_proxy_backend_scgi.c)
@@ -168,14 +167,14 @@ ADD_AND_INSTALL_LIBRARY(mod_status mod_status.c)
 ADD_AND_INSTALL_LIBRARY(mod_compress mod_compress.c)
 ADD_AND_INSTALL_LIBRARY(mod_redirect mod_redirect.c)
 ADD_AND_INSTALL_LIBRARY(mod_rewrite mod_rewrite.c)
-ADD_AND_INSTALL_LIBRARY(mod_auth mod_auth.c http_auth_digest.c http_auth.c)
+ADD_AND_INSTALL_LIBRARY(mod_auth "mod_auth.c;http_auth_digest.c;http_auth.c")
 ADD_AND_INSTALL_LIBRARY(mod_webdav mod_webdav.c)
 ADD_AND_INSTALL_LIBRARY(mod_sql_vhost_core mod_sql_vhost_core.c)
 ADD_AND_INSTALL_LIBRARY(mod_mysql_vhost mod_mysql_vhost.c)
 ADD_AND_INSTALL_LIBRARY(mod_trigger_b4_dl mod_trigger_b4_dl.c)
 ADD_AND_INSTALL_LIBRARY(mod_uploadprogress mod_uploadprogress.c)
 ADD_AND_INSTALL_LIBRARY(mod_evasive mod_evasive.c)
-ADD_AND_INSTALL_LIBRARY(mod_ssi mod_ssi_exprparser.c mod_ssi_expr.c mod_ssi.c)
+ADD_AND_INSTALL_LIBRARY(mod_ssi "mod_ssi_exprparser.c;mod_ssi_expr.c;mod_ssi.c")
 ADD_AND_INSTALL_LIBRARY(mod_flv_streaming mod_flv_streaming.c)
 
 TARGET_LINK_LIBRARIES(mod_rewrite pcre)
@@ -215,5 +214,4 @@ INSTALL(TARGETS ${L_INSTALL_TARGETS}
 	RUNTIME DESTINATION bin
 	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib/static)
-
 

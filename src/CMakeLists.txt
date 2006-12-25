@@ -1,0 +1,219 @@
+INCLUDE(UsePkgConfig)
+INCLUDE(CheckIncludeFiles)
+INCLUDE(CheckFunctionExists)
+INCLUDE(CheckVariableExists)
+INCLUDE(CMakeDetermineCCompiler)
+INCLUDE(FindThreads)
+INCLUDE(CPack)
+INCLUDE(CTest)
+
+## our modules are without the "lib" prefix
+SET(CMAKE_SHARED_LIBRARY_PREFIX "")
+
+MACRO(CHECK_INCLUDE_FILES_ADD_DEF FILENAME DEFINESTR)
+  CHECK_INCLUDE_FILES(${FILENAME} ${DEFINESTR})
+  IF (${DEFINESTR})
+    ADD_DEFINITIONS(-D${DEFINESTR})
+  ENDIF(${DEFINESTR})
+ENDMACRO(CHECK_INCLUDE_FILES_ADD_DEF)
+	
+MACRO(CHECK_TYPE_EXISTS_ADD_DEF SYMNAME DEFINESTR)
+  ADD_DEFINITIONS(-D${DEFINESTR})
+ENDMACRO(CHECK_TYPE_EXISTS_ADD_DEF)
+ 
+MACRO(CHECK_FUNCTION_EXISTS_ADD_DEF FUNCNAME DEFINESTR)
+  CHECK_FUNCTION_EXISTS(${FUNCNAME} ${DEFINESTR})
+  IF (${DEFINESTR})
+    ADD_DEFINITIONS(-D${DEFINESTR})
+  ENDIF(${DEFINESTR})
+ENDMACRO(CHECK_FUNCTION_EXISTS_ADD_DEF)
+ 
+ADD_DEFINITIONS(-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES)
+
+CHECK_INCLUDE_FILES_ADD_DEF(sys/types.h HAVE_SYS_TYPES_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/mman.h HAVE_SYS_MMAN_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/un.h HAVE_SYS_UN_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/wait.h HAVE_SYS_WAIT_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/uio.h HAVE_SYS_UIO_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/sendfile.h HAVE_SYS_SENDFILE_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/prctl.h HAVE_SYS_PRCTL_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/epoll.h HAVE_SYS_EPOLL_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/poll.h HAVE_SYS_POLL_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/select.h HAVE_SYS_SELECT_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/devpoll.h HAVE_SYS_DEVPOLL_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/event.h HAVE_SYS_EVENT_H)
+CHECK_INCLUDE_FILES_ADD_DEF(sys/port.h HAVE_SYS_PORT_H)
+
+CHECK_INCLUDE_FILES_ADD_DEF(attr/attributes.h HAVE_SYS_WAIT_H)
+CHECK_INCLUDE_FILES_ADD_DEF(stdint.h HAVE_STDINT_H)
+CHECK_INCLUDE_FILES_ADD_DEF(stddef.h HAVE_STDDEF_H)
+CHECK_INCLUDE_FILES_ADD_DEF(inttypes.h HAVE_INTTYPES_H)
+CHECK_INCLUDE_FILES_ADD_DEF(openssl/ssl.h HAVE_OPENSSL_SSL_H)
+CHECK_INCLUDE_FILES_ADD_DEF(fam.h HAVE_FAM_H)
+CHECK_INCLUDE_FILES_ADD_DEF(libaio.h HAVE_LIBAIO_H)
+CHECK_INCLUDE_FILES_ADD_DEF(aio.h HAVE_AIO_H)
+CHECK_INCLUDE_FILES_ADD_DEF(pwd.h HAVE_PWD_H)
+CHECK_INCLUDE_FILES_ADD_DEF(zlib.h HAVE_ZLIB_H)
+CHECK_INCLUDE_FILES_ADD_DEF(getopt.h HAVE_GETOPT_H)
+CHECK_INCLUDE_FILES_ADD_DEF(poll.h HAVE_POLL_H)
+CHECK_INCLUDE_FILES_ADD_DEF(syslog.h HAVE_SYSLOG_H)
+CHECK_INCLUDE_FILES_ADD_DEF(pcre.h HAVE_PCRE_H)
+
+CHECK_TYPE_EXISTS_ADD_DEF(socklen_t HAVE_SOCKLEN_T)
+
+CHECK_FUNCTION_EXISTS_ADD_DEF(lstat HAVE_LSTAT)
+CHECK_FUNCTION_EXISTS_ADD_DEF(fork HAVE_FORK)
+CHECK_FUNCTION_EXISTS_ADD_DEF(mmap HAVE_MMAP)
+CHECK_FUNCTION_EXISTS_ADD_DEF(inet_ntop HAVE_INET_NTOP)
+CHECK_FUNCTION_EXISTS_ADD_DEF(writev HAVE_WRITEV)
+CHECK_FUNCTION_EXISTS_ADD_DEF(sendfile HAVE_SENDFILE)
+CHECK_FUNCTION_EXISTS_ADD_DEF(sendfile64 HAVE_SENDFILE64)
+CHECK_FUNCTION_EXISTS_ADD_DEF(sendfilev HAVE_SENDFILEV)
+CHECK_FUNCTION_EXISTS_ADD_DEF(sigaction HAVE_SIGACTION)
+CHECK_FUNCTION_EXISTS_ADD_DEF(signal HAVE_SIGNAL)
+CHECK_FUNCTION_EXISTS_ADD_DEF(poll HAVE_POLL)
+CHECK_FUNCTION_EXISTS_ADD_DEF(epoll_ctl HAVE_EPOLL_CTL)
+CHECK_FUNCTION_EXISTS_ADD_DEF(sigtimedwait HAVE_SIGTIMEDWAIT)
+CHECK_FUNCTION_EXISTS_ADD_DEF(select HAVE_SELECT)
+CHECK_FUNCTION_EXISTS_ADD_DEF(kqueue HAVE_KQUEUE)
+CHECK_FUNCTION_EXISTS_ADD_DEF(port_create HAVE_PORT_CREATE)
+CHECK_FUNCTION_EXISTS_ADD_DEF(syslog HAVE_SYSLOG)
+CHECK_FUNCTION_EXISTS_ADD_DEF(getrlimit HAVE_GETRLIMIT)
+
+ADD_DEFINITIONS(
+	-DLIGHTTPD_VERSION_ID=10500 
+	-DPACKAGE_NAME="\\"${CMAKE_PROJECT_NAME}\\"" 
+	-DLIBRARY_DIR="\\"${CMAKE_INSTALL_PREFIX}/lib\\"" 
+	-DPACKAGE_VERSION="\\"${CPACK_PACKAGE_VERSION}\\""
+)
+
+SET(COMMON_SRC 
+      buffer.c log.c 
+      keyvalue.c chunk.c  
+      stream.c fdevent.c 
+      stat_cache.c plugin.c joblist.c etag.c array.c 
+      data_string.c data_count.c data_array.c 
+      data_integer.c md5.c  
+      fdevent_select.c fdevent_linux_rtsig.c
+      fdevent_poll.c fdevent_linux_sysepoll.c 
+      fdevent_solaris_devpoll.c fdevent_freebsd_kqueue.c 
+      data_config.c bitset.c 
+      inet_ntop_cache.c crc32.c 
+      connections-glue.c iosocket.c 
+      configfile-glue.c 
+      http-header-glue.c status_counter.c 
+      splaytree.c 
+      network_writev.c 
+      network_write.c 
+      network_linux_sendfile.c 
+      network_freebsd_sendfile.c  
+      network_win32_send.c 
+      network_solaris_sendfilev.c 
+      network_openssl.c 
+      network_linux_aio.c 
+      network_posix_aio.c
+      http_resp.c 
+      http_resp_parser.c 
+      http_req.c 
+      http_req_parser.c 
+      http_req_range.c 
+      http_req_range_parser.c
+)
+
+ADD_EXECUTABLE(lighttpd 
+	server.c 
+	network.c 
+	configfile.c 
+	configparser.c 
+	connections.c
+	proc_open.c
+	request.c
+	response.c
+	${COMMON_SRC})
+
+SET(L_INSTALL_TARGETS lighttpd)
+
+MACRO(ADD_AND_INSTALL_LIBRARY LIBNAME SRCFILES)
+  ADD_LIBRARY(${LIBNAME} SHARED ${SRCFILES})
+  SET(L_INSTALL_TARGETS ${L_INSTALL_TARGETS} ${LIBNAME})
+ENDMACRO(ADD_AND_INSTALL_LIBRARY)
+
+ADD_AND_INSTALL_LIBRARY(mod_access mod_access.c)
+ADD_AND_INSTALL_LIBRARY(mod_alias mod_alias.c)
+ADD_AND_INSTALL_LIBRARY(mod_dirlisting mod_dirlisting.c)
+ADD_AND_INSTALL_LIBRARY(mod_staticfile mod_staticfile.c)
+
+ADD_AND_INSTALL_LIBRARY(mod_indexfile mod_indexfile.c)
+ADD_AND_INSTALL_LIBRARY(mod_setenv mod_setenv.c)
+ADD_AND_INSTALL_LIBRARY(mod_rrdtool mod_rrdtool.c)
+ADD_AND_INSTALL_LIBRARY(mod_usertrack mod_usertrack.c)
+ADD_AND_INSTALL_LIBRARY(mod_proxy_core 	mod_proxy_core.c
+		mod_proxy_core_pool.c
+		mod_proxy_core_backend.c
+		mod_proxy_core_address.c
+		mod_proxy_core_backlog.c
+		mod_proxy_core_protocol.c
+		mod_proxy_core_rewrites.c) 
+ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_http mod_proxy_backend_http.c)
+ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_fastcgi mod_proxy_backend_fastcgi.c)
+ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_scgi mod_proxy_backend_scgi.c)
+ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_ajp13 mod_proxy_backend_ajp13.c)
+ADD_AND_INSTALL_LIBRARY(mod_userdir mod_userdir.c)
+ADD_AND_INSTALL_LIBRARY(mod_secdownload mod_secure_download.c)
+ADD_AND_INSTALL_LIBRARY(mod_accesslog mod_accesslog.c)
+ADD_AND_INSTALL_LIBRARY(mod_simple_vhost mod_simple_vhost.c)
+ADD_AND_INSTALL_LIBRARY(mod_evhost mod_evhost.c)
+ADD_AND_INSTALL_LIBRARY(mod_expire mod_expire.c)
+ADD_AND_INSTALL_LIBRARY(mod_status mod_status.c)
+ADD_AND_INSTALL_LIBRARY(mod_compress mod_compress.c)
+ADD_AND_INSTALL_LIBRARY(mod_redirect mod_redirect.c)
+ADD_AND_INSTALL_LIBRARY(mod_rewrite mod_rewrite.c)
+ADD_AND_INSTALL_LIBRARY(mod_auth mod_auth.c http_auth_digest.c http_auth.c)
+ADD_AND_INSTALL_LIBRARY(mod_webdav mod_webdav.c)
+ADD_AND_INSTALL_LIBRARY(mod_sql_vhost_core mod_sql_vhost_core.c)
+ADD_AND_INSTALL_LIBRARY(mod_mysql_vhost mod_mysql_vhost.c)
+ADD_AND_INSTALL_LIBRARY(mod_trigger_b4_dl mod_trigger_b4_dl.c)
+ADD_AND_INSTALL_LIBRARY(mod_uploadprogress mod_uploadprogress.c)
+ADD_AND_INSTALL_LIBRARY(mod_evasive mod_evasive.c)
+ADD_AND_INSTALL_LIBRARY(mod_ssi mod_ssi_exprparser.c mod_ssi_expr.c mod_ssi.c)
+ADD_AND_INSTALL_LIBRARY(mod_flv_streaming mod_flv_streaming.c)
+
+TARGET_LINK_LIBRARIES(mod_rewrite pcre)
+TARGET_LINK_LIBRARIES(mod_dirlisting pcre)
+TARGET_LINK_LIBRARIES(mod_redirect pcre)
+TARGET_LINK_LIBRARIES(mod_ssi pcre)
+TARGET_LINK_LIBRARIES(mod_trigger_b4_dl pcre)
+TARGET_LINK_LIBRARIES(mod_mysql_vhost mysqlclient)
+TARGET_LINK_LIBRARIES(mod_webdav xml2 sqlite3)
+TARGET_LINK_LIBRARIES(mod_auth crypt ldap lber)
+TARGET_LINK_LIBRARIES(mod_compress z bz2)
+
+IF(CMAKE_COMPILER_IS_GNUCC)
+  SET_TARGET_PROPERTIES(lighttpd PROPERTIES COMPILE_FLAGS "-std=gnu99 -Wall -O2 -g")
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
+
+IF(CMAKE_SYSTEM MATCHES "Linux")
+  SET_TARGET_PROPERTIES(lighttpd PROPERTIES LINK_FLAGS "-pthread -lrt")
+ENDIF(CMAKE_SYSTEM MATCHES "Linux")
+
+SET_TARGET_PROPERTIES(lighttpd PROPERTIES CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+
+TARGET_LINK_LIBRARIES(lighttpd dl)
+IF(HAVE_LIBAIO_H)
+  TARGET_LINK_LIBRARIES(lighttpd aio)
+ENDIF(HAVE_LIBAIO_H)
+
+IF(HAVE_PCRE_H)
+  TARGET_LINK_LIBRARIES(lighttpd pcre)
+ENDIF(HAVE_PCRE_H)
+
+IF(HAVE_FAM_H)
+  TARGET_LINK_LIBRARIES(lighttpd fam)
+ENDIF(HAVE_FAM_H)
+
+INSTALL(TARGETS ${L_INSTALL_TARGETS}
+	RUNTIME DESTINATION bin
+	LIBRARY DESTINATION lib
+	ARCHIVE DESTINATION lib/static)
+
+

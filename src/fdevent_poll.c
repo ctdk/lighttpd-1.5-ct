@@ -22,7 +22,7 @@ static int fdevent_poll_event_del(fdevents *ev, iosocket *sock) {
 	if (sock->fde_ndx < 0) return -1;
 
 	if ((size_t)sock->fde_ndx >= ev->used) {
-		fprintf(stderr, "%s.%d: del! out of range %d %zd\n", __FILE__, __LINE__, sock->fde_ndx, ev->used);
+		ERROR("(fdevent-poll-del) out of range %d %zd\n", sock->fde_ndx, ev->used);
 		SEGFAULT();
 	}
 
@@ -74,7 +74,7 @@ static int fdevent_poll_event_add(fdevents *ev, iosocket *sock, int events) {
 
 			return sock->fde_ndx;
 		}
-		fprintf(stderr, "%s.%d: add: (%d, %d)\n", __FILE__, __LINE__, sock->fde_ndx, ev->pollfds[sock->fde_ndx].fd);
+		ERROR("(fdevent-poll-add) (%d, %d)", sock->fde_ndx, ev->pollfds[sock->fde_ndx].fd);
 		SEGFAULT();
 	}
 
@@ -149,8 +149,8 @@ int fdevent_poll_init(fdevents *ev) {
 int fdevent_poll_init(fdevents *ev) {
 	UNUSED(ev);
 
-	fprintf(stderr, "%s.%d: poll is not supported, try to set server.event-handler = \"select\"\n",
-			__FILE__, __LINE__);
+	ERROR("event-handler 'poll' is not supported, try to set server.event-handler = \"%s\"", "select");
+	
 	return -1;
 }
 #endif

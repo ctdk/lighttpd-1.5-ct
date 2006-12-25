@@ -31,7 +31,7 @@ static int fdevent_linux_sysepoll_event_del(fdevents *ev, iosocket *sock) {
 	ep.data.ptr = NULL;
 
 	if (0 != epoll_ctl(ev->epoll_fd, EPOLL_CTL_DEL, sock->fd, &ep)) {
-		fprintf(stderr, "%s.%d: epoll_ctl failed: %s, dying\n", __FILE__, __LINE__, strerror(errno));
+		ERROR("epoll_ctl (del) failed on fd=%d: %s", sock->fd, strerror(errno));
 
 		SEGFAULT();
 
@@ -71,7 +71,7 @@ static int fdevent_linux_sysepoll_event_add(fdevents *ev, iosocket *sock, int ev
 	ep.data.fd = sock->fd;
 
 	if (0 != epoll_ctl(ev->epoll_fd, add ? EPOLL_CTL_ADD : EPOLL_CTL_MOD, sock->fd, &ep)) {
-		fprintf(stderr, "%s.%d: epoll_ctl failed: %s, dying\n", __FILE__, __LINE__, strerror(errno));
+		ERROR("epoll_ctl (add/mod) failed on fd=%d: %s", sock->fd, strerror(errno));
 
 		SEGFAULT();
 
@@ -120,15 +120,15 @@ int fdevent_linux_sysepoll_init(fdevents *ev) {
 	SET(get_revents);
 
 	if (-1 == (ev->epoll_fd = epoll_create(ev->maxfds))) {
-		fprintf(stderr, "%s.%d: epoll_create failed (%s), try to set server.event-handler = \"poll\" or \"select\"\n",
-			__FILE__, __LINE__, strerror(errno));
+		ERROR("epoll_create failed (%s), try to set server.event-handler = \"poll\" or \"select\"",
+			strerror(errno));
 
 		return -1;
 	}
 
 	if (-1 == fcntl(ev->epoll_fd, F_SETFD, FD_CLOEXEC)) {
-		fprintf(stderr, "%s.%d: epoll_create failed (%s), try to set server.event-handler = \"poll\" or \"select\"\n",
-			__FILE__, __LINE__, strerror(errno));
+		ERROR("fcntl after epoll_create failed (%s), try to set server.event-handler = \"poll\" or \"select\"",
+			strerror(errno));
 
 		close(ev->epoll_fd);
 
@@ -144,8 +144,7 @@ int fdevent_linux_sysepoll_init(fdevents *ev) {
 int fdevent_linux_sysepoll_init(fdevents *ev) {
 	UNUSED(ev);
 
-	fprintf(stderr, "%s.%d: linux-sysepoll not supported, try to set server.event-handler = \"poll\" or \"select\"\n",
-		__FILE__, __LINE__);
+	ERROR("event-handler 'linux-sysepoll' is not supported, try to set server.event-handler = \"%s\" or \"%s\"", "select", "poll");
 
 	return -1;
 }

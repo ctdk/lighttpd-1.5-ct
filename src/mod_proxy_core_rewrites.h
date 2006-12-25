@@ -1,9 +1,15 @@
 #ifndef _MOD_PROXY_CORE_REWRITES_H_
 #define _MOD_PROXY_CORE_REWRITES_H_
 
+#ifdef HAVE_PCRE_H
 #include <pcre.h>
+#endif
 #include "array-static.h"
 #include "buffer.h"
+
+#ifndef HAVE_PCRE_H
+#define pcre void
+#endif
 
 typedef struct {
 	buffer *header;

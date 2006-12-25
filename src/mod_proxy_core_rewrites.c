@@ -17,8 +17,9 @@ proxy_rewrite *proxy_rewrite_init(void) {
 }
 void proxy_rewrite_free(proxy_rewrite *rewrite) {
 	if (!rewrite) return;
-
+#ifdef HAVE_PCRE_H
 	if (rewrite->regex) pcre_free(rewrite->regex);
+#endif
 
 	buffer_free(rewrite->header);
 	buffer_free(rewrite->match);
@@ -31,6 +32,7 @@ int proxy_rewrite_set_regex(proxy_rewrite *rewrite, buffer *regex) {
 	const char *errptr;
 	int erroff;
 
+#ifdef HAVE_PCRE_H
 	if (NULL == (rewrite->regex = pcre_compile(BUF_STR(regex),
 		  0, &errptr, &erroff, NULL))) {
 		
@@ -38,6 +40,7 @@ int proxy_rewrite_set_regex(proxy_rewrite *rewrite, buffer *regex) {
 
 		return -1;
 	}
+#endif
 
 	return 0;
 }
@@ -66,6 +69,7 @@ void proxy_rewrites_free(proxy_rewrites *rewrites) {
 }
 
 int pcre_replace(pcre *match, buffer *replace, buffer *match_buf, buffer *result) {
+#ifdef HAVE_PCRE_H
 	const char *pattern = replace->ptr;
 	size_t pattern_len = replace->used - 1;
 
@@ -117,6 +121,9 @@ int pcre_replace(pcre *match, buffer *replace, buffer *match_buf, buffer *result
 	}
 
 	return n;
+#else
+	return -1;
+#endif
 }
 
 

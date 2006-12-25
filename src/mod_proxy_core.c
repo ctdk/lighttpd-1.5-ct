@@ -662,6 +662,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 
 		buffer_copy_string_buffer(ds->key, header->key);
 
+#ifdef HAVE_PCRE_H
 		for (k = 0; k < p->conf.response_rewrites->used; k++) {
 			proxy_rewrite *rw = p->conf.response_rewrites->ptr[k];
 
@@ -689,6 +690,9 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 		if (k == p->conf.response_rewrites->used) {
 			buffer_copy_string_buffer(ds->value, header->value);
 		}
+#else
+		buffer_copy_string_buffer(ds->value, header->value);
+#endif
 
 		array_insert_unique(con->response.headers, (data_unset *)ds);
 	}
@@ -882,7 +886,7 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 		if (buffer_is_equal_string(ds->key, CONST_STR_LEN("Connection"))) continue;
 		if (buffer_is_equal_string(ds->key, CONST_STR_LEN("Keep-Alive"))) continue;
 		if (buffer_is_equal_string(ds->key, CONST_STR_LEN("Expect"))) continue;
-
+#ifdef HAVE_PCRE_H
 		for (k = 0; k < p->conf.request_rewrites->used; k++) {
 			proxy_rewrite *rw = p->conf.request_rewrites->ptr[k];
 
@@ -910,10 +914,13 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 		if (k == p->conf.request_rewrites->used) {
 			array_set_key_value(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
 		}
+#else
+		array_set_key_value(sess->request_headers, CONST_BUF_LEN(ds->key), CONST_BUF_LEN(ds->value));
+#endif
 	}
 
 	/* check if we want to rewrite the uri */
-
+#ifdef HAVE_PCRE_H
 	for (i = 0; i < p->conf.request_rewrites->used; i++) {
 		proxy_rewrite *rw = p->conf.request_rewrites->ptr[i];
 
@@ -941,6 +948,9 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 	if (i == p->conf.request_rewrites->used) {
 		buffer_append_string_buffer(sess->request_uri, con->request.uri);
 	}
+#else
+	buffer_append_string_buffer(sess->request_uri, con->request.uri);
+#endif
 
 	proxy_get_request_chunk(srv, sess, con->recv, sess->send_raw);
 

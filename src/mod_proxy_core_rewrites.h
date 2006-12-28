@@ -1,6 +1,10 @@
 #ifndef _MOD_PROXY_CORE_REWRITES_H_
 #define _MOD_PROXY_CORE_REWRITES_H_
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #ifdef HAVE_PCRE_H
 #include <pcre.h>
 #endif

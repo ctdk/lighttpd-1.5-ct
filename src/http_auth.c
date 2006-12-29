@@ -691,6 +691,7 @@ static int http_auth_basic_password_compare(server *srv, mod_auth_plugin_data *p
 		}
 
 #endif
+	}
 	} else if (p->conf.auth_backend == AUTH_BACKEND_PLAIN) {
 		if (buffer_is_equal_string(password, pw, strlen(pw))) {
 			return 0;

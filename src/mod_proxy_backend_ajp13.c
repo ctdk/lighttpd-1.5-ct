@@ -228,7 +228,8 @@ static int ajp13_encode_string(buffer *buf, const char *str, size_t str_len) {
 static int ajp13_env_add(buffer *buf, const char *key, size_t key_len, const char *val, size_t val_len) {
 	char uppercase_key[MAX_KEY_LEN];
 	size_t len = 0;
-	int code = -1,i;
+	int code = -1;
+	size_t i;
 
 	if (!key || !val) return -1;
 
@@ -278,7 +279,7 @@ static int ajp13_decode_string(buffer *str, ajp13_state_data *data, int is_heade
 
 	/* string length */
 	len = ajp13_decode_int(data);
-	if (len == -1) return len;
+	if ((ssize_t)len == -1) return len;
 
 	/* if string is header, check for common header code. */
 	if (is_header && (len & AJP13_COMMON_HEADER_CODE)) {
@@ -351,7 +352,8 @@ int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *ses
 #ifdef HAVE_IPV6
 	char b2[INET6_ADDRSTRLEN + 1];
 #endif
-	int i,len = 0,port = 0;
+	int len = 0,port = 0;
+	size_t i;
 
 	/* prefix_code */
 	len += ajp13_encode_byte(packet, AJP13_TYPE_FORWARD_REQUEST);

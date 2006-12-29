@@ -631,6 +631,7 @@ handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s) {
 				}
 			}
 #else
+			UNUSED(s);
 			log_error_write(srv, __FILE__, __LINE__, "s", "no ldap support available");
 			return HANDLER_ERROR;
 #endif

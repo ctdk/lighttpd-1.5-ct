@@ -1,4 +1,9 @@
+/*
+ * make sure _GNU_SOURCE is defined
+ */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE /* we need O_DIRECT */
+#endif
 
 #include "network_backends.h"
 

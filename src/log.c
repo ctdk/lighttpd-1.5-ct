@@ -1,4 +1,9 @@
+/*
+ * make sure _GNU_SOURCE is defined
+ */
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 
 #include <sys/types.h>
 
@@ -310,7 +315,7 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 
 static int log_trace_write(const char *fmt, va_list ap) {
 	buffer *b;
-	int l;
+	size_t l;
 	errorlog *err = myconfig;
 	
 	b = buffer_init();

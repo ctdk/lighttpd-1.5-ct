@@ -7,7 +7,12 @@
 #include <signal.h>
 #include <limits.h>
 
+#ifndef _GNU_SOURCE
+/* seems we dont need this when using _GNU_SOURCE
+ *  #define __USE_GNU
+ */
 #define __USE_GNU
+#endif
 #include <fcntl.h>
 
 #include "fdevent.h"

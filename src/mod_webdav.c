@@ -47,7 +47,7 @@
  *
  */
 
-#define WEBDAV_FILE_MODE WEBDAV_FILE_MODE
+#define WEBDAV_FILE_MODE S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
 #define WEBDAV_DIR_MODE  S_IRWXU | S_IRWXG | S_IRWXO
 
 /* plugin config for all request/connections */
@@ -535,6 +535,8 @@ static int webdav_gen_response_status_tag(server *srv, connection *con, physical
 static int webdav_delete_file(server *srv, connection *con, plugin_data *p, physical *dst, buffer *b) {
 	int status = 0;
 
+	UNUSED(p);
+
 	/* try to unlink it */
 	if (-1 == unlink(dst->path->ptr)) {
 		switch(errno) {
@@ -666,6 +668,7 @@ static int webdav_copy_file(server *srv, connection *con, plugin_data *p, physic
 
 	UNUSED(con);
 	UNUSED(srv);
+	UNUSED(p);
 
 	if (stream_open(&s, src->path)) {
 		return 403;
@@ -1196,6 +1199,9 @@ int webdav_has_lock(server *srv, connection *con, plugin_data *p, buffer *uri) {
 	}
 #else
 	UNUSED(srv);
+	UNUSED(uri);
+	UNUSED(con);
+	UNUSED(p);
 #endif
 
 	return has_lock;

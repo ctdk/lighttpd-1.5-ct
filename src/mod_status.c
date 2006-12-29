@@ -173,7 +173,7 @@ static int mod_status_header_append_sort(buffer *b, void *p_d, const char* key) 
 	if (p->conf.sort) {
 		BUFFER_APPEND_STRING_CONST(b, "<th class=\"status\"><a href=\"#\" class=\"sortheader\" onclick=\"resort(this);return false;\">");
 		buffer_append_string(b, key);
-		BUFFER_APPEND_STRING_CONST(b, "<span class=\"sortarrow\"></span></a></th>\n");
+		BUFFER_APPEND_STRING_CONST(b, "<span class=\"sortarrow\">:</span></a></th>\n");
 	} else {
 		BUFFER_APPEND_STRING_CONST(b, "<th class=\"status\">");
 		buffer_append_string(b, key);
@@ -677,7 +677,7 @@ static handler_t mod_status_handle_server_config(server *srv, connection *con, v
 			   " </head>\n"
 			   " <body>\n"
 			   "  <h1>" PACKAGE_NAME " " PACKAGE_VERSION "</h1>\n"
-			   "  <table border=\"1\">\n");
+			   "  <table summary=\"status\" border=\"1\">\n");
 
 	mod_status_header_append(b, "Server-Features");
 #ifdef HAVE_PCRE_H

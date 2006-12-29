@@ -47,7 +47,8 @@
  *
  */
 
-
+#define WEBDAV_FILE_MODE WEBDAV_FILE_MODE
+#define WEBDAV_DIR_MODE  S_IRWXU | S_IRWXG | S_IRWXO
 
 /* plugin config for all request/connections */
 
@@ -208,7 +209,9 @@ SETDEFAULTS_FUNC(mod_webdav_set_defaults) {
 			char *err;
 
 			if (SQLITE_OK != sqlite3_open(s->sqlite_db_name->ptr, &(s->sql))) {
-				log_error_write(srv, __FILE__, __LINE__, "s", "sqlite3_open failed");
+				log_error_write(srv, __FILE__, __LINE__, "sbs", "sqlite3_open failed for",
+						s->sqlite_db_name,
+						sqlite3_errmsg(s->sql));
 				return HANDLER_ERROR;
 			}
 
@@ -668,7 +671,7 @@ static int webdav_copy_file(server *srv, connection *con, plugin_data *p, physic
 		return 403;
 	}
 
-	if (-1 == (ofd = open(dst->path->ptr, O_WRONLY|O_TRUNC|O_CREAT|(overwrite ? 0 : O_EXCL), S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH))) {
+	if (-1 == (ofd = open(dst->path->ptr, O_WRONLY|O_TRUNC|O_CREAT|(overwrite ? 0 : O_EXCL), WEBDAV_FILE_MODE))) {
 		/* opening the destination failed for some reason */
 		switch(errno) {
 		case EEXIST:
@@ -773,7 +776,7 @@ static int webdav_copy_dir(server *srv, connection *con, plugin_data *p, physica
 				/* why ? */
 			} else if (S_ISDIR(st.st_mode)) {
 				/* a directory */
-				if (-1 == mkdir(d.path->ptr, 0700) &&
+				if (-1 == mkdir(d.path->ptr, WEBDAV_DIR_MODE) &&
 				    errno != EEXIST) {
 					/* WTH ? */
 				} else {
@@ -1150,31 +1153,31 @@ int webdav_lockdiscovery(server *srv, connection *con,
 int webdav_has_lock(server *srv, connection *con, plugin_data *p, buffer *uri) {
 	int has_lock = 1;
 
-	UNUSED(srv);
-
 #ifdef USE_LOCKS
 	data_string *ds;
 
+	UNUSED(srv);
+
 	/**
-	 * If can have
-	 * - <lock-token>
-	 * - [etag]
-	 *
-	 * there is NOT, AND and OR
-	 * and a list can be tagged
-	 *
-	 * (<lock-token>) is untagged
-	 * <tag> (<lock-token>) is tagged
-	 *
-	 * as long as we don't handle collections it is simple. :)
+	 * This implementation is more fake than real
+	 * we need a parser for the If: header to really handle the full scope
 	 *
 	 * X-Litmus: locks: 11 (owner_modify)
 	 * If: <http://127.0.0.1:1025/dav/litmus/lockme> (<opaquelocktoken:2165478d-0611-49c4-be92-e790d68a38f1>)
+	 * - a tagged check:
+	 *   if http://127.0.0.1:1025/dav/litmus/lockme is locked with
+	 *   opaquelocktoken:2165478d-0611-49c4-be92-e790d68a38f1, go on
 	 *
 	 * X-Litmus: locks: 16 (fail_cond_put)
 	 * If: (<DAV:no-lock> ["-1622396671"])
+	 * - untagged:
+	 *   go on if the resource has the etag [...] and the lock
 	 */
 	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "If"))) {
+		/* Ooh, ooh. A if tag, now the fun begins.
+		 *
+		 * this can only work with a real parser
+		 **/
 	} else {
 		/* we didn't provided a lock-token -> */
 		/* if the resource is locked -> 423 */
@@ -1191,6 +1194,8 @@ int webdav_has_lock(server *srv, connection *con, plugin_data *p, buffer *uri) {
 			has_lock = 0;
 		}
 	}
+#else
+	UNUSED(srv);
 #endif
 
 	return has_lock;
@@ -1495,7 +1500,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		/* let's create the directory */
 
-		if (-1 == mkdir(con->physical.path->ptr, 0700)) {
+		if (-1 == mkdir(con->physical.path->ptr, WEBDAV_DIR_MODE)) {
 			switch(errno) {
 			case EPERM:
 				con->http_status = 403;
@@ -1653,7 +1658,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				return HANDLER_FINISHED;
 			}
 
-			if (-1 == (fd = open(con->physical.path->ptr, O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH))) {
+			if (-1 == (fd = open(con->physical.path->ptr, O_WRONLY, WEBDAV_FILE_MODE))) {
 				switch (errno) {
 				case ENOENT:
 					con->http_status = 404; /* not found */
@@ -1677,9 +1682,9 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			/* take what we have in the request-body and write it to a file */
 
 			/* if the file doesn't exist, create it */
-			if (-1 == (fd = open(con->physical.path->ptr, O_WRONLY|O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH))) {
+			if (-1 == (fd = open(con->physical.path->ptr, O_WRONLY|O_TRUNC, WEBDAV_FILE_MODE))) {
 				if (errno == ENOENT &&
-				    -1 == (fd = open(con->physical.path->ptr, O_WRONLY|O_CREAT|O_TRUNC|O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH))) {
+				    -1 == (fd = open(con->physical.path->ptr, O_WRONLY|O_CREAT|O_TRUNC|O_EXCL, WEBDAV_FILE_MODE))) {
 					/* we can't open the file */
 					con->http_status = 403;
 
@@ -1885,7 +1890,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			/* src is a directory */
 
 			if (-1 == stat(p->physical.path->ptr, &st)) {
-				if (-1 == mkdir(p->physical.path->ptr, 0700)) {
+				if (-1 == mkdir(p->physical.path->ptr, WEBDAV_DIR_MODE)) {
 					con->http_status = 403;
 					return HANDLER_FINISHED;
 				}
@@ -1896,7 +1901,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 					return HANDLER_FINISHED;
 				} else {
 					unlink(p->physical.path->ptr);
-					if (-1 == mkdir(p->physical.path->ptr, 0700)) {
+					if (-1 == mkdir(p->physical.path->ptr, WEBDAV_DIR_MODE)) {
 						con->http_status = 403;
 						return HANDLER_FINISHED;
 					}
@@ -2308,13 +2313,13 @@ propmatch_cleanup:
 									  SQLITE_TRANSIENT);
 
 							sqlite3_bind_text(stmt, 3,
-									  lockscope,
+									  (const char *)lockscope,
 									  xmlStrlen(lockscope),
 									  SQLITE_TRANSIENT);
 
 							sqlite3_bind_text(stmt, 4,
-									  locktype,
-									  xmlStrlen(locktype),
+									  (const char *)locktype,
+									  +xmlStrlen(locktype),
 									  SQLITE_TRANSIENT);
 
 							/* owner */
@@ -2334,7 +2339,7 @@ propmatch_cleanup:
 							}
 
 							/* looks like we survived */
-							webdav_lockdiscovery(srv, con, p->tmp_buf, lockscope, locktype, depth);
+							webdav_lockdiscovery(srv, con, p->tmp_buf, (const char *)lockscope, (const char *)locktype, depth);
 
 							con->http_status = 201;
 							con->send->is_closed = 1;

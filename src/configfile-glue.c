@@ -59,7 +59,7 @@ int config_insert_values_internal(server *srv, array *ca, const config_values_t 
 						array_insert_unique(cv[i].destination, (data_unset *)ds);
 					} else {
 						log_error_write(srv, __FILE__, __LINE__, "sssd",
-								"the key of and array can only be a string or a integer, variable:",
+								"the key of an array can only be a string or a integer, variable:",
 								cv[i].key, "type:", da->value->data[j]->type);
 
 						return -1;
@@ -102,7 +102,7 @@ int config_insert_values_internal(server *srv, array *ca, const config_values_t 
 					break;
 				}
 
-				log_error_write(srv, __FILE__, __LINE__, "ssb", "get a string but expected a short:", cv[i].key, ds->value);
+				log_error_write(srv, __FILE__, __LINE__, "ssb", "got a string but expected a short:", cv[i].key, ds->value);
 
 				return -1;
 			}

@@ -22,7 +22,7 @@
 #include <aio.h>
 #endif
 
-#if defined HAVE_SYS_UIO_H && defined HAVE_SENDFILE && defined HAVE_WRITEV && defined(__FreeBSD__)
+#if defined HAVE_SYS_UIO_H && defined HAVE_SENDFILE && defined HAVE_WRITEV && (defined(__FreeBSD__) || defined(__DragonFly__))
 # define USE_FREEBSD_SENDFILE
 # include <sys/uio.h>
 #endif

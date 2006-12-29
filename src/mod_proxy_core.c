@@ -86,7 +86,7 @@ INIT_FUNC(mod_proxy_core_init) {
 	/**
 	 * create a small pool of session objects
 	 *
-	 * instead of creating new one each time, 
+	 * instead of creating new one each time,
 	 * cleanup old ones and put them into the pool
 	 *
 	 * 8 clean items should be enough at a time, destroy the other ones
@@ -127,7 +127,7 @@ FREE_FUNC(mod_proxy_core_free) {
 	buffer_free(p->protocol_buf);
 	buffer_free(p->replace_buf);
 	buffer_free(p->tmp_buf);
-	
+
 #if 0
 	proxy_session_pool_free(p->session_pool);
 #endif
@@ -147,7 +147,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 		data_array *keys = (data_array *)du;
 
 		if (keys->type != TYPE_ARRAY) {
-			ERROR("%s = <...>", 
+			ERROR("%s = <...>",
 				config_key);
 
 			return HANDLER_ERROR;
@@ -155,7 +155,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 
 		/*
 		 * proxy-core.rewrite-request = (
-		 *   "_uri" => ( ... ) 
+		 *   "_uri" => ( ... )
 		 * )
 		 */
 
@@ -165,7 +165,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 
 			/* keys->key should be "_uri" and the value a array of rewrite */
 			if (headers->type != TYPE_ARRAY) {
-				ERROR("%s = ( %s => <...> ) has to a array", 
+				ERROR("%s = ( %s => <...> ) has to a array",
 					config_key,
 					BUF_STR(headers->key));
 
@@ -173,7 +173,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 			}
 
 			if (headers->value->used > 1) {
-				ERROR("%s = ( %s => <...> ) has to a array with only one element", 
+				ERROR("%s = ( %s => <...> ) has to a array with only one element",
 					config_key,
 					BUF_STR(headers->key));
 
@@ -187,14 +187,14 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 
 				/* keys->key should be "_uri" and the value a array of rewrite */
 				if (rewrites->type != TYPE_STRING) {
-					ERROR("%s = ( \"%s\" => ( \"%s\" => <value> ) ) has to a string", 
+					ERROR("%s = ( \"%s\" => ( \"%s\" => <value> ) ) has to a string",
 						config_key,
 						BUF_STR(headers->key),
 						BUF_STR(rewrites->key));
 
 					return HANDLER_ERROR;
 				}
-			
+
 				rw = proxy_rewrite_init();
 
 				if (0 != proxy_rewrite_set_regex(rw, rewrites->key)) {
@@ -272,7 +272,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 
 		if (!buffer_is_empty(p->balance_buf)) {
 			data_integer *di;
-			
+
 			if (NULL == (di = (data_integer *)array_get_element(p->possible_balancers, BUF_STR(p->balance_buf)))) {
 				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
 
@@ -285,7 +285,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		if (!buffer_is_empty(p->protocol_buf)) {
 			proxy_protocol *protocol = NULL;
 			if (NULL == (protocol = proxy_get_protocol(p->protocol_buf))) {
-				ERROR("proxy.protocol has to be on of { %s } got %s, you might have to load 'mod_proxy_backend_%s'", 
+				ERROR("proxy.protocol has to be on of { %s } got %s, you might have to load 'mod_proxy_backend_%s'",
 						proxy_available_protocols(),
 						BUF_STR(p->protocol_buf),
 						BUF_STR(p->protocol_buf)
@@ -318,7 +318,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		if (HANDLER_GO_ON != mod_proxy_core_config_parse_rewrites(s->request_rewrites, ca, CONFIG_PROXY_CORE_REWRITE_REQUEST)) {
 			return HANDLER_ERROR;
 		}
-		
+
 		if (HANDLER_GO_ON != mod_proxy_core_config_parse_rewrites(s->response_rewrites, ca, CONFIG_PROXY_CORE_REWRITE_RESPONSE)) {
 			return HANDLER_ERROR;
 		}
@@ -427,7 +427,7 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 				chunkqueue_steal_chunk(con->send, c);
 			} else {
 				chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-		
+
 				c->offset = c->mem->used - 1; /* mark the incoming side as read */
 			}
 		} else {
@@ -467,7 +467,7 @@ int proxy_stream_cleanup(server *srv, proxy_session *sess) {
 /**
  * decode the content for the protocol
  *
- * http might have chunk-encoding 
+ * http might have chunk-encoding
  * fastcgi has the fastcgi wrapper code
  *
  * @param in chunkqueue for the encoded, protocol specific data
@@ -578,9 +578,9 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			if (p->conf.allow_x_sendfile) {
 				sess->send_response_content = 0;
 				sess->do_internal_redirect = 1;
-				
+
 				/* don't try to rewrite this request through mod_proxy_core again */
-				sess->internal_redirect_count = MAX_INTERNAL_REDIRECTS; 
+				sess->internal_redirect_count = MAX_INTERNAL_REDIRECTS;
 
 				buffer_copy_string_buffer(con->physical.path, header->value);
 
@@ -592,7 +592,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-send-tempfile"))) {
 			if (p->conf.allow_x_sendfile && !buffer_is_empty(header->value)) {
 				stat_cache_entry *sce = NULL;
-				
+
 				if (HANDLER_ERROR != stat_cache_get_entry(srv, con, header->value, &sce)) {
 					chunk *c;
 					sess->send_response_content = 0;
@@ -616,7 +616,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			}
 
 			continue;
-		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-URI"))) { 
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-URI"))) {
 			if (p->conf.allow_x_rewrite) {
 				sess->send_response_content = 0;
 				sess->do_internal_redirect = 1;
@@ -628,7 +628,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			}
 
 			continue;
-		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-Host"))) { 
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-Host"))) {
 			if (p->conf.allow_x_rewrite) {
 				sess->send_response_content = 0;
 				sess->do_internal_redirect = 1;
@@ -654,7 +654,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			continue;
 
 		}
-		
+
 		if (NULL == (ds = (data_string *)array_get_unused_element(con->response.headers, TYPE_STRING))) {
 			ds = data_response_init();
 		}
@@ -748,9 +748,9 @@ handler_t proxy_connection_connect(proxy_connection *con) {
  * event-handler for idling connections
  *
  * unused (idling) keep-alive connections are not bound to a session
- * and need their own event-handler 
+ * and need their own event-handler
  *
- * if the connection closes (we get a FDEVENT_IN), close our side too and 
+ * if the connection closes (we get a FDEVENT_IN), close our side too and
  * let the trigger-func handle the cleanup
  *
  * @see proxy_trigger
@@ -818,7 +818,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 			joblist_append(srv, con);
 			break;
 		case PROXY_STATE_READ_RESPONSE_BODY:
-			/* we should be in the WRITE state now, 
+			/* we should be in the WRITE state now,
 			 * just read in the content and forward it to the outgoing connection
 			 * */
 
@@ -958,8 +958,8 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 }
 
 /* we are event-driven
- * 
- * the first entry is connect() call, if the doesn't need a event 
+ *
+ * the first entry is connect() call, if the doesn't need a event
  *
  * a bit boring
  * - connect (+ delayed connect)
@@ -985,7 +985,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			sess->state = PROXY_STATE_CONNECTING;
 			sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTING;
-			
+
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_GO_ON:
 			/* we are connected */
@@ -998,7 +998,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		default:
 			/* not good, something failed */
 			return HANDLER_ERROR;
-		
+
 		}
 
 		/* fall through */
@@ -1092,7 +1092,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			return HANDLER_WAIT_FOR_EVENT;
 		case NETWORK_STATUS_CONNECTION_CLOSE:
-			/* the connection got close while sending the request content up 
+			/* the connection got close while sending the request content up
 			 * to the backend, for now handle this as error */
 
 			TRACE("%s", "(con-close)");
@@ -1131,7 +1131,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			if (sess->do_internal_redirect) {
 				/* now it becomes tricky
-				 * 
+				 *
 				 * mod_staticfile should handle this file for us
 				 * con->mode = DIRECT is taking us out of the loop */
 
@@ -1161,7 +1161,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 				sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
 
 				/**
-				 * we might run into a 'race-condition' 
+				 * we might run into a 'race-condition'
 				 *
 				 * 1. proxy-con is keep-alive, idling and just being closed (FDEVENT_IN) [fd=27]
 				 * 2. new connection comes in, we use the idling connection [fd=14]
@@ -1175,7 +1175,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			}
 
 			ERROR("%s", "conn-close after header-read");
-				
+
 			break;
 		default:
 			ERROR("++ %s", "oops, something went wrong while reading");
@@ -1188,7 +1188,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		chunkqueue_remove_finished_chunks(sess->recv_raw);
 
 		if (!sess->recv_raw->is_closed &&
-		    (sess->recv_raw->first == NULL || 
+		    (sess->recv_raw->first == NULL ||
 				 sess->recv_raw->bytes_in == sess->recv_raw->bytes_out)) {
 			/* we have to read more data */
 
@@ -1211,10 +1211,10 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 				ERROR("%s", "oops, we failed to read");
 				break;
 			}
-		} 
+		}
 
 		/* how much do we want to read ? */
-			
+
 		/* call stream-decoder (HTTP-chunked, FastCGI, ... ) */
 
 		switch (proxy_stream_decoder(srv, sess, sess->recv_raw, sess->recv)) {
@@ -1239,11 +1239,11 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 		proxy_copy_response(srv, con, sess);
 
-		/* we wrote something into the the send-buffers, 
+		/* we wrote something into the the send-buffers,
 		 * call the connection-handler to push it to the client */
 
 		joblist_append(srv, con);
-		
+
 		break;
 	default:
 		break;
@@ -1270,7 +1270,7 @@ proxy_backend *proxy_get_backend(server *srv, connection *con, plugin_data *p) {
 /**
  * choose a available address from the address-pool
  *
- * the backend has different balancers 
+ * the backend has different balancers
  */
 proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend *backend) {
 	size_t i;
@@ -1297,7 +1297,7 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 				generate_crc32c(CONST_BUF_LEN(cur_address->name)) + /* we can cache this */
 				generate_crc32c(CONST_BUF_LEN(con->uri.authority));
 #if 0
-			TRACE("hash-election: %s - %s - %s: %ld", 
+			TRACE("hash-election: %s - %s - %s: %ld",
 					con->uri.path->ptr,
 					cur_address->name->ptr,
 					con->uri.authority->ptr,
@@ -1337,7 +1337,7 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 		 */
 
 		active_addresses = 0;
-		
+
 		for (i = 0; i < address_pool->used; i++) {
 			cur_address = address_pool->ptr[i];
 
@@ -1347,7 +1347,7 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend
 		}
 
 		rand_ndx = (int) (1.0 * active_addresses * rand()/(RAND_MAX));
-	
+
 		active_addresses = 0;
 		for (i = 0; i < address_pool->used; i++) {
 			cur_address = address_pool->ptr[i];
@@ -1472,14 +1472,14 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 
 	if (p->id != con->mode) return HANDLER_GO_ON;
 
-	/* 
+	/*
 	 * 0. build session
 	 * 1. get a proxy connection
 	 * 2. create the http-request header
-	 * 3. stream the content to the backend 
-	 * 4. wait for http-response header 
+	 * 3. stream the content to the backend
+	 * 4. wait for http-response header
 	 * 5. decode the response + parse the response
-	 * 6. stream the response-content to the client 
+	 * 6. stream the response-content to the client
 	 * 7. kill session
 	 * */
 
@@ -1504,17 +1504,17 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			if (sess->proxy_con) {
 				/* if we are waiting for a proxy-connection right now, close it */
 				proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-	
+
 				fdevent_event_del(srv->ev, sess->proxy_con->sock);
 				fdevent_unregister(srv->ev, sess->proxy_con->sock);
 
 				proxy_connection_free(sess->proxy_con);
-			
+
 				sess->proxy_con = NULL;
 			}
 
 			TRACE("%s", "connect to backend timed out");
-			
+
 			return HANDLER_FINISHED;
 		}
 	default:
@@ -1556,11 +1556,11 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				req = proxy_request_init();
 				req->added_ts = srv->cur_ts;
 				req->con = con;
-				
+
 				TRACE("backlog: all backends are down, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
 				proxy_backlog_push(p->conf.backlog, req);
 
-				/* no, not really a event, 
+				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
@@ -1569,14 +1569,14 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			}
 
 			/**
-			 * we prefer older connections to wakeup and take a 
-			 * connection over a new connection being answered fast 
+			 * we prefer older connections to wakeup and take a
+			 * connection over a new connection being answered fast
 			 */
 			woken_up = mod_proxy_wakeup_connections(srv, &(p->conf));
 
 			if ((sess->sent_to_backlog == 0 && woken_up > 0 && p->conf.backlog->length > 0) ||
 			    PROXY_CONNECTIONPOOL_FULL == proxy_connection_pool_get_connection(
-						sess->proxy_backend->pool, 
+						sess->proxy_backend->pool,
 						address,
 						&(sess->proxy_con))) {
 				proxy_request *req;
@@ -1585,15 +1585,15 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				req = proxy_request_init();
 				req->added_ts = srv->cur_ts;
 				req->con = con;
-			
+
 #if 0
 				TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
 #endif
 				proxy_backlog_push(p->conf.backlog, req);
-			
+
 				sess->sent_to_backlog++;
 
-				/* no, not really a event, 
+				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
@@ -1608,8 +1608,8 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			} else {
 				/* we are already connected */
 				sess->state = PROXY_STATE_CONNECTED;
-				
-				/* the connection was idling and using the fdevent_idle-handler 
+
+				/* the connection was idling and using the fdevent_idle-handler
 				 * switch it back to the normal proxy-event-handler */
 				fdevent_event_del(srv->ev, sess->proxy_con->sock);
 				fdevent_unregister(srv->ev, sess->proxy_con->sock);
@@ -1625,7 +1625,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_COMEBACK:
 			proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-	
+
 			fdevent_event_del(srv->ev, sess->proxy_con->sock);
 			fdevent_unregister(srv->ev, sess->proxy_con->sock);
 
@@ -1685,7 +1685,7 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
  */
 CONNECTION_FUNC(mod_proxy_connection_reset) {
 	plugin_data *p = p_d;
-	proxy_session *sess = con->plugin_ctx[p->id]; 
+	proxy_session *sess = con->plugin_ctx[p->id];
 	proxy_request *req;
 
 	if (!sess) return HANDLER_GO_ON;
@@ -1711,7 +1711,7 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 
 		case PROXY_CONNECTION_STATE_CLOSED:
 			proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-	
+
 			fdevent_event_del(srv->ev, sess->proxy_con->sock);
 			fdevent_unregister(srv->ev, sess->proxy_con->sock);
 
@@ -1728,7 +1728,7 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 		/* if we have the connection in the backlog, remove it */
 		proxy_backlog_remove_connection(p->conf.backlog, con);
 	}
-	
+
 
 	/* cleanup protocol stream and proxy session */
 	proxy_stream_cleanup(srv, sess);
@@ -1745,7 +1745,7 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 		proxy_request_free(req);
 	}
 
-	
+
 	return HANDLER_GO_ON;
 }
 
@@ -1754,7 +1754,7 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 /**
  * cleanup dead connections once a second
  *
- * the idling event-handler can't cleanup connections itself and has to wait until the 
+ * the idling event-handler can't cleanup connections itself and has to wait until the
  * trigger cleans up
  */
 static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
@@ -1776,7 +1776,7 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
 			switch (proxy_con->state) {
 			case PROXY_CONNECTION_STATE_CLOSED:
 				proxy_connection_pool_remove_connection(backend->pool, proxy_con);
-	
+
 				fdevent_event_del(srv->ev, proxy_con->sock);
 				fdevent_unregister(srv->ev, proxy_con->sock);
 
@@ -1813,14 +1813,14 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
 
 		proxy_request_free(req);
 	}
-	
+
 	return woken_up;
 }
 
 TRIGGER_FUNC(mod_proxy_trigger) {
 	plugin_data *p = p_d;
 	size_t i;
-	
+
 	for (i = 0; i < srv->config_context->used; i++) {
 		mod_proxy_wakeup_connections(srv, p->config_storage[i]);
 	}

@@ -201,7 +201,7 @@ typedef struct {
 	splay_tree *files; /* the nodes of the tree are stat_cache_entries */
 
 	buffer *dir_name; /* for building the dirname from the filename */
-	buffer *hash_key; 
+	buffer *hash_key;
 #ifdef HAVE_FAM_H
 	splay_tree *dirs; /* the nodes of the tree are fam_dir_entry */
 
@@ -448,7 +448,7 @@ typedef struct {
 	buffer *network_backend;
 	array *modules;
 	array *upload_tempdirs;
-	
+
 	unsigned short use_noatime;
 
 	unsigned short max_worker;
@@ -594,7 +594,7 @@ typedef struct server {
 
 	void *posix_aio_data[POSIX_AIO_MAX_IOCBS];
 #endif
-	
+
 } server;
 
 

@@ -8,9 +8,9 @@
 #include "sys-socket.h"
 
 /**
- * a single DNS name might explode to several IP addresses 
- * 
- * url: 
+ * a single DNS name might explode to several IP addresses
+ *
+ * url:
  * - http://foo.bar/suburl/
  * - https://foo.bar/suburl/
  * - unix:/tmp/socket
@@ -23,7 +23,7 @@
  *
  * request-url-rewrite
  * response-url-rewrite
- */ 
+ */
 typedef enum {
 	PROXY_BALANCE_UNSET,
 	PROXY_BALANCE_SQF,

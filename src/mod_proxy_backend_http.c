@@ -250,7 +250,7 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
 	UNUSED(sess);
 
 	/* there is nothing that we have to send out anymore */
-	if (in->bytes_in == in->bytes_out && 
+	if (in->bytes_in == in->bytes_out &&
 	    in->is_closed) return 0;
 
 	for (c = in->first; in->bytes_out < in->bytes_in; c = c->next) {
@@ -268,7 +268,7 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
 
 			if (weHave > weWant) weHave = weWant;
 
-			/** steal the chunk from the incoming chunkqueue */	
+			/** steal the chunk from the incoming chunkqueue */
 			chunkqueue_steal_tempfile(out, c);
 
 			c->offset += weHave;
@@ -309,7 +309,7 @@ STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
 	connection *con = sess->remote_con;
 	buffer *b;
 	size_t i;
-	
+
 	UNUSED(srv);
 	UNUSED(in);
 
@@ -342,7 +342,7 @@ STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
 	BUFFER_APPEND_STRING_CONST(b, "\r\n");
 
 	out->bytes_in += b->used - 1;
-	
+
 	return 0;
 }
 

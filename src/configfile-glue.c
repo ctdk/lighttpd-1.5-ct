@@ -43,7 +43,7 @@ int config_insert_values_internal(server *srv, array *ca, const config_values_t 
 				for (j = 0; j < da->value->used; j++) {
 					if (da->value->data[j]->type == TYPE_STRING) {
 						data_string *ds;
-			
+
 						if (NULL == (ds = (data_string *)array_get_unused_element(cv[i].destination, TYPE_STRING))) {
 							ds = data_string_init();
 						}
@@ -135,9 +135,9 @@ int config_insert_values_internal(server *srv, array *ca, const config_values_t 
 			break;
 		case T_CONFIG_UNSUPPORTED:
 			log_error_write(srv, __FILE__, __LINE__, "ssss", "ERROR: found unsupported key:", cv[i].key, "-", (char *)(cv[i].destination));
-			
+
 			srv->config_unsupported = 1;
-			
+
 			break;
 		case T_CONFIG_DEPRECATED:
 			log_error_write(srv, __FILE__, __LINE__, "ssss", "ERROR: found deprecated key:", cv[i].key, "-", (char *)(cv[i].destination));
@@ -464,7 +464,7 @@ void config_cond_cache_reset(server *srv, connection *con) {
 		con->cond_cache[i].result = COND_RESULT_UNSET;
 		con->cond_cache[i].patterncount = 0;
 	}
-#else	
+#else
 	memset(con->cond_cache, 0, sizeof(cond_cache_t) * srv->config_context->used);
 #endif
 }

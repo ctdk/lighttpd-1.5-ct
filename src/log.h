@@ -3,8 +3,8 @@
 
 #include "buffer.h"
 
-void log_init(void); 
-void log_free(void); 
+void log_init(void);
+void log_free(void);
 
 int log_error_open(buffer *file, int use_syslog);
 int log_error_close();

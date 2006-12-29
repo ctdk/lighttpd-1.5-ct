@@ -20,8 +20,8 @@ const char* chunkqueue_to_buffer(chunkqueue *cq, buffer *b) {
 }
 
 int main(void) {
-	http_req *req = http_request_init(); 
-	chunkqueue *cq = chunkqueue_init(); 
+	http_req *req = http_request_init();
+	chunkqueue *cq = chunkqueue_init();
 	buffer *b, *content = buffer_init();
 	const char *body;
 
@@ -31,15 +31,15 @@ int main(void) {
 	/* basic request header + CRLF */
 	b = chunkqueue_get_append_buffer(cq);
 
-	buffer_copy_string(b, 
+	buffer_copy_string(b,
 		"GET / HTTP/1.0\r\n"
 		"Location: foobar\r\n"
 		"Content-Lenght: 24\r\n"
 		"\r\nABC"
 	);
-    
+
 	ok(PARSE_SUCCESS == http_request_parse_cq(cq, req), "basic GET header");
-    
+
 	chunkqueue_remove_finished_chunks(cq);
 	body = chunkqueue_to_buffer(cq, content);
 	ok(0 == strcmp("ABC", body), "content is ABC, got %s", body);
@@ -47,12 +47,12 @@ int main(void) {
 	http_request_free(req);
 
 	/* line-wrapping */
-	
+
 	chunkqueue_reset(cq);
 	req = http_request_init();
 
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, 
+	buffer_copy_string(b,
 		"GET /server-status HTTP/1.0\r\n"
 		"User-Agent: Wget/1.9.1\r\n"
 		"Authorization: Digest username=\"jan\", realm=\"jan\", nonce=\"9a5428ccc05b086a08d918e73b01fc6f\",\r\n"
@@ -61,73 +61,73 @@ int main(void) {
 	);
 
 	ok(PARSE_SUCCESS == http_request_parse_cq(cq, req), "POST request with line-wrapping");
-    
+
 	chunkqueue_remove_finished_chunks(cq);
 
 	http_request_free(req);
 
 	/* no request line */
-	
+
 	chunkqueue_reset(cq);
 	req = http_request_init();
 
 	b = chunkqueue_get_append_buffer(cq);
 
-	buffer_copy_string(b, 
+	buffer_copy_string(b,
 		"Location: foobar\r\n"
 		"Content-Lenght: 24\r\n"
 		"\r\nABC"
 	);
 
 	ok(PARSE_ERROR == http_request_parse_cq(cq, req), "missing request-line");
-    
+
 	http_request_free(req);
 
 	/* LF as line-ending */
-	
+
 	chunkqueue_reset(cq);
 	req = http_request_init();
 
 	b = chunkqueue_get_append_buffer(cq);
 
-	buffer_copy_string(b, 
+	buffer_copy_string(b,
 		"GET / HTTP/1.0\n"
 		"\nABC"
 	);
 	ok(PARSE_SUCCESS == http_request_parse_cq(cq, req), "no request key-value pairs");
-    
+
 	chunkqueue_remove_finished_chunks(cq);
 	body = chunkqueue_to_buffer(cq, content);
 	ok(0 == strcmp("ABC", body), "content is ABC, got %s", body);
 
 	/* LF as line-ending */
-	
+
 	chunkqueue_reset(cq);
 	req = http_request_init();
 
 	b = chunkqueue_get_append_buffer(cq);
 
-	buffer_copy_string(b, 
+	buffer_copy_string(b,
 		"GE");
-    
+
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "T ");
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "/foo");
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "bar HTTP/1.0\r");
-    
+
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "\n"
 		"Locati");
-    
+
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "on: foobar\r\n"
 		"Content-Lenght: 24\r\n"
 		"\r\nABC"
 	);
 	ok(PARSE_SUCCESS == http_request_parse_cq(cq, req), "POST request with line-wrapping");
-    
+
 	chunkqueue_remove_finished_chunks(cq);
 	body = chunkqueue_to_buffer(cq, content);
 	ok(0 == strcmp("ABC", body), "content is ABC, got %s", body);
@@ -136,6 +136,6 @@ int main(void) {
 	chunkqueue_free(cq);
 	buffer_free(content);
 	log_free();
-    
+
 	return exit_status();
 }

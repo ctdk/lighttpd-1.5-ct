@@ -161,7 +161,7 @@ int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const 
 			close(STDERR_FILENO);
 			dup2(STDERR_FILENO, max_fd);
 			close(max_fd);
-	
+
 			max_fd = open("/dev/null", O_RDWR);
 			close(STDOUT_FILENO);
 			dup2(STDOUT_FILENO, max_fd);

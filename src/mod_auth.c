@@ -445,7 +445,7 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 						"the require field is missing in:",
 						"auth.require = ( \"...\" => ( ..., \"method\" => \"...\" ) )");
 				return HANDLER_ERROR;
-			} 
+			}
 			if (!buffer_is_equal_string(method, CONST_STR_LEN("basic")) &&
 			    !buffer_is_equal_string(method, CONST_STR_LEN("digest"))) {
 				log_error_write(srv, __FILE__, __LINE__, "ss",

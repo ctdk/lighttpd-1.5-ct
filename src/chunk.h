@@ -25,7 +25,7 @@ typedef struct chunk {
 		int is_temp; /* file is temporary and will be deleted on cleanup */
 
 		struct {
-			int fd; 
+			int fd;
 			off_t length;
 			off_t offset;
 		} copy;
@@ -65,8 +65,8 @@ buffer * chunkqueue_get_append_buffer(chunkqueue *c);
 buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
 chunk * chunkqueue_get_append_tempfile(chunkqueue *cq);
 int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in);
-int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c); 
-int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len); 
+int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c);
+int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len);
 int chunkqueue_skip(chunkqueue *cq, off_t skip);
 void chunkqueue_remove_empty_last_chunk(chunkqueue *cq);
 

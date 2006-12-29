@@ -57,12 +57,12 @@ int proxy_backlog_remove_connection(proxy_backlog *backlog, void *con) {
 	/* the first element is what we look for */
 	if (backlog->first->con == con) {
 		req = backlog->first;
-		
+
 		backlog->first = req->next;
 		if (backlog->first == NULL) backlog->last = NULL;
 
 		backlog->length--;
-		
+
 		proxy_request_free(req);
 
 		return 0;

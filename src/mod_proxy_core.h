@@ -6,7 +6,7 @@
 #include "http_resp.h"
 #include "array.h"
 
-#include "mod_proxy_core_pool.h"	
+#include "mod_proxy_core_pool.h"
 #include "mod_proxy_core_backend.h"
 #include "mod_proxy_core_backlog.h"
 #include "mod_proxy_core_rewrites.h"
@@ -87,7 +87,7 @@ typedef struct {
 	int send_response_content; /** 0 if we have to ignore the content-body */
 	int do_internal_redirect;  /** 1 if we do a internal redirect to the ->mode = DIRECT */
 	int internal_redirect_count;  /** protection against infinite loops */
-	
+
 	/**
 	 * chunkqueues
 	 * - recv_raw     is the raw byte stream that need to be decoded
@@ -98,7 +98,7 @@ typedef struct {
 	chunkqueue *recv;
 	chunkqueue *recv_raw;
 	chunkqueue *send_raw;
-	
+
 	off_t bytes_read;
 	off_t content_length;
 

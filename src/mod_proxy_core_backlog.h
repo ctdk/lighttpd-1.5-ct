@@ -31,9 +31,9 @@ void proxy_backlog_free(proxy_backlog *backlog);
 
 /**
  * append a request to the end
- * 
+ *
  * @return 0 in success, -1 if full
- */ 
+ */
 int proxy_backlog_push(proxy_backlog *backlog, proxy_request *req);
 
 /**

@@ -60,7 +60,7 @@ static int http_req_range_tokenizer(
 
 	while (tid == 0) {
 		char c = t->hdr->ptr[t->ndx];
-		
+
 		switch (c) {
 		case '-':
 			tid = TK_MINUS;
@@ -147,7 +147,7 @@ parse_status_t http_request_range_parse(buffer *hdr, http_req_range *ranges) {
 	pParser = http_req_range_parserAlloc( malloc );
 	token = buffer_init();
 #if 0
-	http_req_range_parserTrace(stderr, "range: "); 
+	http_req_range_parserTrace(stderr, "range: ");
 #endif
 
 	while((1 == http_req_range_tokenizer(&t, &token_id, token)) && context.ok) {

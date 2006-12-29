@@ -32,7 +32,7 @@ proxy_connection_pool *proxy_connection_pool_init(void) {
 	pool = calloc(1, sizeof(*pool));
 
        	/* default: max parallel connections to the backend
-	 * 
+	 *
 	 * this should match max-procs if we manage the procs ourself
        	 */
 
@@ -113,7 +113,7 @@ proxy_connection_pool_t proxy_connection_pool_get_connection(proxy_connection_po
 		 */
 
 		if (address->used == pool->max_size) return PROXY_CONNECTIONPOOL_FULL;
-		
+
 		proxy_con = proxy_connection_init();
 
 		proxy_con->state = PROXY_CONNECTION_STATE_CONNECTING;

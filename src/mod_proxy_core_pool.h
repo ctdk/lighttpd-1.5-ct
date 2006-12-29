@@ -17,10 +17,10 @@ typedef enum {
 
 /**
  * a connection to a proxy backend
- * 
+ *
  * the connection is independent of the incoming request to allow keep-alive
  */
-typedef struct { 
+typedef struct {
 	iosocket *sock;
 
 	time_t last_read; /* timeout handling for keep-alive connections */
@@ -39,8 +39,8 @@ typedef enum {
 	PROXY_CONNECTIONPOOL_GOT_CONNECTION,
 } proxy_connection_pool_t;
 
-proxy_connection_pool *proxy_connection_pool_init(void); 
-void proxy_connection_pool_free(proxy_connection_pool *pool); 
+proxy_connection_pool *proxy_connection_pool_init(void);
+void proxy_connection_pool_free(proxy_connection_pool *pool);
 
 proxy_connection_pool_t proxy_connection_pool_get_connection(proxy_connection_pool *pool, proxy_address *address, proxy_connection **rcon);
 int proxy_connection_pool_remove_connection(proxy_connection_pool *pool, proxy_connection *c);

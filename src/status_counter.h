@@ -13,4 +13,4 @@ int status_counter_inc(const char *s, size_t len);
 int status_counter_dec(const char *s, size_t len);
 int status_counter_set(const char *s, size_t len, int val);
 
-#endif 
+#endif

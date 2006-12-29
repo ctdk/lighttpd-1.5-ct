@@ -70,7 +70,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 			break;
 		case FILE_CHUNK: {
 			ssize_t r;
-			int rounds = 8; 
+			int rounds = 8;
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
@@ -81,7 +81,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 				}
 
 				srv->cur_fds++;
-			
+
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -91,7 +91,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 				size_t toSend;
 				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
 				off_t offset;
-			
+
 				offset = c->file.start + c->offset;
 
 				toSend = c->file.length - c->offset > max_toSend ?
@@ -101,21 +101,21 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					int async_error = 0;
 
 					size_t iocb_ndx;
-					
 
-					c->file.copy.offset = 0; 
+
+					c->file.copy.offset = 0;
 					c->file.copy.length = toSend;
 
 					if (c->file.copy.length == 0) {
 						async_error = 1;
 					}
 
-					/* if we reused the previous tmp-file we get overlaps 
-					 * 
-					 *    1 ... 3904 are ok
-					 * 3905 ... 4096 are replaces by 8001 ... 8192 
+					/* if we reused the previous tmp-file we get overlaps
 					 *
-					 * somehow the second read writes into the mmap() before 
+					 *    1 ... 3904 are ok
+					 * 3905 ... 4096 are replaces by 8001 ... 8192
+					 *
+					 * somehow the second read writes into the mmap() before
 					 * the sendfile is finished which is very strange.
 					 *
 					 * if someone finds the reason for this, feel free to remove
@@ -152,16 +152,16 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						/* open a file in /dev/shm to write to */
 						if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 							async_error = 1;
-					
-							if (errno != EMFILE) {	
-								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d, falling back to sync-io", 
+
+							if (errno != EMFILE) {
+								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d, falling back to sync-io",
 									errno, strerror(errno), srv->cur_fds);
 							}
 						} else {
 							c->file.mmap.offset = 0;
 							c->file.mmap.length = c->file.copy.length; /* align to page-size */
 
-							c->file.mmap.start = mmap(0, c->file.mmap.length, 
+							c->file.mmap.start = mmap(0, c->file.mmap.length,
 									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
 								async_error = 1;
@@ -173,7 +173,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					}
 
 
-					/* looks like we couldn't get a temp-file [disk-full] */	
+					/* looks like we couldn't get a temp-file [disk-full] */
 					if (async_error == 0 && c->file.mmap.start != MAP_FAILED) {
 						struct aiocb *iocb = NULL;
 
@@ -199,7 +199,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 							srv->posix_aio_data[iocb_ndx] = NULL;
 
 							if (errno != EAGAIN) {
-								TRACE("aio_read returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
+								TRACE("aio_read returned: %d (%s), waiting jobs: %d, falling back to sync-io",
 									errno, strerror(errno), srv->have_aio_waiting);
 							} else {
 								TRACE("aio_read returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
@@ -270,8 +270,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					/* the write should only return when it is finished */
 					fcntl(sock->fd, F_SETFL, fcntl(sock->fd, F_GETFL) & ~O_NONBLOCK);
-					
-					if (0 != aio_write(iocb)) { 
+
+					if (0 != aio_write(iocb)) {
 						TRACE("aio-write failed: %d (%s)", errno, strerror(errno));
 
 						return NETWORK_STATUS_FATAL_ERROR;
@@ -323,7 +323,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 				if (c->offset == c->file.length) {
 					chunk_finished = 1;
-	
+
 					if (c->file.copy.fd != -1) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;

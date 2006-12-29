@@ -458,7 +458,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 	 * No one took the file away from the normal path of execution yet (like mod_access)
 	 *
 	 * we don't have a backend yet, try to resolve the physical path and go on
-	 * 
+	 *
 	 */
 
 	if (con->mode == DIRECT) {
@@ -542,11 +542,11 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				/* we have no idea what happened, so tell the user. */
 				con->http_status = 500;
 
-				ERROR("checking file '%s' (%s) failed: %d (%s) -> sending status 500", 
+				ERROR("checking file '%s' (%s) failed: %d (%s) -> sending status 500",
 					BUF_STR(con->uri.path),
 					BUF_STR(con->physical.path),
 					errno, strerror(errno));
-				
+
 				buffer_reset(con->physical.path);
 
 				return HANDLER_FINISHED;

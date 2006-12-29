@@ -54,7 +54,7 @@ void fdevent_revents_add(fdevent_revents *revents, int fd, int events) {
 
 void fdevent_revents_free(fdevent_revents *revents) {
 	size_t i;
-	
+
 	if (!revents) return;
 
 	if (revents->size) {

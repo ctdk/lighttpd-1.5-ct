@@ -346,13 +346,13 @@ static int connection_handle_response_header(server *srv, connection *con) {
 		if ((con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) == 0 &&
 		    NULL == (cl = (data_string *)array_get_element(con->response.headers, "Content-Length"))) {
 			buffer_copy_off_t(srv->tmp_buf, chunkqueue_length(con->send));
-			
+
 			response_header_overwrite(srv, con, CONST_STR_LEN("Content-Length"), CONST_BUF_LEN(srv->tmp_buf));
 		}
 	} else {
 		if (NULL == (cl = (data_string *)array_get_element(con->response.headers, "Content-Length"))) {
-			/* we don't know the size of the content yet 
-			 * - either enable chunking 
+			/* we don't know the size of the content yet
+			 * - either enable chunking
 			 * - or disable keep-alive  */
 
 			if (con->request.http_version == HTTP_VERSION_1_1) {
@@ -606,7 +606,7 @@ handler_t connection_handle_read_request_header(server *srv, connection *con)  {
 
 	con->read_idle_ts = srv->cur_ts;  /* start a read-call() */
 
-	/* read from the network */ 
+	/* read from the network */
 	switch (network_read(srv, con, con->sock, con->recv_raw)) {
 	case NETWORK_STATUS_SUCCESS:
 		/* we read everything from the socket, do we have a full header ? */
@@ -656,7 +656,7 @@ handler_t connection_handle_read_request_content(server *srv, connection *con)  
 	chunkqueue *in = con->recv_raw;
 	chunkqueue *out = con->recv; /* the pure content */
 	chunk *c;
-	
+
 	/* let's see if we need more data later */
 	fdevent_event_del(srv->ev, con->sock);
 
@@ -668,12 +668,12 @@ handler_t connection_handle_read_request_content(server *srv, connection *con)  
 	if (in->first &&
 	    chunkqueue_length(in) - in->first->offset > 0) {
 
-		/*  
+		/*
 		 * looks like the request-header also had some content for us
 		 */
-		
+
 	} else {
-		/* read from the network */ 
+		/* read from the network */
 		switch (network_read(srv, con, con->sock, in)) {
 		case NETWORK_STATUS_SUCCESS:
 			/* we have data */
@@ -869,7 +869,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 #if EWOULDBLOCK != EAGAIN
 		case EWOULDBLOCK:
 #endif
-		case EINTR: 
+		case EINTR:
 			/* we were stopped _before_ we had a connection */
 		case ECONNABORTED: /* this is a FreeBSD thingy */
 			/* we were stopped _after_ we had a connection */
@@ -912,7 +912,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 			connection_close(srv, con);
 			return NULL;
 		}
-			
+
 #ifdef USE_OPENSSL
 		/* connect FD to SSL */
 		if (srv_socket->is_ssl) {
@@ -1148,7 +1148,7 @@ int connection_state_machine(server *srv, connection *con) {
 			}
 
 			break;
-		case CON_STATE_READ_REQUEST_HEADER: 
+		case CON_STATE_READ_REQUEST_HEADER:
 			/* read us much data as needed into the recv_raw-cq for a valid header */
 			if (srv->srvconf.log_state_handling) {
 				TRACE("state for fd=%d: %s", con->sock->fd, connection_get_state(con->state));
@@ -1192,7 +1192,7 @@ int connection_state_machine(server *srv, connection *con) {
 
 				connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
 			} else {
-				/* parsing the request went fine 
+				/* parsing the request went fine
 				 * let's find a handler for this request */
 				connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
 			}
@@ -1322,7 +1322,7 @@ int connection_state_machine(server *srv, connection *con) {
 
 			chunkqueue_remove_finished_chunks(con->recv);
 
-			/* 
+			/*
 			 * this should call the backend
 			 * they might build the connection now or stream the content to the upstream server
 			 * */
@@ -1347,7 +1347,7 @@ int connection_state_machine(server *srv, connection *con) {
 
 			if (con->state == CON_STATE_ERROR) break;
 
-			if (con->recv->is_closed && 
+			if (con->recv->is_closed &&
 			    con->recv->bytes_in == con->recv->bytes_out) {
 				/* everything we read is sent */
 				connection_set_state(srv, con, CON_STATE_HANDLE_RESPONSE_HEADER);
@@ -1359,7 +1359,7 @@ int connection_state_machine(server *srv, connection *con) {
 			 * call all plugins who want to modify the response header
 			 * - mod_compress/deflate
 			 * - HTTP/1.1 chunking
-			 * 
+			 *
 			 */
 
 			connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
@@ -1370,13 +1370,13 @@ int connection_state_machine(server *srv, connection *con) {
 			connection_handle_response_header(srv, con);
 
 			connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_CONTENT);
-			
+
 			break;
 		case CON_STATE_WRITE_RESPONSE_CONTENT:
 			fdevent_event_del(srv->ev, con->sock);
 
-			/* we might have new content in the con->send buffer 
-			 * encode it for the network 
+			/* we might have new content in the con->send buffer
+			 * encode it for the network
 			 * - chunking
 			 * - compression
 			 */

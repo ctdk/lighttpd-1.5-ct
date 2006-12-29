@@ -49,7 +49,7 @@ NETWORK_BACKEND_READ(read) {
 	UNUSED(con);
 
 	start_bytes_in = cq->bytes_in;
-	
+
 	/* use a chunk-size of 16k */
 	do {
 		toread = 16384;
@@ -85,7 +85,7 @@ NETWORK_BACKEND_READ(read) {
 		cq->bytes_in += r;
 
 		if (cq->bytes_in - start_bytes_in > max_read) break;
-	} while (r == toread); 
+	} while (r == toread);
 
 	return NETWORK_STATUS_SUCCESS;
 }

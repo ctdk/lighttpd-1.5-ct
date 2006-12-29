@@ -197,7 +197,7 @@ int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in) {
 
 	assert(in->type == FILE_CHUNK);
 	assert(in->file.is_temp == 1);
-	
+
 	c = chunkqueue_get_unused_chunk(cq);
 
 	c->type = FILE_CHUNK;
@@ -299,7 +299,7 @@ int chunkqueue_skip(chunkqueue *cq, off_t skip) {
 	}
 	return total;
 }
- 
+
 int chunkqueue_append_buffer(chunkqueue *cq, buffer *mem) {
 	chunk *c;
 

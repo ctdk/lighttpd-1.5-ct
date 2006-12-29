@@ -70,7 +70,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 			break;
 		case FILE_CHUNK: {
 			ssize_t r;
-			int rounds = 8; 
+			int rounds = 8;
 
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
@@ -92,7 +92,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				}
 
 				srv->cur_fds++;
-			
+
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -103,7 +103,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
 				int file_fd;
 				off_t offset;
-			
+
 				offset = c->file.start + c->offset;
 
 				toSend = c->file.length - c->offset > max_toSend ?
@@ -118,19 +118,19 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					size_t iocb_ndx;
 					struct iocb *iocb = NULL;
 
-					c->file.copy.offset = 0; 
+					c->file.copy.offset = 0;
 					c->file.copy.length = toSend - (toSend % page_size); /* align to page-size */
 
 					if (c->file.copy.length == 0) {
 						async_error = 1;
 					}
 
-					/* if we reused the previous tmp-file we get overlaps 
-					 * 
-					 *    1 ... 3904 are ok
-					 * 3905 ... 4096 are replaces by 8001 ... 8192 
+					/* if we reused the previous tmp-file we get overlaps
 					 *
-					 * somehow the second read writes into the mmap() before 
+					 *    1 ... 3904 are ok
+					 * 3905 ... 4096 are replaces by 8001 ... 8192
+					 *
+					 * somehow the second read writes into the mmap() before
 					 * the sendfile is finished which is very strange.
 					 *
 					 * if someone finds the reason for this, feel free to remove
@@ -165,9 +165,9 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						strcpy(tmpfile_name, "/dev/shm/l-XXXXXX");
 						if (-1 == (c->file.copy.fd = mkstemp(tmpfile_name))) {
 							async_error = 1;
-					
-							if (errno != EMFILE) {	
-								TRACE("mkstemp returned: %d (%s), open fds: %d, falling back to sync-io", 
+
+							if (errno != EMFILE) {
+								TRACE("mkstemp returned: %d (%s), open fds: %d, falling back to sync-io",
 									errno, strerror(errno), srv->cur_fds);
 							}
 						}
@@ -181,15 +181,15 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 							if (0 != ftruncate(c->file.copy.fd, c->file.mmap.length)) {
 								/* disk full ... */
 								async_error = 1;
-								
-								TRACE("ftruncate returned: %d (%s), open fds: %d, falling back to sync-io", 
+
+								TRACE("ftruncate returned: %d (%s), open fds: %d, falling back to sync-io",
 									errno, strerror(errno), srv->cur_fds);
 							}
 						}
 
 						if (!async_error) {
 
-							c->file.mmap.start = mmap(0, c->file.mmap.length, 
+							c->file.mmap.start = mmap(0, c->file.mmap.length,
 									PROT_READ | PROT_WRITE, MAP_SHARED, c->file.copy.fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
 								async_error = 1;
@@ -202,7 +202,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					    (((intptr_t)c->file.mmap.start) % page_size != 0 ||
 					     c->file.copy.length % page_size != 0 ||
 					     ((intptr_t)(c->file.start + c->offset)) % page_size != 0)) {
-						/** 
+						/**
 						 * after a fallback to sendfile() the offset might be unaligned
 						 */
 
@@ -210,7 +210,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					}
 
 
-					/* looks like we couldn't get a temp-file [disk-full] */	
+					/* looks like we couldn't get a temp-file [disk-full] */
 					if (async_error == 0 && -1 != c->file.copy.fd) {
 		        			struct iocb *iocbs[] = { iocb };
 
@@ -227,7 +227,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 							iocb->data = NULL;
 
 							if (-res != EAGAIN) {
-								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io", 
+								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io",
 									res, strerror(-res), srv->have_aio_waiting);
 							} else {
 								TRACE("io_submit returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
@@ -301,7 +301,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 				if (c->offset == c->file.length) {
 					chunk_finished = 1;
-	
+
 					if (c->file.copy.fd != -1) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;

@@ -7,7 +7,7 @@
 #include "config.h"
 #endif
 
-#ifdef HAVE_MYSQL_H 
+#ifdef HAVE_MYSQL_H
 # ifdef HAVE_LIBMYSQL
 #  define HAVE_MYSQL
 # endif
@@ -49,7 +49,7 @@ typedef struct {
 	plugin_config conf;
 } plugin_data;
 
-SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost); 
+SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost);
 
 /* init the plugin data */
 INIT_FUNC(mod_mysql_vhost_init) {
@@ -103,7 +103,7 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 	size_t i = 0;
 
 	/* our very own plugin storage, one entry for each conditional
-	 * 
+	 *
 	 * srv->config_context->used is the number of conditionals
 	 * */
 	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
@@ -122,7 +122,7 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 		s = calloc(1, sizeof(plugin_config));
 
 		s->core = core_config->config_storage[i];
-		
+
 		s->mysql = NULL;
 
 		s->mysql_pre = buffer_init();
@@ -224,7 +224,7 @@ static int mod_mysql_vhost_patch_connection(server *srv, connection *con, plugin
 }
 
 /**
- * get the vhost info from the database 
+ * get the vhost info from the database
  */
 SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 	plugin_data *p = p_d;
@@ -274,7 +274,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 /* this function is called at dlopen() time and inits the callbacks */
 int mod_mysql_vhost_plugin_init(plugin *p) {
 	data_string *ds;
-	
+
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        			= buffer_init_string("mysql_vhost");
 
@@ -282,7 +282,7 @@ int mod_mysql_vhost_plugin_init(plugin *p) {
 	p->cleanup     			= mod_mysql_vhost_cleanup;
 
 	p->set_defaults			= mod_mysql_vhost_set_defaults;
-	
+
 	ds = data_string_init();
 	buffer_copy_string(ds->value, CORE_PLUGIN);
 	array_insert_unique(p->required_plugins, (data_unset *)ds);

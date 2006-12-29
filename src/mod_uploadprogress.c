@@ -361,7 +361,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		/* just an attempt the force the IE/proxies to NOT cache the request */
 		response_header_overwrite(srv, con, CONST_STR_LEN("Pragma"), CONST_STR_LEN("no-cache"));
 		response_header_overwrite(srv, con, CONST_STR_LEN("Expires"), CONST_STR_LEN("Thu, 19 Nov 1981 08:52:00 GMT"));
-		response_header_overwrite(srv, con, CONST_STR_LEN("Cache-Control"), 
+		response_header_overwrite(srv, con, CONST_STR_LEN("Cache-Control"),
 				CONST_STR_LEN("no-store, no-cache, must-revalidate, post-check=0, pre-check=0"));
 
 		b = chunkqueue_get_append_buffer(con->send);

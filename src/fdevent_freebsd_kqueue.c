@@ -133,7 +133,7 @@ static int fdevent_freebsd_kqueue_get_revents(fdevents *ev, size_t event_count, 
 		if (e & EV_EOF) {
 			events |= FDEVENT_HUP;
 		}
-	
+
 		if (e & EV_ERROR) {
 			events |= FDEVENT_ERR;
 		}

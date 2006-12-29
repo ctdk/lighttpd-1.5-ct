@@ -245,7 +245,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 	array_reset(req->headers);
 
 #if 0
-	http_req_parserTrace(stderr, "http-request: "); 
+	http_req_parserTrace(stderr, "http-request: ");
 #endif
 
 	while((1 == http_req_tokenizer(&t, &token_id, token)) && context.ok) {

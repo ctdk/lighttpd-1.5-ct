@@ -35,9 +35,9 @@ typedef enum {
 	HTTP_METHOD_CONNECT
 } http_method_t;
 
-typedef enum { 
-	HTTP_VERSION_UNSET = -1, 
-	HTTP_VERSION_1_0, 
+typedef enum {
+	HTTP_VERSION_UNSET = -1,
+	HTTP_VERSION_1_0,
 	HTTP_VERSION_1_1
 } http_version_t;
 

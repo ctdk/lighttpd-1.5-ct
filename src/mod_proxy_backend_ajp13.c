@@ -127,7 +127,7 @@ typedef struct {
 } AJP13_Header;
 
 /**
- * init the AJP13_header 
+ * init the AJP13_header
  */
 static int ajp13_header(char *ptr, int length) {
 	AJP13_Header * header = (AJP13_Header *)ptr;
@@ -366,8 +366,8 @@ int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *ses
 	len += ajp13_encode_string(packet, str, strlen(str));
 
 	/* request uri
-	 * 
-	 * the docs where unspecific here, but it looks like tomcat wants to get 
+	 *
+	 * the docs where unspecific here, but it looks like tomcat wants to get
 	 * the uri without the query-string here */
 	len += ajp13_encode_string(packet, CONST_BUF_LEN(con->uri.path));
 
@@ -635,7 +635,7 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder) {
 		/* decode the packet */
 		res = proxy_ajp13_stream_decoder_internal(srv, sess, in, out);
 	} while (in->first && res == 0);
-	
+
 	return res;
 }
 

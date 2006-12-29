@@ -20,7 +20,7 @@ void proxy_backend_free(proxy_backend *backend) {
 
 	proxy_connection_pool_free(backend->pool);
 	proxy_address_pool_free(backend->address_pool);
-	
+
 	free(backend);
 }
 

@@ -358,7 +358,7 @@ STREAM_IN_OUT_FUNC(proxy_scgi_stream_encoder) {
 	UNUSED(sess);
 
 	/* there is nothing that we have to send out anymore */
-	if (in->bytes_in == in->bytes_out && 
+	if (in->bytes_in == in->bytes_out &&
 	    in->is_closed) return 0;
 
 	for (c = in->first; in->bytes_out < in->bytes_in; c = c->next) {
@@ -376,7 +376,7 @@ STREAM_IN_OUT_FUNC(proxy_scgi_stream_encoder) {
 
 			if (weHave > weWant) weHave = weWant;
 
-			/** steal the chunk from the incoming chunkqueue */	
+			/** steal the chunk from the incoming chunkqueue */
 			chunkqueue_steal_tempfile(out, c);
 
 			c->offset += weHave;

@@ -42,7 +42,7 @@ NETWORK_BACKEND_READ(openssl) {
 
 		if (len < 0) {
 			int r, ssl_err;
-	
+
 			switch ((r = SSL_get_error(sock->ssl, len))) {
 			case SSL_ERROR_WANT_READ:
 				chunkqueue_remove_empty_last_chunk(cq);
@@ -74,7 +74,7 @@ NETWORK_BACKEND_READ(openssl) {
 				break;
 			case SSL_ERROR_ZERO_RETURN:
 				/* clean shutdown on the remote side */
-	
+
 				if (r == 0) {
 					/* FIXME: later */
 				}

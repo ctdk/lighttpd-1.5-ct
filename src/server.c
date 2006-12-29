@@ -204,7 +204,7 @@ static server *server_init(void) {
 
 	srv->split_vals = array_init();
 
-#ifdef HAVE_LIBAIO_H 
+#ifdef HAVE_LIBAIO_H
 	srv->linux_io_ctx = NULL;
 	/**
 	 * we can't call io_setup before the fork() in daemonize()
@@ -222,7 +222,7 @@ static void server_free(server *srv) {
 	}
 
 
-#ifdef HAVE_LIBAIO_H 
+#ifdef HAVE_LIBAIO_H
 	if (srv->linux_io_ctx) {
 		io_destroy(srv->linux_io_ctx);
 	}
@@ -486,17 +486,17 @@ static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
 
 /**
  * a async event handler for libaio
- * 
+ *
  * The problem:
  * - poll(..., 1000) is blocking
  * - getevents(..., 1000) is blocking too
- * 
+ *
  * I havn't found a way to monitor getevents with poll or friends
  *
  * So ... we run io_getevents() and fdevents_poll() at the same time. As long
- * as the poll() is running io_getevents() running too. 
+ * as the poll() is running io_getevents() running too.
  *
- * The one who finishes earlier fires a kill(getpid(), SIGUSR1); to interrupt 
+ * The one who finishes earlier fires a kill(getpid(), SIGUSR1); to interrupt
  * the other system call. We use mutexes to synchronize the two functions.
  *
  * If no io-event is pending, linux_io_getevents_thread() won't be activated
@@ -517,8 +517,8 @@ static void *linux_io_getevents_thread(void *_data) {
 
 		/* wait one second as the poll() */
 		io_ts.tv_sec = 1;
-	        io_ts.tv_nsec = 0; 
-		
+	        io_ts.tv_nsec = 0;
+
 		waiting = srv->have_aio_waiting;
 
 		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
@@ -527,7 +527,7 @@ static void *linux_io_getevents_thread(void *_data) {
 				connection *con = event[i].data;
 
 				if ((long)event[i].res <= 0) {
-					TRACE("async-read failed with %d (%s), waiting: %d, was asked for %s (fd = %d)", 
+					TRACE("async-read failed with %d (%s), waiting: %d, was asked for %s (fd = %d)",
 						event[i].res, strerror(-event[i].res), waiting, BUF_STR(con->uri.path), con->sock->fd);
 					connection_set_state(srv, con, CON_STATE_ERROR);
 				}
@@ -541,7 +541,7 @@ static void *linux_io_getevents_thread(void *_data) {
 
 			/* interrupt the poll() */
 			kill(getpid(), SIGUSR1);
-		} else if (res < 0) { 
+		} else if (res < 0) {
 			TRACE("getevents - failed: %d", res);
 		}
 
@@ -566,8 +566,8 @@ static void *posix_aio_getevents_thread(void *_data) {
 
 		/* wait one second as the poll() */
 		io_ts.tv_sec = 1;
-	        io_ts.tv_nsec = 0; 
-		
+	        io_ts.tv_nsec = 0;
+
 		waiting = srv->have_aio_waiting;
 
 		if (0 == aio_suspend(srv->posix_aio_iocbs_watch, POSIX_AIO_MAX_IOCBS, &io_ts)) {
@@ -579,7 +579,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 				int res;
 
 				if (srv->posix_aio_iocbs_watch[i] == NULL) continue;
-			       
+
 				con = srv->posix_aio_data[i];
 				iocb = srv->posix_aio_iocbs_watch[i];
 
@@ -590,7 +590,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 					case ECANCELED:
 						connection_set_state(srv, con, CON_STATE_ERROR);
 
-						TRACE("aio-op was canceled, waiting: %d, was asked for %s (fd = %d)", 
+						TRACE("aio-op was canceled, waiting: %d, was asked for %s (fd = %d)",
 							waiting, BUF_STR(con->uri.path), con->sock->fd);
 						connection_set_state(srv, con, CON_STATE_ERROR);
 						break;
@@ -599,7 +599,7 @@ static void *posix_aio_getevents_thread(void *_data) {
 					default:
 						connection_set_state(srv, con, CON_STATE_ERROR);
 
-						TRACE("aio-op failed with %d (%s), waiting: %d, was asked for %s (fd = %d)", 
+						TRACE("aio-op failed with %d (%s), waiting: %d, was asked for %s (fd = %d)",
 							res, strerror(res), waiting, BUF_STR(con->uri.path), con->sock->fd);
 						connection_set_state(srv, con, CON_STATE_ERROR);
 						break;
@@ -607,8 +607,8 @@ static void *posix_aio_getevents_thread(void *_data) {
 
 					if ((res = aio_return(iocb)) < 0) {
 						/* we have an error */
-	
-						TRACE("aio-return returned %d (%s), waiting: %d, was asked for %s (fd = %d)", 
+
+						TRACE("aio-return returned %d (%s), waiting: %d, was asked for %s (fd = %d)",
 							res, strerror(res), waiting, BUF_STR(con->uri.path), con->sock->fd);
 						connection_set_state(srv, con, CON_STATE_ERROR);
 					}
@@ -770,9 +770,9 @@ int lighty_mainloop(server *srv) {
 
 					switch (con->state) {
 					case CON_STATE_READ_REQUEST_HEADER:
-					case CON_STATE_READ_REQUEST_CONTENT: 
+					case CON_STATE_READ_REQUEST_CONTENT:
 						if (con->recv->is_closed) break; /* everything is read, no need to fear a timeout */
-						
+
 						if (con->request_count == 1) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_read_idle) {
 								/* time - out */
@@ -795,7 +795,7 @@ int lighty_mainloop(server *srv) {
 						break;
 					case CON_STATE_WRITE_RESPONSE_HEADER:
 					case CON_STATE_WRITE_RESPONSE_CONTENT:
-					
+
 
 						if (con->write_request_ts != 0 &&
 						    srv->cur_ts - con->write_request_ts > con->conf.max_write_idle) {
@@ -860,7 +860,7 @@ int lighty_mainloop(server *srv) {
 		 *  */
 		if (1) {
 			int cur_max_fd;
-		       
+
 			if (-1 != (cur_max_fd = open("/dev/null", O_RDONLY))) {
 				close(cur_max_fd);
 				srv->cur_fds = cur_max_fd;
@@ -951,7 +951,7 @@ int lighty_mainloop(server *srv) {
 
 			is_unlocked = 1;
 		}
-		
+
 		n = fdevent_poll(srv->ev, 1000);
 		poll_errno = errno;
 
@@ -969,16 +969,16 @@ int lighty_mainloop(server *srv) {
 #else
 		n = fdevent_poll(srv->ev, 1000);
 #endif
-		
+
 		if (n > 0) {
 			/* n is the number of events */
 			size_t i;
 			fdevent_get_revents(srv->ev, n, revents);
 
 			/* handle client connections first
-			 * 
-			 * this is a bit of a hack, but we have to make sure than we handle 
-			 * close-events before the connection is reused for a keep-alive 
+			 *
+			 * this is a bit of a hack, but we have to make sure than we handle
+			 * close-events before the connection is reused for a keep-alive
 			 * request
 			 *
 			 * this is mostly an issue for mod_proxy_core, but you never know
@@ -1006,7 +1006,7 @@ int lighty_mainloop(server *srv) {
 					log_error_write(srv, __FILE__, __LINE__, "d", r);
 					break;
 				}
-			} 
+			}
 
 			for (i = 0; i < revents->used; i++) {
 				fdevent_revent *revent = revents->ptr[i];
@@ -1029,7 +1029,7 @@ int lighty_mainloop(server *srv) {
 					log_error_write(srv, __FILE__, __LINE__, "d", r);
 					break;
 				}
-			} 
+			}
 
 		} else if (n < 0 && errno != EINTR) {
 			log_error_write(srv, __FILE__, __LINE__, "ss",
@@ -1050,7 +1050,7 @@ int lighty_mainloop(server *srv) {
 		for (ndx = 0; ndx < srv->joblist_prev->used; ndx++) {
 			connection *con = srv->joblist_prev->ptr[ndx];
 			handler_t r;
-		
+
 			con->in_joblist = 0;
 			connection_state_machine(srv, con);
 
@@ -1116,7 +1116,7 @@ int main (int argc, char **argv, char **envp) {
 
 	/* for nice %b handling in strfime() */
 	setlocale(LC_TIME, "C");
-	
+
 	if (NULL == (srv = server_init())) {
 		fprintf(stderr, "did this really happen?\n");
 		return -1;
@@ -1524,7 +1524,7 @@ int main (int argc, char **argv, char **envp) {
 	}
 
 	if (srv->config_unsupported) {
-		log_error_write(srv, __FILE__, __LINE__, "s", 
+		log_error_write(srv, __FILE__, __LINE__, "s",
 				"Configuration contains unsupported keys. Going down.");
 	}
 

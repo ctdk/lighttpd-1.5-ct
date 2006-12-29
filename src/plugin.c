@@ -147,7 +147,7 @@ PLUGIN_STATIC(mod_webdav);
 struct {
 	const char *name;
 	int (*init)(plugin *pl);
-} const static_plugins[] = { 
+} const static_plugins[] = {
 PLUGIN_STATIC(mod_access),
 PLUGIN_STATIC(mod_accesslog),
 PLUGIN_STATIC(mod_alias),
@@ -195,7 +195,7 @@ int plugins_load(server *srv) {
 	for (i = 0; i < srv->srvconf.modules->used; i++) {
 		data_string *d = (data_string *)srv->srvconf.modules->data[i];
 		char *modules = d->value->ptr;
-				
+
 		p = plugin_init();
 
 #ifdef LIGHTTPD_STATIC
@@ -314,7 +314,7 @@ int plugins_load(server *srv) {
 				log_error_write(srv, __FILE__, __LINE__, "ssbs", modules, "failed to load. required plugin", req->value, "was not loaded" );
 
 				plugin_free(p);
-			
+
 				return -1;
 			}
 		}
@@ -529,7 +529,7 @@ handler_t plugins_call_init(server *srv) {
 }
 
 /**
- * get the config-storage of the named plugin 
+ * get the config-storage of the named plugin
  */
 void *plugin_get_config(server *srv, const char *name) {
 	size_t i;

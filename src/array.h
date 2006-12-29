@@ -69,8 +69,8 @@ data_array *data_array_init(void);
 /**
  * possible compare ops in the configfile parser
  */
-typedef enum { 
-	CONFIG_COND_UNSET, 
+typedef enum {
+	CONFIG_COND_UNSET,
 	CONFIG_COND_EQ,      /** == */
 	CONFIG_COND_MATCH,   /** =~ */
 	CONFIG_COND_NE,      /** != */
@@ -82,12 +82,12 @@ typedef enum {
  */
 typedef enum {
 	COMP_UNSET,
-	COMP_SERVER_SOCKET, 
-	COMP_HTTP_URL, 
-	COMP_HTTP_HOST, 
-	COMP_HTTP_REFERER, 
-	COMP_HTTP_USERAGENT, 
-	COMP_HTTP_COOKIE, 
+	COMP_SERVER_SOCKET,
+	COMP_HTTP_URL,
+	COMP_HTTP_HOST,
+	COMP_HTTP_REFERER,
+	COMP_HTTP_USERAGENT,
+	COMP_HTTP_COOKIE,
 	COMP_HTTP_REMOTEIP,
 	COMP_HTTP_QUERYSTRING
 } comp_key_t;

@@ -57,7 +57,7 @@ void proxy_address_pool_add(proxy_address_pool *address_pool, proxy_address *add
 			proxy_address_free(address);
 
 			return;
-		}	
+		}
 	}
 
 	TRACE("adding %s to the address-pool", BUF_STR(address->name));
@@ -124,7 +124,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 	} else if (name->ptr[0] == '[') {
 		if (name->ptr[name->used - 1] == ']') {
 			/* no port-number attached */
-		
+
 			hostname = buffer_init();
 			buffer_copy_string_len(hostname, BUF_STR(name) + 1, name->used - 3);
 			port = buffer_init_string("80");
@@ -156,7 +156,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 	}
 
 	TRACE("resolving %s on port %s", BUF_STR(hostname), BUF_STR(port));
-	
+
 	if (0 != (ret = getaddrinfo(BUF_STR(hostname), BUF_STR(port), &pref, &res))) {
 		ERROR("getaddrinfo failed: %s", gai_strerror(ret));
 

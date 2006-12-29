@@ -298,7 +298,7 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 				} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Content-Length"))) {
 					have_content_length = 1;
 				}
-				
+
 				if (NULL == (ds = (data_string *)array_get_unused_element(con->response.headers, TYPE_STRING))) {
 					ds = data_response_init();
 				}
@@ -468,7 +468,7 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 				/* read even more, do we have all the content */
 
 				/* how much do we want to read ? */
-				
+
 				/* call stream-decoder (HTTP-chunked, FastCGI, ... ) */
 
 				chunkqueue_remove_finished_chunks(sess->rb);
@@ -478,7 +478,7 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 					if (c->mem->used == 0) continue;
 
 					http_chunk_append_mem(srv, sess->remote_con, c->mem->ptr + c->offset, c->mem->used - c->offset);
-	
+
 					c->offset = c->mem->used - 1;
 
 				}
@@ -488,7 +488,7 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 					/* send final HTTP-Chunk packet */
 					http_chunk_append_mem(srv, sess->remote_con, NULL, 0);
 				}
-				
+
 				break;
 			default:
 				ERROR("%s", "oops, we failed to read");

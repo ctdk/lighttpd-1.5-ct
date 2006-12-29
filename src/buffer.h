@@ -144,11 +144,11 @@ BUFFER_CTYPE_FUNC(alnum)
 #define CONST_STR_LEN(x) x, x ? sizeof(x) - 1 : 0
 #define CONST_BUF_LEN(x) BUF_STR(x), x->used ? x->used - 1 : 0
 
-	
+
 #define UNUSED(x) ( (void)(x) )
 
 /**
- * a pool of unused buffer * 
+ * a pool of unused buffer *
  */
 
 ARRAY_STATIC_DEF(buffer_pool, buffer, );

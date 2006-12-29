@@ -216,13 +216,13 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	context.errmsg = buffer_init();
 	context.resp = resp;
 	context.unused_buffers = buffer_pool_init();
-	
+
 	array_reset(resp->headers);
 
 	pParser = http_resp_parserAlloc( malloc );
 	token = buffer_pool_get(context.unused_buffers);
 #if 0
-	http_resp_parserTrace(stderr, "http-response: "); 
+	http_resp_parserTrace(stderr, "http-response: ");
 #endif
 
 	while((1 == http_resp_tokenizer(&t, &token_id, token)) && context.ok) {

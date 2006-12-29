@@ -22,7 +22,7 @@ typedef struct { \
 		a->size += 16; \
 		a->ptr = realloc(a->ptr, a->size * sizeof(*(a->ptr))); \
 	}
-	
+
 #define FOREACH(array, type, element, func) \
 do { size_t _i; for (_i = 0; _i < array->used; _i++) { type *element = array->ptr[_i]; func; } } while(0);
 

@@ -74,7 +74,7 @@ void log_init(void) {
 	errorlog *err;
 
 	err = calloc(1, sizeof(*err));
-	
+
 	err->fd = -1;
 	err->mode = ERRORLOG_STDERR;
 	err->buf = buffer_init();
@@ -215,7 +215,7 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 	case ERRORLOG_STDERR:
 		/* cache the generated timestamp */
 		t = time(NULL);
-		
+
 		if (t != err->cached_ts) {
 			buffer_prepare_copy(err->cached_ts_str, 255);
 			strftime(err->cached_ts_str->ptr, err->cached_ts_str->size - 1, "%Y-%m-%d %H:%M:%S", localtime(&(t)));
@@ -317,7 +317,7 @@ static int log_trace_write(const char *fmt, va_list ap) {
 	buffer *b;
 	size_t l;
 	errorlog *err = myconfig;
-	
+
 	b = buffer_init();
 	buffer_prepare_copy(b, 1024);
 	l = vsnprintf(b->ptr, b->size - 1, fmt, ap);
@@ -341,7 +341,7 @@ static int log_trace_write(const char *fmt, va_list ap) {
 		break;
 #endif
 	}
-	
+
 	buffer_free(b);
 
 	return 0;

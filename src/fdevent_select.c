@@ -77,7 +77,7 @@ static int fdevent_select_poll(fdevents *ev, int timeout_ms) {
 }
 
 /**
- * scan the fdset for events 
+ * scan the fdset for events
  */
 static int fdevent_select_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
 

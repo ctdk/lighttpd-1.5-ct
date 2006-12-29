@@ -150,7 +150,7 @@ int fdevent_poll_init(fdevents *ev) {
 	UNUSED(ev);
 
 	ERROR("event-handler 'poll' is not supported, try to set server.event-handler = \"%s\"", "select");
-	
+
 	return -1;
 }
 #endif

@@ -645,7 +645,7 @@ static int proxy_demux_response(server *srv, handler_ctx *hctx) {
 				} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Content-Length"))) {
 					have_content_length = 1;
 				}
-				
+
 				if (NULL == (ds = (data_string *)array_get_unused_element(con->response.headers, TYPE_STRING))) {
 					ds = data_response_init();
 				}

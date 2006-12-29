@@ -192,18 +192,18 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 			 * the last <end> bytes  */
 			r->start = sce->st.st_size - r->end;
 			r->end = sce->st.st_size - 1;
-		} 
+		}
 		if (r->end == -1) {
 			/* <start>-
 			 * all but the first <start> bytes */
-					
+
 			r->end = sce->st.st_size - 1;
 		}
 
 		if (r->end > sce->st.st_size - 1) {
 			/* RFC 2616 - 14.35.1
 			 *
-			 * if last-byte-pos not present or > size-of-file 
+			 * if last-byte-pos not present or > size-of-file
 			 * take the size-of-file
 			 *
 			 *  */
@@ -224,7 +224,7 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 			/* RFC 2616 - 14.35.1
 			 *
 			 * if last-byte-pos is present, it has to be >= first-byte-pos
-			 * 
+			 *
 			 * invalid ranges have to be handle as no Range specified
 			 *  */
 
@@ -299,7 +299,7 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 
 		response_header_insert(srv, con, CONST_STR_LEN("Content-Range"), CONST_BUF_LEN(p->range_buf));
 	}
-	
+
 	/* ok, the file is set-up */
 	return 0;
 }
@@ -418,7 +418,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 
 	if (HANDLER_FINISHED == http_response_handle_cachable(srv, con, mtime)) {
 		return HANDLER_FINISHED;
-	} else if (con->conf.range_requests && 
+	} else if (con->conf.range_requests &&
 	           NULL != array_get_element(con->request.headers, "Range")) {
 		int do_range_request = 1;
 		/* check if we have a conditional GET */
@@ -468,7 +468,7 @@ CONNECTION_FUNC(mod_staticfile_dev_null) {
 	if (con->mode != DIRECT) return HANDLER_GO_ON;
 
 	/* there is nothing that we have to send out anymore */
-	if (in->bytes_in == in->bytes_out && 
+	if (in->bytes_in == in->bytes_out &&
 	    in->is_closed) return HANDLER_GO_ON;
 
 	for (c = in->first; in->bytes_out < in->bytes_in; c = c->next) {

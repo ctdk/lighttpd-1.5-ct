@@ -18,7 +18,7 @@ typedef struct {
 	proxy_protocol *protocol;
 } protocol_plugin_data;
 
-/** 
+/**
  * we aren't supporting multiplexing
  *
  * use always the same request-id
@@ -163,7 +163,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 		array_set_key_value(sess->env_headers, CONST_STR_LEN("CONTENT_LENGTH"), buf, strlen(buf));
 	}
 
-	
+
 	/*
 	 * SCRIPT_NAME, PATH_INFO and PATH_TRANSLATED according to
 	 * http://cgi-spec.golux.com/draft-coar-cgi-v11-03-clean.html
@@ -315,7 +315,7 @@ static int fcgi_env_add(buffer *env, const char *key, size_t key_len, const char
 }
 
 /**
- * init the FCGI_header 
+ * init the FCGI_header
  */
 static int fcgi_header(FCGI_Header * header, unsigned char type, size_t request_id, int contentLength, unsigned char paddingLength) {
 	header->version = FCGI_VERSION_1;
@@ -526,7 +526,7 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder) {
 		/* decode the packet */
 		res = proxy_fastcgi_stream_decoder_internal(srv, sess, in, out);
 	} while (in->first && res == 0);
-	
+
 	return res;
 }
 

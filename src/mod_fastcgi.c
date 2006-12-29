@@ -2359,22 +2359,22 @@ static int fcgi_demux_response(server *srv, handler_ctx *hctx) {
 						con->http_status = 302;
 					} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("Content-Length"))) {
 						have_content_length = 1;
-					} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Sendfile")) || 
+					} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Sendfile")) ||
 						   0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-send-file"))) {
-						
+
 						stat_cache_entry *sce;
-						
+
 						if (host->allow_xsendfile &&
 						    HANDLER_ERROR != stat_cache_get_entry(srv, con, header->value, &sce)) {
 							chunkqueue_append_file(con->send, header->value, 0, sce->st.st_size);
 							hctx->send_content_body = 0; /* ignore the content */
-					
+
 							joblist_append(srv, con);
 						}
 
 						continue; /* ignore header */
 					}
-					
+
 					if (NULL == (ds = (data_string *)array_get_unused_element(con->response.headers, TYPE_STRING))) {
 						ds = data_response_init();
 					}

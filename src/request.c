@@ -313,7 +313,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			con->http_status = 400;
 			return 0;
 		}
-		
+
 		buffer_copy_string(con->request.uri, sl);
 		buffer_copy_string_len(con->request.http_host, BUF_STR(req->uri_raw) + 7, sl - BUF_STR(req->uri_raw) - 7);
 	}
@@ -432,7 +432,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			buffer_copy_string_buffer(con->request.http_host, ds->value);
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("If-Modified-Since")))) {
 			data_string *old;
-			
+
 			if (NULL != (old = (data_string *)array_get_element(con->request.headers, "If-Modified-Since"))) {
 				if (0 != buffer_caseless_compare(CONST_BUF_LEN(old->value), CONST_BUF_LEN(ds->value))) {
 					/* duplicate header and different timestamps */
@@ -464,7 +464,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 
 				con->http_status = 400;
 				con->keep_alive = 0;
-			
+
 				return 0;
 			}
 		}

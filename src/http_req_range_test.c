@@ -8,7 +8,7 @@
 #include "log.h"
 
 int main(void) {
-	http_req_range *r, *ranges = http_request_range_init(); 
+	http_req_range *r, *ranges = http_request_range_init();
 	buffer *b = buffer_init();
 
 	log_init();
@@ -66,6 +66,6 @@ int main(void) {
 
 	buffer_free(b);
 	log_free();
-    
+
 	return exit_status();
 }

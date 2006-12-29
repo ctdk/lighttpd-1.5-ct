@@ -4,8 +4,8 @@
 /**
  * make sure we know about OPENSSL all the time
  *
- * if we don't include config.h here we run into different sizes 
- * for the iosocket-struct depending on config.h include before 
+ * if we don't include config.h here we run into different sizes
+ * for the iosocket-struct depending on config.h include before
  * iosocket.h or not
  */
 

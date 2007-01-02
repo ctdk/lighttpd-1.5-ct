@@ -625,7 +625,9 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 
 	max_fsize = p->conf.compress_max_filesize;
 
-	stat_cache_get_entry(srv, con, con->physical.path, &sce);
+	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+		return HANDLER_GO_ON;
+	}
 
 	/* don't compress files that are too large as we need to much time to handle them */
 	if (max_fsize && (sce->st.st_size >> 10) > max_fsize) return HANDLER_GO_ON;

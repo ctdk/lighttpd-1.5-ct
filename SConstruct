@@ -191,7 +191,7 @@ if 1:
 
 	autoconf.env.Append( LIBSQLITE3 = '', LIBXML2 = '', LIBMYSQL = '', LIBZ = '', 
 		LIBBZ2 = '', LIBCRYPT = '', LIBMEMCACHE = '', LIBFCGI = '', LIBPCRE = '',
-		LIBLDAP = '', LIBLBER = '', LIBLUA = '', LIBLUALIB = '', LIBDL = '')
+		LIBLDAP = '', LIBLBER = '', LIBLUA = '', LIBLUALIB = '', LIBDL = '', LIBUUID = '')
 
 	if env['with_fam']:
 		if autoconf.CheckLibWithHeader('fam', 'fam.h', 'C'):

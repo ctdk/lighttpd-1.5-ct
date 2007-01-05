@@ -697,10 +697,8 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 		array_insert_unique(con->response.headers, (data_unset *)ds);
 	}
 
-	/* we are finished decoding the response content. */
-	if(out->is_closed) {
-		proxy_copy_response(srv, con, sess);
-	} else {
+	/* we are finished decoding the response headers. */
+	if(!out->is_closed) {
 		/* We don't have all the response content try to enable chunked encoding. */
 		/* does the client allow us to send chunked encoding ? */
 		if (con->request.http_version == HTTP_VERSION_1_1 &&
@@ -708,6 +706,9 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			con->response.transfer_encoding = HTTP_TRANSFER_ENCODING_CHUNKED;
 		}
 	}
+
+	/* we might have part of the response content too */
+	proxy_copy_response(srv, con, sess);
 
 	return PARSE_SUCCESS; /* we have a full header */
 }

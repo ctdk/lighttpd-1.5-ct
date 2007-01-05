@@ -48,7 +48,7 @@ http_req.c: http_req_parser.h
 http_req_range.c: http_req_range_parser.h
 
 common_src=buffer.c log.c \
-      keyvalue.c chunk.c  \
+      keyvalue.c chunk.c filter.c \
       stream.c fdevent.c \
       stat_cache.c plugin.c joblist.c etag.c array.c \
       data_string.c data_count.c data_array.c \
@@ -140,6 +140,11 @@ lib_LTLIBRARIES += mod_staticfile.la
 mod_staticfile_la_SOURCES = mod_staticfile.c 
 mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_staticfile_la_LIBADD = $(common_libadd)
+
+lib_LTLIBRARIES += mod_chunked.la
+mod_chunked_la_SOURCES = mod_chunked.c 
+mod_chunked_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_chunked_la_LIBADD = $(common_libadd)
 
 lib_LTLIBRARIES += mod_dirlisting.la
 mod_dirlisting_la_SOURCES = mod_dirlisting.c 
@@ -272,7 +277,7 @@ mod_accesslog_la_LIBADD = $(common_libadd)
 
 
 hdr = server.h buffer.h network.h log.h keyvalue.h \
-      response.h request.h fastcgi.h chunk.h \
+      response.h request.h fastcgi.h chunk.h filter.h \
       settings.h http_auth_digest.h \
       md5.h http_auth.h stream.h \
       fdevent.h connections.h base.h stat_cache.h \

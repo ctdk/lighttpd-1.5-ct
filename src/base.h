@@ -19,6 +19,7 @@
 #include "buffer.h"
 #include "array.h"
 #include "chunk.h"
+#include "filter.h"
 #include "keyvalue.h"
 #include "settings.h"
 #include "fdevent.h"
@@ -330,9 +331,10 @@ typedef struct {
 
 	int file_started;
 
-	chunkqueue *send;            /* the response-content without encoding */
+	chunkqueue *send;            /* the response-content before filters are applied */
 	chunkqueue *recv;            /* the request-content, without encoding */
 
+	filter_chain *send_filters;  /* the chain of filters to apply to response-content. */
 	chunkqueue *send_raw;        /* the full response (HTTP-Header + compression + chunking ) */
 	chunkqueue *recv_raw;        /* the full request (HTTP-Header + chunking ) */
 

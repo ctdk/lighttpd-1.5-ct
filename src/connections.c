@@ -183,7 +183,7 @@ static void dump_packet(const unsigned char *data, size_t len) {
 #endif
 
 static int connection_handle_response_header(server *srv, connection *con) {
-	data_string *cl;
+	int no_response_body = 0;
 
 	if (con->mode == DIRECT) {
 		/* static files */
@@ -213,11 +213,9 @@ static int connection_handle_response_header(server *srv, connection *con) {
 				response_header_insert(srv, con, CONST_STR_LEN("Allow"), CONST_STR_LEN("OPTIONS, GET, HEAD, POST"));
 
 				/* trash the content */
-				chunkqueue_reset(con->send);
+				no_response_body = 1;
 
 				con->http_status = 200;
-				con->send->is_closed = 1;
-
 			}
 			break;
 		default:
@@ -330,48 +328,21 @@ static int connection_handle_response_header(server *srv, connection *con) {
 	case 205: /* class: header only */
 	case 304:
 	default:
+		no_response_body = 1;
+		break;
+	}
+
+	if (con->request.http_method == HTTP_METHOD_HEAD) {
+		no_response_body = 1;
+	}
+
+	if (no_response_body) {
 		/* disable chunked encoding again as we have no body */
 		con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
 		chunkqueue_reset(con->send);
 
 		con->send->is_closed = 1;
-
-		break;
 	}
-
-
-	if (con->send->is_closed) {
-		/* we have all the content and chunked encoding is not used, set a content-length */
-
-		if ((con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) == 0 &&
-		    NULL == (cl = (data_string *)array_get_element(con->response.headers, "Content-Length"))) {
-			buffer_copy_off_t(srv->tmp_buf, chunkqueue_length(con->send));
-
-			response_header_overwrite(srv, con, CONST_STR_LEN("Content-Length"), CONST_BUF_LEN(srv->tmp_buf));
-		}
-	} else {
-		if (NULL == (cl = (data_string *)array_get_element(con->response.headers, "Content-Length"))) {
-			/* we don't know the size of the content yet
-			 * - either enable chunking
-			 * - or disable keep-alive  */
-
-			if (con->request.http_version == HTTP_VERSION_1_1) {
-				/* enable chunk-encoding */
-				con->response.transfer_encoding |= HTTP_TRANSFER_ENCODING_CHUNKED;
-			} else  {
-				con->keep_alive = 0;
-			}
-		}
-	}
-
-	if (con->request.http_method == HTTP_METHOD_HEAD) {
-		con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
-		chunkqueue_reset(con->send);
-
-		con->send->is_closed = 1;
-	}
-
-	http_response_write_header(srv, con, con->send_raw);
 
 	return 0;
 }
@@ -419,7 +390,9 @@ connection *connection_init(server *srv) {
 	CLEAN(dst_addr_buf);
 
 #undef CLEAN
-	con->send = chunkqueue_init();
+	con->send_filters = filter_chain_init();
+	/* send is the chunkqueue of the first send filter */
+	con->send = con->send_filters->first->cq;
 	con->recv = chunkqueue_init();
 
 	con->send_raw = chunkqueue_init();
@@ -452,7 +425,8 @@ void connections_free(server *srv) {
 		connection_reset(srv, con);
 		iosocket_free(con->sock);
 
-		chunkqueue_free(con->send);
+		filter_chain_free(con->send_filters);
+		con->send = NULL;
 		chunkqueue_free(con->recv);
 		chunkqueue_free(con->send_raw);
 		chunkqueue_free(con->recv_raw);
@@ -565,7 +539,8 @@ int connection_reset(server *srv, connection *con) {
 	array_reset(con->response.headers);
 	array_reset(con->environment);
 
-	chunkqueue_reset(con->send);
+	filter_chain_reset(con->send_filters);
+	con->send = con->send_filters->first->cq;
 	chunkqueue_reset(con->recv);
 	chunkqueue_reset(con->send_raw);
 
@@ -938,140 +913,6 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 	}
 }
 
-static int http_chunk_append_len(chunkqueue *cq, size_t len) {
-	size_t i, olen = len, j;
-	buffer *b;
-
-	b = buffer_init();
-
-	if (len == 0) {
-		buffer_copy_string(b, "0");
-	} else {
-		for (i = 0; i < 8 && len; i++) {
-			len >>= 4;
-		}
-
-		/* i is the number of hex digits we have */
-		buffer_prepare_copy(b, i + 1);
-
-		for (j = i-1, len = olen; j+1 > 0; j--) {
-			b->ptr[j] = (len & 0xf) + (((len & 0xf) <= 9) ? '0' : 'a' - 10);
-			len >>= 4;
-		}
-		b->used = i;
-		b->ptr[b->used++] = '\0';
-	}
-
-	buffer_append_string(b, "\r\n");
-	chunkqueue_append_buffer(cq, b);
-	len = b->used - 1;
-
-	buffer_free(b);
-
-	return len;
-}
-
-
-/**
- * apply chunk encoding if necessary
- */
-int http_stream_encoder(server *srv, connection *con, chunkqueue *in, chunkqueue *out) {
-	chunk *c;
-	int is_chunked;
-	int we_have = 0;
-
-	UNUSED(srv);
-
-	/* no more data to encode. */
-	if (out->is_closed) return 0;
-	/**/
-
-	is_chunked = (con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED);
-
-	if (is_chunked) {
-		for (c = in->first; c; c = c->next) {
-			switch (c->type) {
-			case MEM_CHUNK:
-				if (c->mem->used == 0) continue;
-
-				we_have = c->mem->used - c->offset - 1;
-				in->bytes_out += we_have;
-				if(we_have == 0) continue;
-				we_have += http_chunk_append_len(out, we_have);
-				chunkqueue_append_buffer(out, c->mem);
-				c->offset = c->mem->used - 1;
-				break;
-			case FILE_CHUNK:
-				if (c->file.length == 0) continue;
-
-				we_have = c->file.length;
-				in->bytes_out += we_have;
-				we_have += http_chunk_append_len(out, c->file.length);
-				if(c->file.is_temp) {
-					chunkqueue_steal_tempfile(out, c);
-				} else {
-					chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
-				}
-
-				c->offset = c->file.length;
-				break;
-			case UNUSED_CHUNK:
-				break;
-			}
-			chunkqueue_append_mem(out, "\r\n", 2 + 1);
-			we_have += 2;
-			out->bytes_in += we_have;
-		}
-		if (in->is_closed) {
-			chunkqueue_append_mem(out, "0\r\n\r\n", 5 + 1);
-			out->bytes_in += 5;
-		}
-	} else {
-		for (c = in->first; c; c = c->next) {
-			switch (c->type) {
-			case MEM_CHUNK:
-				if (c->mem->used == 0) continue;
-
-				we_have = c->mem->used - c->offset - 1;
-				in->bytes_out += we_have;
-				if(we_have == 0) continue;
-				if (c->offset == 0) {
-					chunkqueue_steal_chunk(out, c);
-				} else {
-					chunkqueue_append_buffer(out, c->mem);
-					c->offset = c->mem->used - 1;
-				}
-				break;
-			case FILE_CHUNK:
-				if (c->file.length == 0) continue;
-
-				we_have = c->file.length;
-				in->bytes_out += we_have;
-				if(c->file.is_temp) {
-					chunkqueue_steal_tempfile(out, c);
-				} else {
-					chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
-				}
-
-				c->offset = c->file.length;
-				break;
-			case UNUSED_CHUNK:
-				break;
-			}
-			in->bytes_out += we_have;
-			out->bytes_in += we_have;
-		}
-	}
-
-	chunkqueue_remove_finished_chunks(in);
-
-	if (in->is_closed) {
-		/* mark the output queue as finished. */
-		out->is_closed = 1;
-	}
-	return 0;
-}
-
 int connection_state_machine(server *srv, connection *con) {
 	int done = 0, r;
 #ifdef USE_OPENSSL
@@ -1295,7 +1136,7 @@ int connection_state_machine(server *srv, connection *con) {
 			if (con->request.content_length == -1 ||
 			    con->request.content_length == 0) {
 				con->recv->is_closed = 1;
-		       	}
+			}
 
 			if (!con->recv->is_closed &&
 		 	    con->recv->bytes_in < con->request.content_length) {
@@ -1355,19 +1196,27 @@ int connection_state_machine(server *srv, connection *con) {
 
 			break;
 		case CON_STATE_HANDLE_RESPONSE_HEADER:
+			/* handle the HTTP response headers, or generate error-page */
+			connection_handle_response_header(srv, con);
+
 			/* we got a response header from the backend
 			 * call all plugins who want to modify the response header
 			 * - mod_compress/deflate
 			 * - HTTP/1.1 chunking
 			 *
 			 */
+			switch (plugins_call_handle_response_header(srv, con)) {
+			case HANDLER_GO_ON:
+			default:
+				break;
+			}
 
 			connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
 
 			break;
 		case CON_STATE_WRITE_RESPONSE_HEADER:
-			/* create the HTTP response header */
-			connection_handle_response_header(srv, con);
+			/* write response headers */
+			http_response_write_header(srv, con, con->send_raw);
 
 			connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_CONTENT);
 
@@ -1375,22 +1224,36 @@ int connection_state_machine(server *srv, connection *con) {
 		case CON_STATE_WRITE_RESPONSE_CONTENT:
 			fdevent_event_del(srv->ev, con->sock);
 
-			/* we might have new content in the con->send buffer
-			 * encode it for the network
-			 * - chunking
-			 * - compression
-			 */
-
 			/* looks like we shall read some content from the backend */
-
 			switch (plugins_call_handle_read_response_content(srv, con)) {
+			case HANDLER_WAIT_FOR_EVENT:
+				if (!con->send->is_closed && con->send->bytes_in == con->send->bytes_out) {
+					/* need to wait for more data */
+					return HANDLER_WAIT_FOR_EVENT;
+				}
+				break;
 			case HANDLER_GO_ON:
 			default:
 				break;
 			}
 
-			http_stream_encoder(srv, con, con->send, con->send_raw);
+			/* we might have new content in the con->send buffer
+			 * encode it for the network
+			 * - chunking
+			 * - compression
+			 */
+			switch (plugins_call_handle_filter_response_content(srv, con)) {
+			case HANDLER_GO_ON:
+			default:
+				break;
+			}
 
+			/* copy output from filters into send_raw. */
+			r = filter_chain_copy_output(con->send_filters, con->send_raw);
+
+			if (!con->send_raw->is_closed && con->send_raw->bytes_in == con->send_raw->bytes_out) {
+				return HANDLER_WAIT_FOR_EVENT;
+			}
 			switch(network_write_chunkqueue(srv, con, con->send_raw)) {
 			case NETWORK_STATUS_SUCCESS:
 				/* we send everything from the chunkqueue and the chunkqueue-sender signaled it is finished */

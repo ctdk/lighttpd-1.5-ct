@@ -1019,6 +1019,12 @@ int config_read(server *srv, const char *fn) {
 			buffer_copy_string(ds->value, "mod_staticfile");
 			array_insert_unique(modules->value, (data_unset *)ds);
 		}
+
+		if (NULL == array_get_element(modules->value, "mod_chunked")) {
+			ds = data_string_init();
+			buffer_copy_string(ds->value, "mod_chunked");
+			array_insert_unique(modules->value, (data_unset *)ds);
+		}
 	} else {
 		data_string *ds;
 
@@ -1035,6 +1041,10 @@ int config_read(server *srv, const char *fn) {
 
 		ds = data_string_init();
 		buffer_copy_string(ds->value, "mod_staticfile");
+		array_insert_unique(modules->value, (data_unset *)ds);
+
+		ds = data_string_init();
+		buffer_copy_string(ds->value, "mod_chunked");
 		array_insert_unique(modules->value, (data_unset *)ds);
 
 		buffer_copy_string(modules->key, "server.modules");

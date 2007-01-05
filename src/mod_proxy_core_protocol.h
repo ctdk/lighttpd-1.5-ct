@@ -11,7 +11,7 @@
 #define STREAM_IN_OUT_FUNC(x) \
 		static int x(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out)
 
-typedef struct {
+typedef struct proxy_protocol {
 	buffer *name;
 
 	int (*proxy_stream_init)            (server *srv, proxy_session *sess);

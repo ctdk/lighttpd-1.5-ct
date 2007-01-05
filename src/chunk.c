@@ -241,6 +241,52 @@ int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c) {
 }
 
 /*
+ * copy/steal all chunks from in chunkqueue.  return total bytes copied/stolen.
+ *
+ */
+int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in) {
+	size_t total = 0;
+	off_t we_have = 0;
+	chunk *c;
+
+	if (!cq || !in) return 0;
+
+	for (c = in->first; c; c = c->next) {
+		switch (c->type) {
+		case MEM_CHUNK:
+			if (c->mem->used == 0) continue;
+
+			we_have = c->mem->used - c->offset - 1;
+			if(we_have == 0) continue;
+			if (c->offset == 0) {
+				chunkqueue_steal_chunk(cq, c);
+			} else {
+				chunkqueue_append_buffer(cq, c->mem);
+				c->offset = c->mem->used - 1;
+			}
+			break;
+		case FILE_CHUNK:
+			if (c->file.length == 0) continue;
+
+			we_have = c->file.length;
+			if(c->file.is_temp) {
+				chunkqueue_steal_tempfile(cq, c);
+			} else {
+				chunkqueue_append_file(cq, c->file.name, c->file.start, c->file.length);
+			}
+
+			c->offset = c->file.length;
+			break;
+		case UNUSED_CHUNK:
+			break;
+		}
+		total += we_have;
+	}
+
+	return total;
+}
+
+/*
  * copy/steal max_len bytes from chunk chain.  return total bytes copied/stolen.
  *
  */

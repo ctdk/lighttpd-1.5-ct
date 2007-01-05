@@ -66,7 +66,7 @@ typedef enum {
 	PROXY_STATE_READ_RESPONSE_BODY
 } proxy_state_t;
 
-typedef struct {
+typedef struct proxy_session {
 	proxy_connection *proxy_con;
 	proxy_backend *proxy_backend;
 

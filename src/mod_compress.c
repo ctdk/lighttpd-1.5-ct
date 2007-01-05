@@ -423,7 +423,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 	if (HANDLER_ERROR != stat_cache_get_entry(srv, con, p->ofn, &compressed_sce)) {
 		/* file exists */
 
-		chunkqueue_append_file(con->send_raw, p->ofn, 0, compressed_sce->st.st_size);
+		chunkqueue_append_file(con->send, p->ofn, 0, compressed_sce->st.st_size);
 		con->send->is_closed = 1;
 
 		return 0;
@@ -499,7 +499,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 
 	if (ret != 0) return -1;
 
-	chunkqueue_append_file(con->send_raw, p->ofn, 0, r);
+	chunkqueue_append_file(con->send, p->ofn, 0, r);
 	con->send->is_closed = 1;
 
 	return 0;

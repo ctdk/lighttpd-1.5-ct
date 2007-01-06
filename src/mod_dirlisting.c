@@ -163,7 +163,7 @@ INIT_FUNC(mod_dirlisting_init) {
 	return p;
 }
 
-/* detroy the plugin data */
+/* destroy the plugin data */
 FREE_FUNC(mod_dirlisting_free) {
 	plugin_data *p = p_d;
 

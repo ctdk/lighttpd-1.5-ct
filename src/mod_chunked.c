@@ -39,16 +39,16 @@ typedef struct {
 } plugin_data;
 
 typedef struct {
-	unsigned short is_chunked;
 	unsigned short debug;
+	filter *fl;
 } handler_ctx;
 
 static handler_ctx * handler_ctx_init() {
 	handler_ctx * hctx;
 
 	hctx = calloc(1, sizeof(*hctx));
-	hctx->is_chunked = 0;
 	hctx->debug = 0;
+	hctx->fl = NULL;
 
 	return hctx;
 }
@@ -178,52 +178,61 @@ static int mod_chunked_patch_connection(server *srv, connection *con, plugin_dat
 URIHANDLER_FUNC(mod_chunked_response_header) {
 	plugin_data *p = p_d;
 	handler_ctx *hctx;
-	int need_length = 0;
+	filter *fl;
+	chunkqueue *in;
+	int use_chunked = 0;
 
 	mod_chunked_patch_connection(srv, con, p);
 
-	hctx = handler_ctx_init();
-	hctx->is_chunked = 0;
-	hctx->debug = p->conf.debug;
-	con->plugin_ctx[p->id] = hctx;
+	/* get filter. */
+	fl = filter_chain_get_filter(con->send_filters, p->id);
+	if (!fl) {
+		if (p->conf.debug > 0) TRACE("%s", "add chunked filter to filter chain");
+		fl = filter_chain_create_filter(con->send_filters, p->id);
+	}
+	/* get our input and output chunkqueues. */
+	if (!fl || !fl->prev) {
+		filter_chain_remove_filter(con->send_filters, fl);
+		return HANDLER_GO_ON;
+	}
+	in = fl->prev->cq;
 
-	if (!con->send->is_closed &&
-			NULL == array_get_element(con->response.headers, "Content-Length")) {
+	/* check if response needs chunked encoding. */
+	if(in->is_closed) {
+		if (p->conf.debug > 0) TRACE("%s", "response content finished disable chunked encoding");
+		con->response.content_length = chunkqueue_length(in);
+		use_chunked = 0;
+	} else {
 		/* we don't know the size of the content yet
 		 * - either enable chunking
 		 * - or disable keep-alive  */
 
 		if (con->request.http_version == HTTP_VERSION_1_1 && p->conf.encoding) {
-			/* enable chunk-encoding */
-			con->response.transfer_encoding |= HTTP_TRANSFER_ENCODING_CHUNKED;
+			use_chunked = 1;
 		} else {
-			con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
+			if (p->conf.debug > 0)
+				TRACE("%s", "content length unknown and can't use chunked encoding.  disable keep-alive");
 			con->keep_alive = 0;
+			use_chunked = 0;
 		}
 	}
 
-	/* check if Content-Length header is needed. */
-	if ((con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) == 0 &&
-	    NULL == array_get_element(con->response.headers, "Content-Length")) {
-		need_length = 1;
-	}
-	if (con->send->is_closed) {
-		/* we have all the content and chunked encoding is not used, set a content-length */
-
-		if (need_length) {
-			buffer_copy_off_t(srv->tmp_buf, chunkqueue_length(con->send));
-
-			response_header_overwrite(srv, con, CONST_STR_LEN("Content-Length"), CONST_BUF_LEN(srv->tmp_buf));
-		}
-	} else if (need_length) {
-		/* we don't know the size of the content yet and chunked encoding is disabled.
-		 * - disable keep-alive  */
-		con->keep_alive = 0;
+	if (!use_chunked) {
+		/* chunked encoding disabled.  remove filter */
+		con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
+		filter_chain_remove_filter(con->send_filters, fl);
+		return HANDLER_GO_ON;
 	}
 
-	/* check if another module requested chunk-encoding. */
-	hctx->is_chunked = (con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED);
-	if (hctx->debug > 0) TRACE("is_chunked=%d", hctx->is_chunked);
+	/* enable chunked encoding */
+	con->response.transfer_encoding |= HTTP_TRANSFER_ENCODING_CHUNKED;
+	hctx = handler_ctx_init();
+	hctx->debug = p->conf.debug;
+	con->plugin_ctx[p->id] = hctx;
+	hctx->fl = fl;
+
+	if (hctx->debug > 0)
+		TRACE("%s", "chunked encoding enabled");
 
 	return HANDLER_GO_ON;
 }
@@ -267,7 +276,6 @@ static int http_chunk_append_len(chunkqueue *cq, size_t len) {
 URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 	plugin_data *p = p_d;
 	handler_ctx *hctx = con->plugin_ctx[p->id];
-	filter *fl;
 	chunkqueue *in;
 	chunkqueue *out;
 	int we_have = 0;
@@ -275,21 +283,13 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 
 	UNUSED(srv);
 
+	/* check if chunk-encoding is enabled. */
 	if (!hctx) return HANDLER_GO_ON;
 
-	/* check if chunk-encoding is enabled. */
-	if (0 == hctx->is_chunked) return HANDLER_GO_ON;
-
-	/* get filter. */
-	fl = filter_chain_get_filter(con->send_filters, p->id);
-	if (!fl) {
-		if (hctx->debug > 0) TRACE("%s", "add chunked filter to filter chain");
-		fl = filter_chain_create_filter(con->send_filters, p->id);
-	}
 	/* get our input and output chunkqueues. */
-	if (!fl || !fl->prev) return HANDLER_GO_ON;
-	in = fl->prev->cq;
-	out = fl->cq;
+	if (!hctx->fl || !hctx->fl->prev) return HANDLER_GO_ON;
+	in = hctx->fl->prev->cq;
+	out = hctx->fl->cq;
 
 	/* no more data to encode. */
 	if (out->is_closed) return HANDLER_GO_ON;

@@ -141,6 +141,11 @@ mod_staticfile_la_SOURCES = mod_staticfile.c
 mod_staticfile_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_staticfile_la_LIBADD = $(common_libadd)
 
+lib_LTLIBRARIES += mod_deflate.la
+mod_deflate_la_SOURCES = mod_deflate.c 
+mod_deflate_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_deflate_la_LIBADD = $(Z_LIB) $(BZ_LIB) $(common_libadd)
+
 lib_LTLIBRARIES += mod_chunked.la
 mod_chunked_la_SOURCES = mod_chunked.c 
 mod_chunked_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined

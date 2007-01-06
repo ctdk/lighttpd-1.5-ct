@@ -126,6 +126,18 @@ filter *filter_chain_get_filter(filter_chain *chain, int id) {
 	return fl;
 }
 
+void filter_chain_remove_filter(filter_chain *chain, filter *fl) {
+	if (!chain || !fl) return;
+
+	if (chain->first == fl) {
+		chain->first = fl->next;
+	}
+	if (chain->last == fl) {
+		chain->last = fl->prev;
+	}
+	filter_free(fl);
+}
+
 int filter_chain_copy_output(filter_chain *chain, chunkqueue *out) {
 	int total;
 	chunkqueue *in;

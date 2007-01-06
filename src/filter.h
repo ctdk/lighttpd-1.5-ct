@@ -35,6 +35,7 @@ void filter_chain_reset(filter_chain *chain);
 
 filter *filter_chain_create_filter(filter_chain *chain, int id);
 filter *filter_chain_get_filter(filter_chain *chain, int id);
+void filter_chain_remove_filter(filter_chain *chain, filter *fl);
 
 int filter_chain_copy_output(filter_chain *chain, chunkqueue *out);
 

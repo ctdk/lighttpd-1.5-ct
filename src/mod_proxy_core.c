@@ -573,6 +573,9 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			if (sess->content_length < 0) {
 				return PARSE_ERROR;
 			}
+			con->response.content_length = sess->content_length;
+			/* don't save this header, other modules might change the content length. */
+			continue;
 		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Sendfile")) ||
 			   0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-Sendfile"))) {
 			if (p->conf.allow_x_sendfile) {

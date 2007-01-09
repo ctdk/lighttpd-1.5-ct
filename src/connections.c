@@ -1207,7 +1207,15 @@ int connection_state_machine(server *srv, connection *con) {
 			 */
 			switch (plugins_call_handle_response_header(srv, con)) {
 			case HANDLER_GO_ON:
+			case HANDLER_FINISHED:
+				break;
+			case HANDLER_WAIT_FOR_EVENT:
+				/* need to wait for more data */
+				return HANDLER_WAIT_FOR_EVENT;
 			default:
+				/* something strange happened */
+				TRACE("%s", "(error)");
+				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}
 
@@ -1233,7 +1241,12 @@ int connection_state_machine(server *srv, connection *con) {
 				}
 				break;
 			case HANDLER_GO_ON:
+			case HANDLER_FINISHED:
+				break;
 			default:
+				/* something strange happened */
+				TRACE("%s", "(error)");
+				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}
 
@@ -1244,7 +1257,15 @@ int connection_state_machine(server *srv, connection *con) {
 			 */
 			switch (plugins_call_handle_filter_response_content(srv, con)) {
 			case HANDLER_GO_ON:
+			case HANDLER_FINISHED:
+				break;
+			case HANDLER_WAIT_FOR_EVENT:
+				/* need to wait for more data */
+				return HANDLER_WAIT_FOR_EVENT;
 			default:
+				/* something strange happened */
+				TRACE("%s", "(error)");
+				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}
 

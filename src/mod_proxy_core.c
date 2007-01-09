@@ -437,13 +437,16 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 	}
 	chunkqueue_remove_finished_chunks(sess->recv);
 
+	if(sess->recv->is_closed) {
+		con->send->is_closed = 1;
+	}
 	return 0;
 }
 
 /**
  * Cleanup backend proxy connection.
  */
-int proxy_cleanup_backend_connection(server *srv, connection *con, proxy_session *sess) {
+int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
 
 	if(!sess->proxy_con) return -1;
 	proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
@@ -845,6 +848,8 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 
 			joblist_append(srv, con);
 			break;
+		case PROXY_STATE_FINISHED:
+			break;
 		default:
 			ERROR("oops, unexpected state for fdevent-in %d", sess->state);
 			break;
@@ -862,10 +867,66 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 		case PROXY_STATE_READ_RESPONSE_BODY:
 			/* the keep-alive race-condition */
 			break;
+		case PROXY_STATE_FINISHED:
+			break;
 		default:
 			ERROR("oops, unexpected state for fdevent-hup state=%d, revents=%d", sess->state, revents);
 			break;
 		}
+	}
+
+	return HANDLER_GO_ON;
+}
+
+/**
+ * Recycle packend proxy connection.
+ * 
+ * 1. close the connection if keep-alive is disable
+ * 2. or set the connection idling and wake up a backlogged request.
+ *
+ */
+int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session *sess) {
+	proxy_request *req;
+
+	if (!sess) return HANDLER_GO_ON;
+
+	if (sess->proxy_con) {
+		switch (sess->proxy_con->state) {
+		case PROXY_CONNECTION_STATE_CONNECTED:
+			if (!sess->is_closing) {
+				sess->proxy_con->state = PROXY_CONNECTION_STATE_IDLE;
+
+				/* don't ignore events as the FD is idle
+				 * we might get a HUP as the remote connection might close */
+				fdevent_event_del(srv->ev, sess->proxy_con->sock);
+				fdevent_unregister(srv->ev, sess->proxy_con->sock);
+
+				fdevent_register(srv->ev, sess->proxy_con->sock, proxy_handle_fdevent_idle, sess->proxy_con);
+				fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_IN);
+
+				break;
+			}
+
+			/* fall-through for non-keep-alive */
+
+		case PROXY_CONNECTION_STATE_CLOSED:
+			proxy_remove_backend_connection(srv, sess);
+			/* return so we don't wakeup a backlog connection. */
+			return HANDLER_GO_ON;
+		case PROXY_CONNECTION_STATE_IDLE:
+		default:
+			break;
+		}
+		sess->proxy_con = NULL;
+	}
+
+	/* wake up a connection from the backlog */
+	if ((req = proxy_backlog_shift(p->conf.backlog))) {
+		connection *next_con = req->con;
+
+		joblist_append(srv, next_con);
+
+		proxy_request_free(req);
 	}
 
 	return HANDLER_GO_ON;
@@ -1214,7 +1275,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
 			case NETWORK_STATUS_CONNECTION_CLOSE:
 				/* connection to backend is gone, cleanup backend connection. */
-				proxy_cleanup_backend_connection(srv, con, sess);
+				proxy_remove_backend_connection(srv, sess);
 
 				/* We might have read all of the response content.
 				 *
@@ -1250,7 +1311,6 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		case 1:
 			/* we are done, close the decoded queue */
 			sess->recv->is_closed = 1;
-			con->send->is_closed  = 1; /** we aren't pushing more data into the con->send queue */
 
 			break;
 		default:
@@ -1261,9 +1321,15 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 		proxy_copy_response(srv, con, sess);
 
+		if(sess->recv->is_closed) {
+			/* proxy request finished. */
+			sess->state = PROXY_STATE_FINISHED;
+			/* recycle proxy connection. */
+			proxy_recycle_backend_connection(srv, p, sess);
+		}
+
 		/* we wrote something into the the send-buffers,
 		 * call the connection-handler to push it to the client */
-
 		joblist_append(srv, con);
 
 		break;
@@ -1502,7 +1568,8 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	 * 4. wait for http-response header
 	 * 5. decode the response + parse the response
 	 * 6. stream the response-content to the client
-	 * 7. kill session
+	 * 7. session finished wait for request close
+	 * 8. kill session
 	 * */
 
 	assert(sess);
@@ -1525,7 +1592,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 
 			if (sess->proxy_con) {
 				/* if we are waiting for a proxy-connection right now, close it */
-				proxy_cleanup_backend_connection(srv, con, sess);
+				proxy_remove_backend_connection(srv, sess);
 			}
 
 			TRACE("%s", "connect to backend timed out");
@@ -1540,6 +1607,8 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		}
 #endif
 		break;
+	case PROXY_STATE_FINISHED:
+		return HANDLER_GO_ON;
 	}
 
 
@@ -1639,7 +1708,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_WAIT_FOR_EVENT:
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_COMEBACK:
-			proxy_cleanup_backend_connection(srv, con, sess);
+			proxy_remove_backend_connection(srv, sess);
 
 			if (sess->do_internal_redirect) {
 				con->mode = DIRECT;
@@ -1694,44 +1763,15 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 CONNECTION_FUNC(mod_proxy_connection_reset) {
 	plugin_data *p = p_d;
 	proxy_session *sess = con->plugin_ctx[p->id];
-	proxy_request *req;
 
 	if (!sess) return HANDLER_GO_ON;
 
 	if (sess->proxy_con) {
-		switch (sess->proxy_con->state) {
-		case PROXY_CONNECTION_STATE_CONNECTED:
-			if (!sess->is_closing) {
-				sess->proxy_con->state = PROXY_CONNECTION_STATE_IDLE;
-
-				/* don't ignore events as the FD is idle
-				 * we might get a HUP as the remote connection might close */
-				fdevent_event_del(srv->ev, sess->proxy_con->sock);
-				fdevent_unregister(srv->ev, sess->proxy_con->sock);
-
-				fdevent_register(srv->ev, sess->proxy_con->sock, proxy_handle_fdevent_idle, sess->proxy_con);
-				fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_IN);
-
-				break;
-			}
-
-			/* fall-through for non-keep-alive */
-
-		case PROXY_CONNECTION_STATE_CLOSED:
-			proxy_cleanup_backend_connection(srv, con, sess);
-			break;
-		case PROXY_CONNECTION_STATE_IDLE:
-			TRACE("%s", "... connection is already back in the pool");
-			break;
-		default:
-			ERROR("connection is in a unexpected state at close-time: %d", sess->proxy_con->state);
-			break;
-		}
+		proxy_recycle_backend_connection(srv, p, sess);
 	} else {
 		/* if we have the connection in the backlog, remove it */
 		proxy_backlog_remove_connection(p->conf.backlog, con);
 	}
-
 
 	/* cleanup protocol stream and proxy session */
 	proxy_stream_cleanup(srv, sess);
@@ -1739,19 +1779,8 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 
 	con->plugin_ctx[p->id] = NULL;
 
-	/* wake up a connection from the backlog */
-	if ((req = proxy_backlog_shift(p->conf.backlog))) {
-		connection *next_con = req->con;
-
-		joblist_append(srv, next_con);
-
-		proxy_request_free(req);
-	}
-
-
 	return HANDLER_GO_ON;
 }
-
 
 
 /**

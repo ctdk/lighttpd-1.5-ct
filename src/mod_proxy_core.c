@@ -441,6 +441,23 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 }
 
 /**
+ * Cleanup backend proxy connection.
+ */
+int proxy_cleanup_backend_connection(server *srv, connection *con, proxy_session *sess) {
+
+	if(!sess->proxy_con) return -1;
+	proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
+
+	fdevent_event_del(srv->ev, sess->proxy_con->sock);
+	fdevent_unregister(srv->ev, sess->proxy_con->sock);
+
+	proxy_connection_free(sess->proxy_con);
+	sess->proxy_con = NULL;
+
+	return 0;
+}
+
+/**
  * Initialize protocol stream.
  *
  */
@@ -1044,7 +1061,6 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 				}
 
 				sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
-				sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
 				return HANDLER_COMEBACK;
 			}
 
@@ -1162,7 +1178,6 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		case NETWORK_STATUS_CONNECTION_CLOSE:
 			if (chunkqueue_length(sess->recv_raw) == 0) {
 				/* the connection went away before we got something back */
-				sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
 
 				/**
 				 * we might run into a 'race-condition'
@@ -1198,12 +1213,15 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
 			case NETWORK_STATUS_CONNECTION_CLOSE:
-				fdevent_event_del(srv->ev, sess->proxy_con->sock);
+				/* connection to backend is gone, cleanup backend connection. */
+				proxy_cleanup_backend_connection(srv, con, sess);
 
-				/* the connection is gone
-				 * make the connect */
+				/* We might have read all of the response content.
+				 *
+				 * Note: should add a check for Content-Length header
+				 * to make sure we got all of the response content.
+				 */
 				sess->recv_raw->is_closed = 1;
-				sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
 
 			case NETWORK_STATUS_SUCCESS:
 				/* read even more, do we have all the content */
@@ -1507,14 +1525,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 
 			if (sess->proxy_con) {
 				/* if we are waiting for a proxy-connection right now, close it */
-				proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-
-				fdevent_event_del(srv->ev, sess->proxy_con->sock);
-				fdevent_unregister(srv->ev, sess->proxy_con->sock);
-
-				proxy_connection_free(sess->proxy_con);
-
-				sess->proxy_con = NULL;
+				proxy_cleanup_backend_connection(srv, con, sess);
 			}
 
 			TRACE("%s", "connect to backend timed out");
@@ -1628,14 +1639,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_WAIT_FOR_EVENT:
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_COMEBACK:
-			proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-
-			fdevent_event_del(srv->ev, sess->proxy_con->sock);
-			fdevent_unregister(srv->ev, sess->proxy_con->sock);
-
-			proxy_connection_free(sess->proxy_con);
-
-			sess->proxy_con = NULL;
+			proxy_cleanup_backend_connection(srv, con, sess);
 
 			if (sess->do_internal_redirect) {
 				con->mode = DIRECT;
@@ -1714,12 +1718,7 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 			/* fall-through for non-keep-alive */
 
 		case PROXY_CONNECTION_STATE_CLOSED:
-			proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-
-			fdevent_event_del(srv->ev, sess->proxy_con->sock);
-			fdevent_unregister(srv->ev, sess->proxy_con->sock);
-
-			proxy_connection_free(sess->proxy_con);
+			proxy_cleanup_backend_connection(srv, con, sess);
 			break;
 		case PROXY_CONNECTION_STATE_IDLE:
 			TRACE("%s", "... connection is already back in the pool");

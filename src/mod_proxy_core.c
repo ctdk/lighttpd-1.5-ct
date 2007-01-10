@@ -893,7 +893,13 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 	if (sess->proxy_con) {
 		switch (sess->proxy_con->state) {
 		case PROXY_CONNECTION_STATE_CONNECTED:
-			if (!sess->is_closing) {
+			/*
+			 * Set the connection to idling if:
+			 *
+			 * 1. keep-alive was not disabled (sess->is_closing)
+			 * 2. backend protocol finished parsing all data for this request.  (sess->recv->is_closed)
+			 */
+			if (!sess->is_closing && sess->recv->is_closed) {
 				sess->proxy_con->state = PROXY_CONNECTION_STATE_IDLE;
 
 				/* don't ignore events as the FD is idle
@@ -907,7 +913,7 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 				break;
 			}
 
-			/* fall-through for non-keep-alive */
+			/* fall-through for non-keep-alive or response parsing didn't finish */
 
 		case PROXY_CONNECTION_STATE_CLOSED:
 			proxy_remove_backend_connection(srv, sess);
@@ -1211,12 +1217,21 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			}
 
 			if (sess->do_internal_redirect) {
-				/* now it becomes tricky
-				 *
-				 * mod_staticfile should handle this file for us
-				 * con->mode = DIRECT is taking us out of the loop */
+				/* no more response data to process.  do redirect now. */
+				if (sess->recv->is_closed) {
+					/* now it becomes tricky
+					 *
+					 * mod_staticfile should handle this file for us
+					 * con->mode = DIRECT is taking us out of the loop */
+					con->mode = DIRECT;
+					con->http_status = 0;
 
-				return HANDLER_COMEBACK;
+					return HANDLER_COMEBACK;
+				} else {
+					/* finish processing response data, so we can re-use backend connection. */
+					sess->state = PROXY_STATE_READ_RESPONSE_BODY;
+					break;
+				}
 			}
 
 			con->file_started = 1;
@@ -1256,7 +1271,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			ERROR("%s", "conn-close after header-read");
 
-			break;
+			return HANDLER_ERROR;
 		default:
 			ERROR("++ %s", "oops, something went wrong while reading");
 			return HANDLER_ERROR;
@@ -1326,6 +1341,17 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			sess->state = PROXY_STATE_FINISHED;
 			/* recycle proxy connection. */
 			proxy_recycle_backend_connection(srv, p, sess);
+
+			if (sess->do_internal_redirect) {
+				/* now it becomes tricky
+				 *
+				 * mod_staticfile should handle this file for us
+				 * con->mode = DIRECT is taking us out of the loop */
+				con->mode = DIRECT;
+				con->http_status = 0;
+
+				return HANDLER_COMEBACK;
+			}
 		}
 
 		/* we wrote something into the the send-buffers,
@@ -1708,16 +1734,15 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_WAIT_FOR_EVENT:
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_COMEBACK:
-			proxy_remove_backend_connection(srv, sess);
-
+			/* request finished do redirect. */
 			if (sess->do_internal_redirect) {
-				con->mode = DIRECT;
-				con->http_status = 0;
-
+				/* recycle proxy connection. */
+				proxy_recycle_backend_connection(srv, p, sess);
 				return HANDLER_COMEBACK;
 			}
 			/* restart the connection to the backend */
 			TRACE("%s", "write failed, restarting request");
+			proxy_remove_backend_connection(srv, sess);
 			break;
 		case HANDLER_GO_ON:
 			return HANDLER_GO_ON;

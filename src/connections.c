@@ -1175,6 +1175,8 @@ int connection_state_machine(server *srv, connection *con) {
 			case HANDLER_FINISHED:
 				/* oops, we don't want this here */
 				break;
+			case HANDLER_COMEBACK:
+				break;
 			case HANDLER_WAIT_FOR_EVENT:
 				return HANDLER_WAIT_FOR_EVENT;
 			default:
@@ -1185,6 +1187,12 @@ int connection_state_machine(server *srv, connection *con) {
 			}
 
 			chunkqueue_remove_finished_chunks(con->recv);
+
+			/* jump back, this should be proceeded by mod_staticfile */
+			if (r == HANDLER_COMEBACK && con->mode == DIRECT) {
+				connection_set_state(srv,con,CON_STATE_HANDLE_REQUEST_HEADER);
+				break;
+			}
 
 			if (con->state == CON_STATE_ERROR) break;
 

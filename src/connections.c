@@ -1280,6 +1280,11 @@ int connection_state_machine(server *srv, connection *con) {
 			/* copy output from filters into send_raw. */
 			r = filter_chain_copy_output(con->send_filters, con->send_raw);
 
+			/* limit download speed. */
+			if (con->traffic_limit_reached) {
+				return HANDLER_WAIT_FOR_EVENT;
+			}
+			/* no response data available to send right now.  wait for more. */
 			if (!con->send_raw->is_closed && con->send_raw->bytes_in == con->send_raw->bytes_out) {
 				return HANDLER_WAIT_FOR_EVENT;
 			}

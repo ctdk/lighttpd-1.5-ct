@@ -347,6 +347,7 @@ proxy_session *proxy_session_init(void) {
 
 	sess->is_chunked = 0;
 	sess->send_response_content = 1;
+	sess->do_session_clear = 0;
 
 	return sess;
 }
@@ -437,7 +438,7 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 	}
 	chunkqueue_remove_finished_chunks(sess->recv);
 
-	if(sess->recv->is_closed) {
+	if(sess->recv->is_closed && sess->send_response_content) {
 		con->send->is_closed = 1;
 	}
 	return 0;
@@ -643,6 +644,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			if (p->conf.allow_x_rewrite) {
 				sess->send_response_content = 0;
 				sess->do_internal_redirect = 1;
+				sess->do_session_clear = 1;
 
 				buffer_copy_string_buffer(con->request.uri, header->value);
 				buffer_reset(con->physical.path);
@@ -655,6 +657,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			if (p->conf.allow_x_rewrite) {
 				sess->send_response_content = 0;
 				sess->do_internal_redirect = 1;
+				sess->do_session_clear = 1;
 
 				buffer_copy_string_buffer(con->request.http_host, header->value);
 				buffer_reset(con->physical.path);
@@ -848,8 +851,6 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 
 			joblist_append(srv, con);
 			break;
-		case PROXY_STATE_FINISHED:
-			break;
 		default:
 			ERROR("oops, unexpected state for fdevent-in %d", sess->state);
 			break;
@@ -866,8 +867,6 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 		case PROXY_STATE_READ_RESPONSE_HEADER:
 		case PROXY_STATE_READ_RESPONSE_BODY:
 			/* the keep-alive race-condition */
-			break;
-		case PROXY_STATE_FINISHED:
 			break;
 		default:
 			ERROR("oops, unexpected state for fdevent-hup state=%d, revents=%d", sess->state, revents);
@@ -1337,8 +1336,6 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		proxy_copy_response(srv, con, sess);
 
 		if(sess->recv->is_closed) {
-			/* proxy request finished. */
-			sess->state = PROXY_STATE_FINISHED;
 			/* recycle proxy connection. */
 			proxy_recycle_backend_connection(srv, p, sess);
 
@@ -1580,6 +1577,31 @@ SUBREQUEST_FUNC(mod_proxy_core_match_local_file) {
 	return mod_proxy_core_check_match(srv, con, p_d, 1);
 }
 
+/**
+ * end of a request
+ */
+CONNECTION_FUNC(mod_proxy_connection_reset) {
+	plugin_data *p = p_d;
+	proxy_session *sess = con->plugin_ctx[p->id];
+
+	if (!sess) return HANDLER_GO_ON;
+
+	if (sess->proxy_con) {
+		proxy_recycle_backend_connection(srv, p, sess);
+	} else {
+		/* if we have the connection in the backlog, remove it */
+		proxy_backlog_remove_connection(p->conf.backlog, con);
+	}
+
+	/* cleanup protocol stream and proxy session */
+	proxy_stream_cleanup(srv, sess);
+	proxy_session_free(sess);
+
+	con->plugin_ctx[p->id] = NULL;
+
+	return HANDLER_GO_ON;
+}
+
 CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	plugin_data *p = p_d;
 	proxy_session *sess = con->plugin_ctx[p->id];
@@ -1633,8 +1655,6 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		}
 #endif
 		break;
-	case PROXY_STATE_FINISHED:
-		return HANDLER_GO_ON;
 	}
 
 
@@ -1736,8 +1756,13 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_COMEBACK:
 			/* request finished do redirect. */
 			if (sess->do_internal_redirect) {
-				/* recycle proxy connection. */
-				proxy_recycle_backend_connection(srv, p, sess);
+				if (sess->do_session_clear) {
+					/* clear proxy session. */
+					mod_proxy_connection_reset(srv, con, p);
+				} else {
+					/* recycle proxy connection. */
+					proxy_recycle_backend_connection(srv, p, sess);
+				}
 				return HANDLER_COMEBACK;
 			}
 			/* restart the connection to the backend */
@@ -1781,32 +1806,6 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 
 	return HANDLER_GO_ON;
 }
-
-/**
- * end of a request
- */
-CONNECTION_FUNC(mod_proxy_connection_reset) {
-	plugin_data *p = p_d;
-	proxy_session *sess = con->plugin_ctx[p->id];
-
-	if (!sess) return HANDLER_GO_ON;
-
-	if (sess->proxy_con) {
-		proxy_recycle_backend_connection(srv, p, sess);
-	} else {
-		/* if we have the connection in the backlog, remove it */
-		proxy_backlog_remove_connection(p->conf.backlog, con);
-	}
-
-	/* cleanup protocol stream and proxy session */
-	proxy_stream_cleanup(srv, sess);
-	proxy_session_free(sess);
-
-	con->plugin_ctx[p->id] = NULL;
-
-	return HANDLER_GO_ON;
-}
-
 
 /**
  * cleanup dead connections once a second

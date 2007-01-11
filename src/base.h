@@ -88,6 +88,7 @@ typedef unsigned __int32 uint32_t;
 typedef enum { T_CONFIG_UNSET,
 		T_CONFIG_STRING,
 		T_CONFIG_SHORT,
+		T_CONFIG_INT,
 		T_CONFIG_BOOLEAN,
 		T_CONFIG_ARRAY,
 		T_CONFIG_LOCAL,
@@ -247,7 +248,7 @@ typedef struct {
 	unsigned short is_ssl;
 	unsigned short allow_http11;
 	unsigned short force_lowercase_filenames; /* if the FS is case-insensitive, force all files to lower-case */
-	unsigned short max_request_size;
+	unsigned int max_request_size;
 
 	unsigned short kbytes_per_second; /* connection kb/s limit */
 
@@ -456,7 +457,7 @@ typedef struct {
 	unsigned short max_worker;
 	unsigned short max_fds;
 	unsigned short max_conns;
-	unsigned short max_request_size;
+	unsigned int max_request_size;
 
 	unsigned short log_request_header_on_error;
 	unsigned short log_state_handling;

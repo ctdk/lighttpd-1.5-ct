@@ -63,8 +63,7 @@ typedef enum {
 	PROXY_STATE_WRITE_REQUEST_HEADER,
 	PROXY_STATE_WRITE_REQUEST_BODY,
 	PROXY_STATE_READ_RESPONSE_HEADER,
-	PROXY_STATE_READ_RESPONSE_BODY,
-	PROXY_STATE_FINISHED
+	PROXY_STATE_READ_RESPONSE_BODY
 } proxy_state_t;
 
 typedef struct proxy_session {
@@ -87,6 +86,7 @@ typedef struct proxy_session {
 	int is_closing;            /** our connection will close when we are done */
 	int send_response_content; /** 0 if we have to ignore the content-body */
 	int do_internal_redirect;  /** 1 if we do a internal redirect to the ->mode = DIRECT */
+	int do_session_clear;      /** clear out this proxy session, so a new session can be created. */
 	int internal_redirect_count;  /** protection against infinite loops */
 
 	/**

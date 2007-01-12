@@ -143,6 +143,7 @@ int filter_chain_copy_output(filter_chain *chain, chunkqueue *out) {
 	chunkqueue *in;
 
 	if (!chain || !out) return 0;
+	if (out->is_closed) return 0;
 	in = chain->last->cq;
 	total = chunkqueue_steal_all_chunks(out, in);
 	in->bytes_out += total;

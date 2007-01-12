@@ -268,7 +268,8 @@ int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in) {
 		case FILE_CHUNK:
 			if (c->file.length == 0) continue;
 
-			we_have = c->file.length;
+			we_have = c->file.length - c->offset;
+			if(we_have == 0) continue;
 			if(c->file.is_temp) {
 				chunkqueue_steal_tempfile(cq, c);
 			} else {

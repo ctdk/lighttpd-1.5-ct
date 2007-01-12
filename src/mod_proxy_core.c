@@ -347,7 +347,9 @@ proxy_session *proxy_session_init(void) {
 
 	sess->is_chunked = 0;
 	sess->send_response_content = 1;
-	sess->do_session_clear = 0;
+	sess->do_new_session = 0;
+	sess->do_x_rewrite_backend = 0;
+	sess->x_rewrite_backend = NULL;
 
 	return sess;
 }
@@ -378,7 +380,11 @@ void proxy_session_reset(proxy_session *sess) {
 	sess->internal_redirect_count = 0;
 	sess->do_internal_redirect = 0;
 	sess->is_closing = 0;
-	sess->send_response_content = 0;
+
+	sess->do_new_session = 0;
+	sess->do_x_rewrite_backend = 0;
+	buffer_free(sess->x_rewrite_backend);
+	sess->x_rewrite_backend = NULL;
 
 	sess->remote_con = NULL;
 	sess->proxy_con = NULL;
@@ -400,6 +406,7 @@ void proxy_session_free(proxy_session *sess) {
 	chunkqueue_free(sess->recv_raw);
 	chunkqueue_free(sess->send_raw);
 
+	buffer_free(sess->x_rewrite_backend);
 	free(sess);
 }
 
@@ -538,6 +545,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 	                                         proxy_session *sess, chunkqueue *in, chunkqueue *out) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	int have_content_length = 0;
+	int do_x_rewrite = 0;
 	size_t i;
 
 	if(!protocol || !(protocol->proxy_parse_response_header)) {
@@ -642,27 +650,24 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			continue;
 		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-URI"))) {
 			if (p->conf.allow_x_rewrite) {
-				sess->send_response_content = 0;
-				sess->do_internal_redirect = 1;
-				sess->do_session_clear = 1;
-
+				do_x_rewrite = 1;
 				buffer_copy_string_buffer(con->request.uri, header->value);
-				buffer_reset(con->physical.path);
-
-				config_cond_cache_reset(srv, con);
 			}
 
 			continue;
 		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-Host"))) {
 			if (p->conf.allow_x_rewrite) {
-				sess->send_response_content = 0;
-				sess->do_internal_redirect = 1;
-				sess->do_session_clear = 1;
-
+				do_x_rewrite = 1;
 				buffer_copy_string_buffer(con->request.http_host, header->value);
-				buffer_reset(con->physical.path);
+			}
 
-				config_cond_cache_reset(srv, con);
+			continue;
+		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-Backend"))) {
+			if (p->conf.allow_x_rewrite) {
+				do_x_rewrite = 1;
+				if (!sess->x_rewrite_backend) sess->x_rewrite_backend = buffer_init();
+				buffer_copy_string_buffer(sess->x_rewrite_backend, header->value);
+				sess->do_x_rewrite_backend = 1;
 			}
 
 			continue;
@@ -721,6 +726,16 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 #endif
 
 		array_insert_unique(con->response.headers, (data_unset *)ds);
+	}
+
+	if (do_x_rewrite) {
+		sess->send_response_content = 0;
+		sess->do_internal_redirect = 1;
+		sess->do_new_session = 1;
+
+		buffer_reset(con->physical.path);
+
+		config_cond_cache_reset(srv, con);
 	}
 
 	/* we are finished decoding the response headers. */
@@ -1059,6 +1074,9 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	/* do we have a connection ? */
 
+	if (p->conf.debug > 0)
+		TRACE("proxy_state_engine: state=%d", sess->state);
+
 	switch (sess->state) {
 	case PROXY_STATE_UNSET:
 		/* we are not started yet */
@@ -1218,6 +1236,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			if (sess->do_internal_redirect) {
 				/* no more response data to process.  do redirect now. */
 				if (sess->recv->is_closed) {
+					sess->state = PROXY_STATE_FINISHED;
 					/* now it becomes tricky
 					 *
 					 * mod_staticfile should handle this file for us
@@ -1339,6 +1358,8 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			/* recycle proxy connection. */
 			proxy_recycle_backend_connection(srv, p, sess);
 
+			sess->state = PROXY_STATE_FINISHED;
+
 			if (sess->do_internal_redirect) {
 				/* now it becomes tricky
 				 *
@@ -1378,13 +1399,31 @@ proxy_backend *proxy_get_backend(server *srv, connection *con, plugin_data *p) {
 	return NULL;
 }
 
+proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, buffer *url) {
+	size_t i;
+
+	UNUSED(srv);
+	UNUSED(con);
+
+	for (i = 0; i < p->conf.backends->used; i++) {
+		proxy_backend *backend = p->conf.backends->ptr[i];
+
+		if (buffer_is_equal(backend->url, url)) {
+			return backend;
+		}
+	}
+
+	return NULL;
+}
+
 /**
  * choose a available address from the address-pool
  *
  * the backend has different balancers
  */
-proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_backend *backend) {
+proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_session *sess) {
 	size_t i;
+	proxy_backend *backend = sess->proxy_backend;
 	proxy_address_pool *address_pool = backend->address_pool;
 	unsigned long last_max; /* for the HASH balancer */
 	proxy_address *address = NULL, *cur_address = NULL;
@@ -1492,6 +1531,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(response_rewrites);
 	PATCH_OPTION(allow_x_sendfile);
 	PATCH_OPTION(allow_x_rewrite);
+	PATCH_OPTION(max_pool_size);
 	PATCH_OPTION(check_local);
 
 	/* skip the first, the global context */
@@ -1523,6 +1563,8 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(allow_x_sendfile);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_ALLOW_X_REWRITE))) {
 				PATCH_OPTION(allow_x_rewrite);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_MAX_POOL_SIZE))) {
+				PATCH_OPTION(max_pool_size);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_CHECK_LOCAL))) {
 				PATCH_OPTION(check_local);
 			}
@@ -1536,8 +1578,10 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 	proxy_session *sess = con->plugin_ctx[p->id];
 	buffer *path;
 
-	/* if this is the second round, sess is already prepared */
-	if (sess) return HANDLER_GO_ON;
+	if (sess && !sess->do_new_session) {
+		/* if this is the second round, sess is already prepared */
+		return HANDLER_GO_ON;
+	}
 
 	path = file_match ? con->physical.path : con->uri.path;
 	if (buffer_is_empty(path)) return HANDLER_GO_ON;
@@ -1545,26 +1589,55 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 	/* check if we have a matching conditional for this request */
 	mod_proxy_core_patch_connection(srv, con, p);
 
-	/* no proxy backends to handle this request. */
-	if (p->conf.backends->used == 0) return HANDLER_GO_ON;
+	/* make sure we have a protocol. */
+	if (NULL == p->conf.protocol) return HANDLER_GO_ON;
 
 	/* if check_local is enabled, then wait for file match. */
 	if (file_match != p->conf.check_local) return HANDLER_GO_ON;
 
+	if (sess && sess->do_x_rewrite_backend) {
+		proxy_backend *backend;
+
+		backend = proxy_find_backend(srv, con, p, sess->x_rewrite_backend);
+		if (backend == NULL) {
+			backend = proxy_backend_init();
+
+			buffer_copy_string_buffer(backend->url, sess->x_rewrite_backend);
+			/* check if the new backend has a valid backend-address */
+			if (0 == proxy_address_pool_add_string(backend->address_pool, backend->url)) {
+				if (p->conf.max_pool_size) {
+					backend->pool->max_size = p->conf.max_pool_size;
+				}
+
+				proxy_backends_add(p->conf.backends, backend);
+			} else {
+				proxy_backend_free(backend);
+				backend = NULL;
+			}
+		}
+		/* clear old session */
+		proxy_session_reset(sess);
+		if (NULL == backend) return HANDLER_GO_ON;
+		sess->proxy_backend = backend;
+	}
+
+	/* no proxy backends to handle this request. */
+	if (p->conf.backends->used == 0) return HANDLER_GO_ON;
+
 	if (!sess) {
 		/* a session lives for a single request */
 		sess = proxy_session_init();
-		sess->p = p;
-
-		con->plugin_ctx[p->id] = sess;
-		con->mode = p->id;
-
-		if (con->conf.log_request_handling) {
-			TRACE("handling it in mod_proxy_core: %s.path=%s",
-					file_match ? "physical" : "uri", BUF_STR(path));
-		}
-		sess->remote_con = con;
 	}
+
+	con->plugin_ctx[p->id] = sess;
+	con->mode = p->id;
+
+	if (con->conf.log_request_handling) {
+		TRACE("handling it in mod_proxy_core: %s.path=%s",
+				file_match ? "physical" : "uri", BUF_STR(path));
+	}
+	sess->p = p;
+	sess->remote_con = con;
 
 	return HANDLER_GO_ON;
 }
@@ -1631,6 +1704,8 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	}
 
 	switch (sess->state) {
+	case PROXY_STATE_FINISHED:
+		return HANDLER_GO_ON;
 	case PROXY_STATE_CONNECTING:
 		/* this connections is waited 10 seconds to connect to the backend
 		 * and didn't got a successful connection yet, sending timeout */
@@ -1664,10 +1739,12 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			proxy_address *address = NULL;
 			int woken_up;
 
-			if (NULL == (sess->proxy_backend = proxy_get_backend(srv, con, p))) {
-				/* no connection pool for this location */
-				ERROR("%s", "Couldn't find a backend for this location.");
-				return HANDLER_ERROR;
+			if (NULL == sess->proxy_backend) {
+				if (NULL == (sess->proxy_backend = proxy_get_backend(srv, con, p))) {
+					/* no connection pool for this location */
+					ERROR("%s", "Couldn't find a backend for this location.");
+					return HANDLER_ERROR;
+				}
 			}
 
 			sess->proxy_backend->balancer = p->conf.balancer;
@@ -1678,7 +1755,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			 * check the connection pool if we have a connection open
 			 * for that address
 			 */
-			if (NULL == (address = proxy_backend_balance(srv, con, sess->proxy_backend))) {
+			if (NULL == (address = proxy_backend_balance(srv, con, sess))) {
 				/* we don't have any backends to connect to */
 				proxy_request *req;
 
@@ -1756,13 +1833,8 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_COMEBACK:
 			/* request finished do redirect. */
 			if (sess->do_internal_redirect) {
-				if (sess->do_session_clear) {
-					/* clear proxy session. */
-					mod_proxy_connection_reset(srv, con, p);
-				} else {
-					/* recycle proxy connection. */
-					proxy_recycle_backend_connection(srv, p, sess);
-				}
+				/* recycle proxy connection. */
+				proxy_recycle_backend_connection(srv, p, sess);
 				return HANDLER_COMEBACK;
 			}
 			/* restart the connection to the backend */

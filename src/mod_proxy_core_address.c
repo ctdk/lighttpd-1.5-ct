@@ -52,7 +52,7 @@ void proxy_address_pool_add(proxy_address_pool *address_pool, proxy_address *add
 		proxy_address *pool_address = address_pool->ptr[i];
 
 		if (buffer_is_equal(address->name, pool_address->name)) {
-			TRACE("%s is already in the address-pool", BUF_STR(address->name));
+			/* TRACE("%s is already in the address-pool", BUF_STR(address->name)); */
 
 			proxy_address_free(address);
 

@@ -11,6 +11,7 @@ proxy_backend *proxy_backend_init(void) {
 	backend->pool = proxy_connection_pool_init();
 	backend->address_pool = proxy_address_pool_init();
 	backend->balancer = PROXY_BALANCE_RR;
+	backend->url = buffer_init();
 
 	return backend;
 }
@@ -20,6 +21,7 @@ void proxy_backend_free(proxy_backend *backend) {
 
 	proxy_connection_pool_free(backend->pool);
 	proxy_address_pool_free(backend->address_pool);
+	buffer_free(backend->url);
 
 	free(backend);
 }

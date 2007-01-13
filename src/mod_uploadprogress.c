@@ -11,14 +11,25 @@
 #include "response.h"
 #include "stat_cache.h"
 
+#define CONFIG_UPLOAD_PROGRESS_URL "upload-progress.progress-url"
+#define CONFIG_UPLOAD_PROGRESS_TIMEOUT "upload-progress.remove-timeout"
+#define CONFIG_UPLOAD_PROGRESS_DEBUG "upload-progress.debug"
+
 /**
- * this is a uploadprogress for a lighttpd plugin
+ * uploadprogress for lighttpd
+ *
+ * no author and contact infos yet? Shamelessly adding...
+ *
+ * Initial: Jan Kneschke <jan@kneschke.de>
+ * Timeout+Status addon: Bjoern Kalkbrenner <terminar@cyberphoria.org> [20070112]
  *
  */
 
 typedef struct {
 	buffer     *con_id;
 	connection *con;
+	int timeout;
+	int status;
 } connection_map_entry;
 
 typedef struct {
@@ -32,6 +43,8 @@ typedef struct {
 
 typedef struct {
 	buffer *progress_url;
+	unsigned short debug;
+	unsigned short remove_timeout;
 } plugin_config;
 
 typedef struct {
@@ -75,7 +88,7 @@ void connection_map_free(connection_map *cm) {
 	free(cm);
 }
 
-int connection_map_insert(connection_map *cm, connection *con, buffer *con_id) {
+connection_map_entry *connection_map_insert(connection_map *cm, connection *con, buffer *con_id) {
 	connection_map_entry *cme;
 	size_t i;
 
@@ -99,16 +112,18 @@ int connection_map_insert(connection_map *cm, connection *con, buffer *con_id) {
 	} else {
 		cme = malloc(sizeof(*cme));
 	}
+	cme->timeout = 0;
+	cme->status = 0;
 	cme->con_id = buffer_init();
 	buffer_copy_string_buffer(cme->con_id, con_id);
 	cme->con = con;
 
 	cm->ptr[cm->used++] = cme;
 
-	return 0;
+	return cme;
 }
 
-connection *connection_map_get_connection(connection_map *cm, buffer *con_id) {
+connection_map_entry *connection_map_get_connection_entry(connection_map *cm, buffer *con_id) {
 	size_t i;
 
 	for (i = 0; i < cm->used; i++) {
@@ -116,23 +131,23 @@ connection *connection_map_get_connection(connection_map *cm, buffer *con_id) {
 
 		if (buffer_is_equal(cme->con_id, con_id)) {
 			/* found connection */
-
-			return cme->con;
+			return cme;
 		}
 	}
 	return NULL;
 }
 
-int connection_map_remove_connection(connection_map *cm, connection *con) {
+int connection_map_remove_connection(connection_map *cm, connection_map_entry *entry) {
 	size_t i;
 
 	for (i = 0; i < cm->used; i++) {
 		connection_map_entry *cme = cm->ptr[i];
 
-		if (cme->con == con) {
+		if (cme == entry) {
 			/* found connection */
-
 			buffer_reset(cme->con_id);
+			cme->timeout=0;
+			cme->status=0;
 			cme->con = NULL;
 
 			cm->used--;
@@ -148,6 +163,86 @@ int connection_map_remove_connection(connection_map *cm, connection *con) {
 	}
 
 	return 0;
+}
+
+int connection_map_set_timeout(plugin_data *p, connection *con) {
+	size_t i;
+
+	if(p->conf.debug) TRACE("set_timeout for connection=%p",con);
+	for (i = 0; i < p->con_map->used; i++) {
+		connection_map_entry *cme = p->con_map->ptr[i];
+
+		if (cme->con == con) {
+			cme->con = NULL;
+			
+			/* found connection */
+			cme->timeout = time(NULL) + p->conf.remove_timeout;
+			if(p->conf.debug) TRACE("set_timeout for connection=%p, timeout=%d",con, cme->timeout);
+
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+
+void connection_map_clear_timeout_connections(connection_map *cm) {
+	size_t i;
+	int now_t = time(NULL);
+
+	for (i = 0; i < cm->used; i++) {
+		connection_map_entry *cme = cm->ptr[i];
+
+		if (cme->timeout != 0 && cme->timeout < now_t) {
+			/* found connection */
+			connection_map_remove_connection(cm,cme);
+		}
+	}
+}
+
+buffer *get_tracking_id(plugin_data *p, connection *con) {
+	data_string *ds;
+	buffer *b = NULL;
+	char *qstr=NULL;
+	size_t i;
+
+	/* the request has to contain a 32byte ID */
+	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "X-Progress-ID"))) {
+		/* perhaps the POST request is using the querystring to pass the X-Progress-ID */
+		if (buffer_is_empty(con->uri.query)) {
+			/*
+			 * con->uri.query will not be parsed out if a 413 error happens
+			 */
+			if (NULL != (qstr = strchr(con->request.uri->ptr, '?'))) {
+				/** extract query string from request.uri */
+				buffer_copy_string(con->uri.query, qstr + 1);
+				b = con->uri.query;
+			} else {
+				return NULL;
+			}
+		} else {
+			b = con->uri.query;
+		}
+	} else {
+		b = ds->value;
+	}
+
+	if (b->used != 32 + 1) {
+		if (p->conf.debug) ERROR("the Progress-ID has to be 32 characters long, got %d characters", b->used - 1);
+		return NULL;
+	}
+
+	for (i = 0; i < b->used - 1; i++) {
+		char c = b->ptr[i];
+
+		if (!light_isxdigit(c)) {
+			if (p->conf.debug) ERROR("only hex-digits are allowed (0-9 + a-f): (ascii: %d)", c);
+			return NULL;
+		}
+	}
+
+	return b;
 }
 
 /* init the plugin data */
@@ -177,6 +272,7 @@ FREE_FUNC(mod_uploadprogress_free) {
 			plugin_config *s = p->config_storage[i];
 
 			buffer_free(s->progress_url);
+			s->remove_timeout=0;
 
 			free(s);
 		}
@@ -197,7 +293,9 @@ SETDEFAULTS_FUNC(mod_uploadprogress_set_defaults) {
 	size_t i = 0;
 
 	config_values_t cv[] = {
-		{ "upload-progress.progress-url", NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ CONFIG_UPLOAD_PROGRESS_URL, NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ CONFIG_UPLOAD_PROGRESS_TIMEOUT, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },    /* 1 */
+		{ CONFIG_UPLOAD_PROGRESS_DEBUG, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 2 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -209,9 +307,13 @@ SETDEFAULTS_FUNC(mod_uploadprogress_set_defaults) {
 		plugin_config *s;
 
 		s = calloc(1, sizeof(plugin_config));
-		s->progress_url    = buffer_init();
+		s->progress_url    = buffer_init_string("/progress");
+		s->remove_timeout  = 60;
+		s->debug  = 0;
 
 		cv[0].destination = s->progress_url;
+		cv[1].destination = &(s->remove_timeout);
+		cv[2].destination = &(s->debug);
 
 		p->config_storage[i] = s;
 
@@ -228,6 +330,8 @@ static int mod_uploadprogress_patch_connection(server *srv, connection *con, plu
 	plugin_config *s = p->config_storage[0];
 
 	PATCH_OPTION(progress_url);
+	PATCH_OPTION(remove_timeout);
+	PATCH_OPTION(debug);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -241,8 +345,12 @@ static int mod_uploadprogress_patch_connection(server *srv, connection *con, plu
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("upload-progress.progress-url"))) {
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_UPLOAD_PROGRESS_URL))) {
 				PATCH_OPTION(progress_url);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_UPLOAD_PROGRESS_TIMEOUT))) {
+				PATCH_OPTION(remove_timeout);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_UPLOAD_PROGRESS_DEBUG))) {
+				PATCH_OPTION(debug);
 			}
 		}
 	}
@@ -270,10 +378,10 @@ static int mod_uploadprogress_patch_connection(server *srv, connection *con, plu
 
 URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 	plugin_data *p = p_d;
-	size_t i;
-	data_string *ds;
-	buffer *b, *tracking_id;
-	connection *post_con = NULL;
+	buffer *tracking_id;
+	buffer *b;
+	connection_map_entry *post_con_entry = NULL;
+	connection_map_entry *map_con_entry = NULL;
 
 	UNUSED(srv);
 
@@ -281,39 +389,21 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 
 	mod_uploadprogress_patch_connection(srv, con, p);
 
-	/* check if this is a POST request */
 	switch(con->request.http_method) {
 	case HTTP_METHOD_POST:
-		/* the request has to contain a 32byte ID */
-
-		if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "X-Progress-ID"))) {
-			if (!buffer_is_empty(con->uri.query)) {
-				/* perhaps the POST request is using the querystring to pass the X-Progress-ID */
-				b = con->uri.query;
-			} else {
-				return HANDLER_GO_ON;
-			}
-		} else {
-			b = ds->value;
-		}
-
-		if (b->used != 32 + 1) {
-			ERROR("the Progress-ID has to be 32 characters long, got %d characters", b->used - 1);
-
+		/* get the tracker id */
+		if (NULL == (tracking_id = get_tracking_id(p, con))) {
 			return HANDLER_GO_ON;
 		}
 
-		for (i = 0; i < b->used - 1; i++) {
-			char c = b->ptr[i];
-
-			if (!light_isxdigit(c)) {
-				ERROR("only hex-digits are allowed (0-9 + a-f): (ascii: %d)", c);
-
-				return HANDLER_GO_ON;
-			}
+		if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map,tracking_id))) {
+			connection_map_insert(p->con_map, con, tracking_id);
+		} else {
+			map_con_entry->timeout = 0;
+			map_con_entry->status = 0;
+			map_con_entry->con = con;
+			buffer_copy_string_buffer(map_con_entry->con_id,tracking_id);
 		}
-
-		connection_map_insert(p->con_map, con, b);
 
 		return HANDLER_GO_ON;
 	case HTTP_METHOD_GET:
@@ -321,31 +411,9 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 			return HANDLER_GO_ON;
 		}
 
-		if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "X-Progress-ID"))) {
-			if (!buffer_is_empty(con->uri.query)) {
-				/* perhaps the GET request is using the querystring to pass the X-Progress-ID */
-				tracking_id = con->uri.query;
-			} else {
-				return HANDLER_GO_ON;
-			}
-		} else {
-			tracking_id = ds->value;
-		}
-
-		if (tracking_id->used != 32 + 1) {
-			ERROR("the Progress-ID has to be 32 characters long, got %d characters", tracking_id->used - 1);
-
+		/* get the tracker id */
+		if (NULL == (tracking_id = get_tracking_id(p, con))) {
 			return HANDLER_GO_ON;
-		}
-
-		for (i = 0; i < tracking_id->used - 1; i++) {
-			char c = tracking_id->ptr[i];
-
-			if (!light_isxdigit(c)) {
-				ERROR("only hex-digits are allowed (0-9 + a-f): (ascii: %d)", c);
-
-				return HANDLER_GO_ON;
-			}
 		}
 
 		buffer_reset(con->physical.path);
@@ -367,19 +435,28 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		b = chunkqueue_get_append_buffer(con->send);
 
 		/* get the connection */
-		if (NULL == (post_con = connection_map_get_connection(p->con_map, tracking_id))) {
-			BUFFER_APPEND_STRING_CONST(b, "new Object({ 'status' : 'starting' })\r\n");
-
+		if (NULL == (post_con_entry = connection_map_get_connection_entry(p->con_map, tracking_id))) {
+			BUFFER_APPEND_STRING_CONST(b, "new Object({ 'state' : 'starting' })\r\n");
+			
 			return HANDLER_FINISHED;
+		} else {
+			if(p->conf.debug) TRACE("connection found: con=%p id=%s",post_con_entry->con,tracking_id->ptr);
 		}
 
 		/* prepare XML */
 		BUFFER_COPY_STRING_CONST(b, "new Object({ 'state' : ");
-		buffer_append_string(b, post_con->recv->is_closed ? "'done'" : "'uploading'");
-		BUFFER_APPEND_STRING_CONST(b, ", 'size' : ");
-		buffer_append_off_t(b, post_con->request.content_length == -1 ? 0 : post_con->request.content_length);
-		BUFFER_APPEND_STRING_CONST(b, ", 'received' : ");
-		buffer_append_off_t(b, post_con->recv->bytes_in);
+		
+		if (post_con_entry->status == 413) {
+			BUFFER_APPEND_STRING_CONST(b, "'error', 'status' : 413");
+		} else if (post_con_entry->timeout > 0) {
+			buffer_append_string(b, "'done'");
+		} else {
+			buffer_append_string(b, post_con_entry->con->recv->is_closed ? "'done'" : "'uploading'");
+			BUFFER_APPEND_STRING_CONST(b, ", 'size' : ");
+			buffer_append_off_t(b, post_con_entry->con->request.content_length == -1 ? 0 : post_con_entry->con->request.content_length);
+			BUFFER_APPEND_STRING_CONST(b, ", 'received' : ");
+			buffer_append_off_t(b, post_con_entry->con->recv->bytes_in);
+		}
 		BUFFER_APPEND_STRING_CONST(b, "})\r\n");
 
 		return HANDLER_FINISHED;
@@ -396,14 +473,80 @@ REQUESTDONE_FUNC(mod_uploadprogress_request_done) {
 	UNUSED(srv);
 
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
+	
+	/*
+	 * only need to handle the upload request.
+	 */
+	if (con->request.http_method != HTTP_METHOD_POST) {
+		return HANDLER_GO_ON;
+	}
 
-	if (connection_map_remove_connection(p->con_map, con)) {
-		/* removed */
+	if(p->conf.debug) TRACE("request_done: con=%p, http_method=%d, http_status=%d",con,
+			con->request.http_method, con->http_status);
+	/*
+	 * set timeout on the upload's connection_map_entry.
+	 */
+	if (!connection_map_set_timeout(p, con)) {
+		if(p->conf.debug) TRACE("connection not found??? %p",con);
 	}
 
 	return HANDLER_GO_ON;
 }
 
+URIHANDLER_FUNC(mod_uploadprogress_response_header)
+{
+	plugin_data *p = p_d;
+
+	buffer *tracking_id;
+	connection_map_entry *map_con_entry = NULL;
+
+	UNUSED(srv);
+
+	/*
+	 * we only want to process an 413 (Bad length) error for the upload (POST request)
+	 */
+	if (con->request.http_method != HTTP_METHOD_POST || con->http_status != 413) {
+		return HANDLER_GO_ON;
+	}
+
+	if(p->conf.debug) TRACE("response_header: con=%p, http_method=%d, http_status=%d",con,
+			con->request.http_method, con->http_status);
+
+	/* get the tracker id */
+	if (NULL == (tracking_id = get_tracking_id(p, con))) {
+		return HANDLER_GO_ON;
+	}
+
+	if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map,tracking_id))) {
+		/* add entry if it doesn't exists */
+		if (NULL == (map_con_entry = connection_map_insert(p->con_map, con, tracking_id))) {
+			return HANDLER_GO_ON;
+		}
+	} else {
+		map_con_entry->con = con;
+		buffer_copy_string_buffer(map_con_entry->con_id,tracking_id);
+	}
+
+	//ok, found our entries, setting 413 here for status
+	map_con_entry->timeout = time(NULL) + p->conf.remove_timeout;
+	map_con_entry->status = 413;
+	
+	return HANDLER_GO_ON;
+}
+
+TRIGGER_FUNC(mod_uploadprogress_trigger)
+{
+	plugin_data *p = p_d;
+
+	UNUSED(srv);
+
+	if ((srv->cur_ts % 60) != 0) return HANDLER_GO_ON;
+
+	connection_map_clear_timeout_connections(p->con_map);
+
+	return HANDLER_GO_ON;
+}
+		
 /* this function is called at dlopen() time and inits the callbacks */
 
 int mod_uploadprogress_plugin_init(plugin *p) {
@@ -415,7 +558,9 @@ int mod_uploadprogress_plugin_init(plugin *p) {
 	p->handle_response_done  = mod_uploadprogress_request_done;
 	p->set_defaults  = mod_uploadprogress_set_defaults;
 	p->cleanup     = mod_uploadprogress_free;
-
+	p->handle_trigger = mod_uploadprogress_trigger;
+	p->handle_response_header = mod_uploadprogress_response_header;
+	
 	p->data        = NULL;
 
 	return 0;

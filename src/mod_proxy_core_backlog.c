@@ -86,7 +86,7 @@ int proxy_backlog_remove_connection(proxy_backlog *backlog, void *con) {
 		}
 		cur->next = NULL;
 
-		proxy_request_free(req);
+		proxy_request_free(cur);
 
 		return 0;
 	}

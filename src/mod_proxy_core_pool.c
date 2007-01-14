@@ -112,7 +112,7 @@ proxy_connection_pool_t proxy_connection_pool_get_connection(proxy_connection_po
 		 * check if we can open another connection to this address
 		 */
 
-		if (address->used == pool->max_size) return PROXY_CONNECTIONPOOL_FULL;
+		if (pool->used == pool->max_size) return PROXY_CONNECTIONPOOL_FULL;
 
 		proxy_con = proxy_connection_init();
 

@@ -28,6 +28,7 @@ typedef struct {
 	unsigned short debug;
 	unsigned short max_pool_size;
 	unsigned short check_local;
+	unsigned short max_keep_alive_requests;
 
 	proxy_balance_t balancer;
 	struct proxy_protocol *protocol;

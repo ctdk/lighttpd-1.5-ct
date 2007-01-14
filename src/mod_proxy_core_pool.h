@@ -23,6 +23,7 @@ typedef enum {
 typedef struct {
 	iosocket *sock;
 
+	unsigned short request_count; /* used for max-keep-alive-requests */
 	time_t last_read; /* timeout handling for keep-alive connections */
 	time_t last_write;
 

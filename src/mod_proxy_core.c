@@ -24,6 +24,7 @@
 #define CONFIG_PROXY_CORE_BALANCER "proxy-core.balancer"
 #define CONFIG_PROXY_CORE_PROTOCOL "proxy-core.protocol"
 #define CONFIG_PROXY_CORE_DEBUG "proxy-core.debug"
+#define CONFIG_PROXY_CORE_MAX_KEEP_ALIVE "proxy-core.max-keep-alive-requests"
 #define CONFIG_PROXY_CORE_BACKENDS "proxy-core.backends"
 #define CONFIG_PROXY_CORE_REWRITE_REQUEST "proxy-core.rewrite-request"
 #define CONFIG_PROXY_CORE_REWRITE_RESPONSE "proxy-core.rewrite-response"
@@ -228,6 +229,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		{ CONFIG_PROXY_CORE_ALLOW_X_REWRITE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 7 */
 		{ CONFIG_PROXY_CORE_MAX_POOL_SIZE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },        /* 8 */
 		{ CONFIG_PROXY_CORE_CHECK_LOCAL, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
+		{ CONFIG_PROXY_CORE_MAX_KEEP_ALIVE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },       /* 10 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -251,6 +253,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		s->response_rewrites   = proxy_rewrites_init();
 		s->request_rewrites   = proxy_rewrites_init();
 		s->check_local = 0;
+		s->max_keep_alive_requests = 0;
 
 		cv[0].destination = p->backends_arr;
 		cv[1].destination = &(s->debug);
@@ -260,6 +263,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		cv[7].destination = &(s->allow_x_rewrite);
 		cv[8].destination = &(s->max_pool_size);
 		cv[9].destination = &(s->check_local);
+		cv[10].destination = &(s->max_keep_alive_requests);
 
 		buffer_reset(p->balance_buf);
 
@@ -907,6 +911,11 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 	if (sess->proxy_con) {
 		switch (sess->proxy_con->state) {
 		case PROXY_CONNECTION_STATE_CONNECTED:
+			sess->proxy_con->request_count++;
+			if (p->conf.debug) TRACE("request_count=%d", sess->proxy_con->request_count);
+			if (sess->proxy_con->request_count >= p->conf.max_keep_alive_requests) {
+				sess->is_closing = 1;
+			}
 			/*
 			 * Set the connection to idling if:
 			 *
@@ -931,8 +940,6 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 
 		case PROXY_CONNECTION_STATE_CLOSED:
 			proxy_remove_backend_connection(srv, sess);
-			/* return so we don't wakeup a backlog connection. */
-			return HANDLER_GO_ON;
 		case PROXY_CONNECTION_STATE_IDLE:
 		default:
 			break;
@@ -944,6 +951,7 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 	if ((req = proxy_backlog_shift(p->conf.backlog))) {
 		connection *next_con = req->con;
 
+		if (p->conf.debug) TRACE("wakeup a connection from backlog: con=%d", next_con->sock->fd);
 		joblist_append(srv, next_con);
 
 		proxy_request_free(req);
@@ -1533,6 +1541,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(allow_x_rewrite);
 	PATCH_OPTION(max_pool_size);
 	PATCH_OPTION(check_local);
+	PATCH_OPTION(max_keep_alive_requests);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -1567,6 +1576,8 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(max_pool_size);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_CHECK_LOCAL))) {
 				PATCH_OPTION(check_local);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_MAX_KEEP_ALIVE))) {
+				PATCH_OPTION(max_keep_alive_requests);
 			}
 		}
 	}
@@ -1657,6 +1668,7 @@ CONNECTION_FUNC(mod_proxy_connection_reset) {
 	plugin_data *p = p_d;
 	proxy_session *sess = con->plugin_ctx[p->id];
 
+	if (p->conf.debug) TRACE("proxy_connection_reset (%d)", con->sock->fd);
 	if (!sess) return HANDLER_GO_ON;
 
 	if (sess->proxy_con) {
@@ -1793,9 +1805,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				req->added_ts = srv->cur_ts;
 				req->con = con;
 
-#if 0
-				TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
-#endif
+				if (p->conf.debug)TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
 				proxy_backlog_push(p->conf.backlog, req);
 
 				sess->sent_to_backlog++;
@@ -1874,6 +1884,7 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 
 	UNUSED(srv);
 
+	if (p->conf.debug) TRACE("proxy_connection_close (%d)", con->sock->fd);
 	if (con->mode != p->id) return HANDLER_GO_ON;
 
 	return HANDLER_GO_ON;
@@ -1937,6 +1948,7 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
 	for (woken_up = 0; woken_up < conns_available && (req = proxy_backlog_shift(p->backlog)); woken_up++) {
 		connection *con = req->con;
 
+		if (p->debug) TRACE("wakeup a connection from backlog: con=%d", con->sock->fd);
 		joblist_append(srv, con);
 
 		proxy_request_free(req);

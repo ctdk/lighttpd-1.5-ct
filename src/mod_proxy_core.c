@@ -277,13 +277,9 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		if (!buffer_is_empty(p->balance_buf)) {
 			data_integer *di;
 
-			if (NULL == (di = (data_integer *)array_get_element(p->possible_balancers, BUF_STR(p->balance_buf)))) {
-				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
-
-				return HANDLER_ERROR;
+			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, BUF_STR(p->balance_buf)))) {
+				s->balancer = di->value;
 			}
-
-			s->balancer = di->value;
 		}
 
 		if (!buffer_is_empty(p->protocol_buf)) {
@@ -297,6 +293,11 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 				return HANDLER_ERROR;
 			}
 			s->protocol = protocol;
+			/* we need a balancer */
+			if (s->balancer == PROXY_BALANCE_UNSET) {
+				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
+				return HANDLER_ERROR;
+			}
 		}
 
 		if (p->backends_arr->used) {

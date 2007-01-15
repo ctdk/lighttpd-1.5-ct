@@ -1208,8 +1208,8 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			/* the connection got close while sending the request content up
 			 * to the backend, for now handle this as error */
 
-			TRACE("%s", "(con-close)");
-			return HANDLER_ERROR;
+			if (p->conf.debug) TRACE("%s", "connection to backend closed when sending request headers/content.");
+			return HANDLER_COMEBACK;
 		default:
 			TRACE("%s", "(error)");
 			return HANDLER_ERROR;
@@ -1291,7 +1291,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 				 * 3. we read() ... and finally receive the close-event for the connection
 				 */
 
-				ERROR("%s", "++ oops, connection closed while waiting to read a response, restarting");
+				if (p->conf.debug) ERROR("%s", "connection closed while waiting to read a response, restarting");
 
 				return HANDLER_COMEBACK;
 			}
@@ -1640,6 +1640,8 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 		/* a session lives for a single request */
 		sess = proxy_session_init();
 	}
+	/* make sure the state is correct. */
+	sess->state = PROXY_STATE_UNSET;
 
 	con->plugin_ctx[p->id] = sess;
 	con->mode = p->id;
@@ -1665,12 +1667,17 @@ SUBREQUEST_FUNC(mod_proxy_core_match_local_file) {
 /**
  * end of a request
  */
-CONNECTION_FUNC(mod_proxy_connection_reset) {
+REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 	plugin_data *p = p_d;
 	proxy_session *sess = con->plugin_ctx[p->id];
 
-	if (p->conf.debug) TRACE("proxy_connection_reset (%d)", con->sock->fd);
 	if (!sess) return HANDLER_GO_ON;
+
+	/* TODO: copy p->conf into proxy_session when request starts. */
+	/* re-patch p->conf */
+	mod_proxy_core_patch_connection(srv, con, p);
+
+	if (p->conf.debug) TRACE("proxy_connection_reset (%d)", con->sock->fd);
 
 	if (sess->proxy_con) {
 		proxy_recycle_backend_connection(srv, p, sess);
@@ -1693,6 +1700,11 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	proxy_session *sess = con->plugin_ctx[p->id];
 
 	if (p->id != con->mode) return HANDLER_GO_ON;
+	if (!sess) return HANDLER_GO_ON;
+
+	/* TODO: copy p->conf into proxy_session when request starts. */
+	/* re-patch p->conf */
+	mod_proxy_core_patch_connection(srv, con, p);
 
 	/*
 	 * 0. build session
@@ -1705,8 +1717,6 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	 * 7. session finished wait for request close
 	 * 8. kill session
 	 * */
-
-	assert(sess);
 
 	if (sess->do_internal_redirect) {
 		if (sess->internal_redirect_count > MAX_INTERNAL_REDIRECTS) {
@@ -1842,6 +1852,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_WAIT_FOR_EVENT:
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_COMEBACK:
+			sess->state = PROXY_STATE_FINISHED;
 			/* request finished do redirect. */
 			if (sess->do_internal_redirect) {
 				/* recycle proxy connection. */
@@ -1849,7 +1860,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				return HANDLER_COMEBACK;
 			}
 			/* restart the connection to the backend */
-			TRACE("%s", "write failed, restarting request");
+			if (p->conf.debug) TRACE("%s", "write failed, restarting request");
 			proxy_remove_backend_connection(srv, sess);
 			break;
 		case HANDLER_GO_ON:
@@ -1876,19 +1887,6 @@ CONNECTION_FUNC(mod_proxy_send_request_content) {
 
 	/* copy the chunks to our queue and call the state-engine to send it out */
 	return mod_proxy_core_start_backend(srv, con, p_d);
-}
-/**
- * end of the connection to the client
- */
-REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
-	plugin_data *p = p_d;
-
-	UNUSED(srv);
-
-	if (p->conf.debug) TRACE("proxy_connection_close (%d)", con->sock->fd);
-	if (con->mode != p->id) return HANDLER_GO_ON;
-
-	return HANDLER_GO_ON;
 }
 
 /**
@@ -1980,7 +1978,7 @@ int mod_proxy_core_plugin_init(plugin *p) {
 	p->handle_start_backend = mod_proxy_core_match_local_file;
 	p->handle_send_request_content = mod_proxy_send_request_content;
 	p->handle_read_response_content = mod_proxy_core_start_backend;
-	p->connection_reset        = mod_proxy_connection_reset;
+	p->connection_reset        = mod_proxy_connection_close_callback;
 	p->handle_connection_close = mod_proxy_connection_close_callback;
 	p->handle_trigger          = mod_proxy_trigger;
 

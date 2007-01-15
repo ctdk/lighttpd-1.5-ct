@@ -1181,7 +1181,7 @@ int connection_state_machine(server *srv, connection *con) {
 				return HANDLER_WAIT_FOR_EVENT;
 			default:
 				/* something strange happened */
-				TRACE("%s", "(error)");
+				TRACE("(error) plugins_call_handle_send_request_content(): r = %d", r);
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}

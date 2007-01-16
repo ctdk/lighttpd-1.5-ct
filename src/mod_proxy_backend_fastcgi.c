@@ -424,6 +424,7 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 		}
 		/* make sure we have the full fastcgi header. */
 		if(we_need > 0) {
+			chunkqueue_remove_finished_chunks(in);
 			/* we need more data to parse the header. */
 			return 0;
 		}

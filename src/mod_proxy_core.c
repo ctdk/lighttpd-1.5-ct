@@ -1317,7 +1317,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
 			case NETWORK_STATUS_CONNECTION_CLOSE:
 				/* connection to backend is gone, cleanup backend connection. */
-				proxy_remove_backend_connection(srv, sess);
+				sess->is_closing = 1;
 
 				/* We might have read all of the response content.
 				 *
@@ -1360,6 +1360,9 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			break;
 		}
 		chunkqueue_remove_finished_chunks(sess->recv_raw);
+		if (sess->recv_raw->is_closed || sess->is_closing) {
+			sess->recv->is_closed = 1;
+		}
 
 		proxy_copy_response(srv, con, sess);
 

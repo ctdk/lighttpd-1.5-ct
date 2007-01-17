@@ -664,6 +664,18 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			if (p->conf.allow_x_rewrite) {
 				do_x_rewrite = 1;
 				buffer_copy_string_buffer(con->request.http_host, header->value);
+				/* replace Host request header */
+				if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Host"))) {
+					buffer_copy_string_buffer(ds->value, header->value);
+				} else {
+					/* insert Host request header */
+					if (NULL == (ds = (data_string *)array_get_unused_element(con->request.headers, TYPE_STRING))) {
+						ds = data_response_init();
+					}
+					buffer_copy_string(ds->key, "Host");
+					buffer_copy_string_buffer(ds->value, header->value);
+					array_insert_unique(con->request.headers, (data_unset *)ds);
+				}
 			}
 
 			continue;

@@ -279,6 +279,9 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 
 			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, CONST_BUF_LEN(p->balance_buf)))) {
 				s->balancer = di->value;
+			} else {
+				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
+				return HANDLER_ERROR;
 			}
 		}
 
@@ -293,11 +296,6 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 				return HANDLER_ERROR;
 			}
 			s->protocol = protocol;
-			/* we need a balancer */
-			if (s->balancer == PROXY_BALANCE_UNSET) {
-				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
-				return HANDLER_ERROR;
-			}
 		}
 
 		if (p->backends_arr->used) {
@@ -1501,6 +1499,7 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_session
 		}
 
 		break;
+	case PROXY_BALANCE_UNSET: /* if not set, use round-robin as default */
 	case PROXY_BALANCE_RR:
 		/* round robin */
 
@@ -1533,8 +1532,6 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_session
 			if (rand_ndx == active_addresses++) break;
 		}
 
-		break;
-	default:
 		break;
 	}
 

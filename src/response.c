@@ -187,9 +187,9 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		buffer_to_lower(con->uri.authority);
 
 		config_patch_connection(srv, con, COMP_HTTP_HOST);      /* Host:        */
-		config_patch_connection(srv, con, COMP_HTTP_REMOTEIP);  /* Client-IP */
+		config_patch_connection(srv, con, COMP_HTTP_REMOTE_IP); /* Client-IP */
 		config_patch_connection(srv, con, COMP_HTTP_REFERER);   /* Referer:     */
-		config_patch_connection(srv, con, COMP_HTTP_USERAGENT); /* User-Agent:  */
+		config_patch_connection(srv, con, COMP_HTTP_USER_AGENT);/* User-Agent:  */
 		config_patch_connection(srv, con, COMP_HTTP_COOKIE);    /* Cookie:  */
 
 		/** their might be a fragment which has to be cut away */
@@ -276,7 +276,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		 */
 
 		config_patch_connection(srv, con, COMP_HTTP_URL); /* HTTPurl */
-		config_patch_connection(srv, con, COMP_HTTP_QUERYSTRING); /* HTTPqs */
+		config_patch_connection(srv, con, COMP_HTTP_QUERY_STRING); /* HTTPqs */
 
 		/* do we have to downgrade to 1.0 ? */
 		if (!con->conf.allow_http11) {
@@ -627,6 +627,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				log_error_write(srv, __FILE__, __LINE__,  "sb", "Pathinfo     :", con->request.pathinfo);
 			}
 		}
+
+		config_patch_connection(srv, con, COMP_PHYSICAL_PATH);    /* physical-path  */
 
 		if (con->conf.log_request_handling) {
 			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling subrequest");

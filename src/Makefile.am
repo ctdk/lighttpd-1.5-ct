@@ -1,7 +1,11 @@
 AM_CFLAGS = $(FAM_CFLAGS)
 
-noinst_PROGRAMS=proc_open lemon # simple-fcgi #graphic evalo bench ajp ssl error_test adserver gen-license
+noinst_PROGRAMS=proc_open lemon # simple-fcgi 
+if CHECK_WITH_FASTCGI
+sbin_PROGRAMS=lighttpd fcgi-stat-accel
+else
 sbin_PROGRAMS=lighttpd 
+endif
 bin_PROGRAMS=spawn-fcgi
 LEMON=$(top_builddir)/src/lemon
 
@@ -75,6 +79,11 @@ src = server.c response.c connections.c network.c \
       configfile.c configparser.c request.c proc_open.c
 
 spawn_fcgi_SOURCES=spawn-fcgi.c
+
+if CHECK_WITH_FASTCGI
+fcgi_stat_accel_SOURCES=fcgi-stat-accel.c
+fcgi_stat_accel_LDADD = $(FCGI_LIB)
+endif
 
 lib_LTLIBRARIES = 
 

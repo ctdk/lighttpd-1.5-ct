@@ -611,7 +611,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			/* don't save this header, other modules might change the content length. */
 			continue;
 		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Sendfile")) ||
-			   0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-Sendfile"))) {
+			   0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-LIGHTTPD-send-file"))) {
 			if (p->conf.allow_x_sendfile) {
 				sess->send_response_content = 0;
 				sess->do_internal_redirect = 1;

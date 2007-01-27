@@ -652,7 +652,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 			/* the response might change according to Accept-Encoding */
 			response_header_insert(srv, con, CONST_STR_LEN("Vary"), CONST_STR_LEN("Accept-Encoding"));
 
-			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Accept-Encoding"))) {
+			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Accept-Encoding")))) {
 				int accept_encoding = 0;
 				char *value = ds->value->ptr;
 				int srv_encodings = 0;

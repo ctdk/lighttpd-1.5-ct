@@ -224,7 +224,7 @@ static handler_t mod_auth_uri_handler(server *srv, connection *con, void *p_d) {
 
 	/* try to get Authorization-header */
 
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Authorization"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Authorization")))) {
 		http_authorization = ds->value->ptr;
 	}
 
@@ -232,7 +232,7 @@ static handler_t mod_auth_uri_handler(server *srv, connection *con, void *p_d) {
 		char *auth_realm;
 		data_string *method;
 
-		method = (data_string *)array_get_element(req, "method");
+		method = (data_string *)array_get_element(req, CONST_STR_LEN("method"));
 
 		/* parse auth-header */
 		if (NULL != (auth_realm = strchr(http_authorization, ' '))) {
@@ -265,8 +265,8 @@ static handler_t mod_auth_uri_handler(server *srv, connection *con, void *p_d) {
 
 	if (!auth_satisfied) {
 		data_string *method, *realm;
-		method = (data_string *)array_get_element(req, "method");
-		realm = (data_string *)array_get_element(req, "realm");
+		method = (data_string *)array_get_element(req, CONST_STR_LEN("method"));
+		realm = (data_string *)array_get_element(req, CONST_STR_LEN("realm"));
 
 		con->http_status = 401;
 
@@ -395,7 +395,7 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 		}
 
 		/* no auth.require for this section */
-		if (NULL == (da = (data_array *)array_get_element(ca, "auth.require"))) continue;
+		if (NULL == (da = (data_array *)array_get_element(ca, CONST_STR_LEN("auth.require")))) continue;
 
 		if (da->type != TYPE_ARRAY) continue;
 

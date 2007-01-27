@@ -433,7 +433,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("If-Modified-Since")))) {
 			data_string *old;
 
-			if (NULL != (old = (data_string *)array_get_element(con->request.headers, "If-Modified-Since"))) {
+			if (NULL != (old = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("If-Modified-Since")))) {
 				if (0 != buffer_caseless_compare(CONST_BUF_LEN(old->value), CONST_BUF_LEN(ds->value))) {
 					/* duplicate header and different timestamps */
 					con->http_status = 400;
@@ -446,7 +446,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("If-None-Match")))) {
 			data_string *old;
 			/* if dup, only the first one will survive */
-			if (NULL != (old = (data_string *)array_get_element(con->request.headers, "If-None-Match"))) {
+			if (NULL != (old = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("If-None-Match")))) {
 				if (0 != buffer_caseless_compare(CONST_BUF_LEN(old->value), CONST_BUF_LEN(ds->value))) {
 					/* duplicate header and different timestamps */
 					con->http_status = 400;
@@ -457,7 +457,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 				}
 			}
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("Range")))) {
-			if (NULL != array_get_element(con->request.headers, "Range")) {
+			if (NULL != array_get_element(con->request.headers, CONST_STR_LEN("Range"))) { 
 				/* duplicate Range header */
 
 				TRACE("%s", "Range: header is duplicate (Status: 400)");

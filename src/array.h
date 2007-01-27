@@ -142,7 +142,7 @@ int array_insert_unique(array *a, data_unset *str);
 data_unset *array_pop(array *a);
 int array_print(array *a, int depth);
 data_unset *array_get_unused_element(array *a, data_type_t t);
-data_unset *array_get_element(array *a, const char *key);
+data_unset *array_get_element(array *a, const char *key, size_t key_len);
 void array_set_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
 void array_append_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
 data_unset *array_replace(array *a, data_unset *du);

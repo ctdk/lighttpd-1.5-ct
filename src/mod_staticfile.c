@@ -148,7 +148,7 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 	buffer *range = NULL;
 	http_req_range *ranges, *r;
 
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Range"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Range")))) {
 		range = ds->value;
 	} else {
 		/* we don't have a Range header */
@@ -162,7 +162,7 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 
 	con->response.content_length = 0;
 
-	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, "Content-Type"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Content-Type")))) {
 		content_type = ds->value;
 	}
 
@@ -392,7 +392,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 
 	/* set response content-type, if not set already */
 
-	if (NULL == array_get_element(con->response.headers, "Content-Type")) {
+	if (NULL == array_get_element(con->response.headers, CONST_STR_LEN("Content-Type"))) {
 		if (buffer_is_empty(sce->content_type)) {
 			response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("application/octet-stream"));
 		} else {
@@ -400,7 +400,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 		}
 	}
 
-	if (NULL == array_get_element(con->response.headers, "ETag")) {
+	if (NULL == array_get_element(con->response.headers, CONST_STR_LEN("ETag"))) {
 		/* generate e-tag */
 		etag_mutate(con->physical.etag, sce->etag);
 
@@ -409,7 +409,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	response_header_overwrite(srv, con, CONST_STR_LEN("Accept-Ranges"), CONST_STR_LEN("bytes"));
 
 	/* prepare header */
-	if (NULL == (ds = (data_string *)array_get_element(con->response.headers, "Last-Modified"))) {
+	if (NULL == (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Last-Modified")))) {
 		mtime = strftime_cache_get(srv, sce->st.st_mtime);
 		response_header_overwrite(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(mtime));
 	} else {
@@ -419,11 +419,11 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	if (HANDLER_FINISHED == http_response_handle_cachable(srv, con, mtime)) {
 		return HANDLER_FINISHED;
 	} else if (con->conf.range_requests &&
-	           NULL != array_get_element(con->request.headers, "Range")) {
+	           NULL != array_get_element(con->request.headers, CONST_STR_LEN("Range"))) {
 		int do_range_request = 1;
 		/* check if we have a conditional GET */
 
-		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "If-Range"))) {
+		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("If-Range")))) {
 			/* if the value is the same as our ETag, we do a Range-request,
 			 * otherwise a full 200 */
 

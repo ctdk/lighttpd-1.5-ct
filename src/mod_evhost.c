@@ -287,7 +287,7 @@ static handler_t mod_evhost_uri_handler(server *srv, connection *con, void *p_d)
 			if (*(ptr+1) == '%') {
 				/* %% */
 				BUFFER_APPEND_STRING_CONST(p->tmp_buf,"%");
-			} else if (NULL != (ds = (data_string *)array_get_element(parsed_host,p->conf.path_pieces[i]->ptr))) {
+			} else if (NULL != (ds = (data_string *)array_get_element(parsed_host, CONST_BUF_LEN(p->conf.path_pieces[i])))) {
 				if (ds->value->used) {
 					buffer_append_string_buffer(p->tmp_buf,ds->value);
 				}

@@ -99,7 +99,7 @@ int response_header_overwrite(server *srv, connection *con, const char *key, siz
 	UNUSED(srv);
 
 	/* if there already is a key by this name overwrite the value */
-	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, key))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, key, keylen))) {
 		buffer_copy_string(ds->value, value);
 
 		return 0;
@@ -250,8 +250,8 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 	 *    return a 304 (Not Modified) response.
 	 */
 
-	http_if_none_match = (data_string *)array_get_element(con->request.headers, "if-none-match");
-	http_if_modified_since = (data_string *)array_get_element(con->request.headers, "if-modified-since");
+	http_if_none_match = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("if-none-match"));
+	http_if_modified_since = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("if-modified-since"));
 
 	/* last-modified handling */
 	if (http_if_none_match) {

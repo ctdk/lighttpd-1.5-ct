@@ -199,7 +199,7 @@ FREE_FUNC(mod_dirlisting_free) {
 static int parse_config_entry(server *srv, plugin_config *s, array *ca, const char *option) {
 	data_unset *du;
 
-	if (NULL != (du = array_get_element(ca, option))) {
+	if (NULL != (du = array_get_element(ca, option, strlen(option)))) {
 		data_array *da = (data_array *)du;
 		size_t j;
 
@@ -885,7 +885,7 @@ URIHANDLER_FUNC(mod_dirlisting_subrequest) {
 	response_header_overwrite(srv, con, CONST_STR_LEN("ETag"), CONST_BUF_LEN(con->physical.etag));
 
 	/* prepare header */
-	if (NULL == (ds = (data_string *)array_get_element(con->response.headers, "Last-Modified"))) {
+	if (NULL == (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Last-Modified")))) {
 		mtime = strftime_cache_get(srv, sce->st.st_mtime);
 		response_header_overwrite(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(mtime));
 	} else {

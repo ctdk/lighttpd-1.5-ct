@@ -100,7 +100,7 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 			return HANDLER_ERROR;
 		}
 
-		if (NULL == (du = array_get_element(ca, "url.redirect"))) {
+		if (NULL == (du = array_get_element(ca, CONST_STR_LEN("url.redirect")))) {
 			/* no url.redirect defined */
 			continue;
 		}

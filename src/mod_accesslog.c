@@ -728,14 +728,14 @@ REQUESTDONE_FUNC(log_access_write) {
 				}
 				break;
 			case FORMAT_HEADER:
-				if (NULL != (ds = (data_string *)array_get_element(con->request.headers, p->conf.parsed_format->ptr[j]->string->ptr))) {
+				if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_BUF_LEN(p->conf.parsed_format->ptr[j]->string)))) {
 					buffer_append_string_buffer(b, ds->value);
 				} else {
 					BUFFER_APPEND_STRING_CONST(b, "-");
 				}
 				break;
 			case FORMAT_RESPONSE_HEADER:
-				if (NULL != (ds = (data_string *)array_get_element(con->response.headers, p->conf.parsed_format->ptr[j]->string->ptr))) {
+				if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_BUF_LEN(p->conf.parsed_format->ptr[j]->string)))) {
 					buffer_append_string_buffer(b, ds->value);
 				} else {
 					BUFFER_APPEND_STRING_CONST(b, "-");

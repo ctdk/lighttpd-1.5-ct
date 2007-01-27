@@ -467,7 +467,7 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 
 			b = chunkqueue_get_append_buffer(con->send);
 
-			if (NULL != (ds = (data_string *)array_get_element(p->ssi_cgi_env, var_val))) {
+			if (NULL != (ds = (data_string *)array_get_element(p->ssi_cgi_env, var_val, strlen(var_val)))) {
 				buffer_copy_string_buffer(b, ds->value);
 			} else {
 				buffer_copy_string(b, "(none)");

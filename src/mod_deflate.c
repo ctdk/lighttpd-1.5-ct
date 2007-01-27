@@ -1099,12 +1099,12 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	}
 
 	/* Check if response has a Content-Encoding. */
-	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, "Content-Encoding"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Content-Encoding")))) {
 		return HANDLER_GO_ON;
 	}
 
 	/* Check Accept-Encoding for supported encoding. */
-	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "Accept-Encoding"))) {
+	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Accept-Encoding")))) {
 		return HANDLER_GO_ON;
 	}
 		
@@ -1187,7 +1187,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	}
 
 	/* Check mimetype in response header "Content-Type" */
-	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, "Content-Type"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Content-Type")))) {
 		int found = 0;
 		if(p->conf.debug) {
 			log_error_write(srv, __FILE__, __LINE__, "sb",
@@ -1230,7 +1230,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	}
 
 	/* the response might change according to Accept-Encoding */
-	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, "Vary"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Vary")))) {
 		/* append Accept-Encoding to Vary header */
 		if (NULL == strstr(ds->value->ptr, "Accept-Encoding")) {
 			buffer_append_string(ds->value, ",Accept-Encoding");
@@ -1257,9 +1257,11 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 
 	/* select best matching encoding */
 	if (matched_encodings & HTTP_ACCEPT_ENCODING_BZIP2) {
+#ifdef USE_BZ2LIB
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_BZIP2;
 		compression_name = dflt_bzip2;
 		rc = stream_bzip2_init(srv, con, hctx);
+#endif
 	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_GZIP) {
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_GZIP;
 		compression_name = dflt_gzip;

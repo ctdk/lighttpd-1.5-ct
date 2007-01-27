@@ -1226,7 +1226,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 	if (con->physical.path->used == 0) return HANDLER_GO_ON;
 
 	/* PROPFIND need them */
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Depth"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Depth")))) {
 		depth = strtol(ds->value->ptr, NULL, 10);
 	}
 
@@ -1632,7 +1632,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		 *
 		 * Example: Content-Range: bytes 100-1037/1038 */
 
-		if (NULL != (ds_range = (data_string *)array_get_element(con->request.headers, "Content-Range"))) {
+		if (NULL != (ds_range = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Content-Range")))) {
 			const char *num = ds_range->value->ptr;
 			off_t offset;
 			char *err = NULL;
@@ -1795,14 +1795,14 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			}
 		}
 
-		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Destination"))) {
+		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Destination")))) {
 			destination = ds->value;
 		} else {
 			con->http_status = 400;
 			return HANDLER_FINISHED;
 		}
 
-		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Overwrite"))) {
+		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Overwrite")))) {
 			if (ds->value->used != 2 ||
 			    (ds->value->ptr[0] != 'F' &&
 			     ds->value->ptr[0] != 'T') )  {

@@ -44,7 +44,7 @@ static data_unset *configparser_get_variable(config_t *ctx, const buffer *key) {
     fprintf(stderr, "get var on block: %s\n", dc->key->ptr);
     array_print(dc->value, 0);
 #endif
-    if (NULL != (du = array_get_element(dc->value, key->ptr))) {
+    if (NULL != (du = array_get_element(dc->value, CONST_BUF_LEN(key)))) {
       return du->copy(du);
     }
   }
@@ -149,7 +149,7 @@ varline ::= key(A) ASSIGN expression(B). {
         ctx->current->context_ndx,
         ctx->current->key->ptr, A->ptr);
     ctx->ok = 0;
-  } else if (NULL == array_get_element(ctx->current->value, B->key->ptr)) {
+  } else if (NULL == array_get_element(ctx->current->value, CONST_BUF_LEN(B->key))) {
     array_insert_unique(ctx->current->value, B);
     B = NULL;
   } else {
@@ -173,7 +173,7 @@ varline ::= key(A) APPEND expression(B). {
         ctx->current->context_ndx,
         ctx->current->key->ptr, A->ptr);
     ctx->ok = 0;
-  } else if (NULL != (du = array_get_element(vars, A->ptr))) {
+  } else if (NULL != (du = array_get_element(vars, CONST_BUF_LEN(A)))) {
     /* exists in current block */
     du = configparser_merge_data(du, B);
     if (NULL == du) {
@@ -286,7 +286,7 @@ array(A) ::= LPARAN aelements(B) RPARAN. {
 
 aelements(A) ::= aelements(C) COMMA aelement(B). {
   if (buffer_is_empty(B->key) ||
-      NULL == array_get_element(C, B->key->ptr)) {
+      NULL == array_get_element(C, CONST_BUF_LEN(B->key))) {
     array_insert_unique(C, B);
     B = NULL;
   } else {
@@ -330,7 +330,7 @@ eols ::= .
 
 globalstart ::= GLOBAL. {
   data_config *dc;
-  dc = (data_config *)array_get_element(ctx->srv->config_context, "global");
+  dc = (data_config *)array_get_element(ctx->srv->config_context, CONST_STR_LEN("global"));
   assert(dc);
   configparser_push(ctx, dc, 0);
 }
@@ -407,7 +407,7 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET stringop(C) RBRACKET cond(E) expressio
   rvalue = ((data_string*)D)->value;
   buffer_append_string_buffer(b, rvalue);
   
-  if (NULL != (dc = (data_config *)array_get_element(ctx->all_configs, b->ptr))) {
+  if (NULL != (dc = (data_config *)array_get_element(ctx->all_configs, CONST_BUF_LEN(b)))) {
     configparser_push(ctx, dc, 0);
   } else {
     struct {

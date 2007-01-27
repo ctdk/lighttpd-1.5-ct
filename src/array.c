@@ -96,7 +96,7 @@ static int array_get_index(array *a, const char *key, size_t keylen, int *rndx) 
 		} else if (pos >= (int)a->used) {
 			pos -= i;
 		} else {
-			cmp = buffer_caseless_compare(key, keylen, a->data[a->sorted[pos]]->key->ptr, a->data[a->sorted[pos]]->key->used);
+			cmp = buffer_caseless_compare(key, keylen + 1, a->data[a->sorted[pos]]->key->ptr, a->data[a->sorted[pos]]->key->used);
 
 			if (cmp == 0) {
 				/* found */
@@ -116,10 +116,10 @@ static int array_get_index(array *a, const char *key, size_t keylen, int *rndx) 
 	return ndx;
 }
 
-data_unset *array_get_element(array *a, const char *key) {
+data_unset *array_get_element(array *a, const char *key, size_t keylen) {
 	int ndx;
 
-	if (-1 != (ndx = array_get_index(a, key, strlen(key) + 1, NULL))) {
+	if (-1 != (ndx = array_get_index(a, key, keylen, NULL))) {
 		/* found, leave here */
 
 		return a->data[ndx];
@@ -149,7 +149,7 @@ data_unset *array_get_unused_element(array *a, data_type_t t) {
 void array_set_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len) {
 	data_string *ds_dst;
 
-	if (NULL != (ds_dst = (data_string *)array_get_element(hdrs, key))) {
+	if (NULL != (ds_dst = (data_string *)array_get_element(hdrs, key, key_len))) {
 		buffer_copy_string_len(ds_dst->value, value, val_len);
 		return;
 	}

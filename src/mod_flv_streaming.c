@@ -217,7 +217,7 @@ URIHANDLER_FUNC(mod_flv_streaming_path_handler) {
 			buffer_copy_string_buffer(p->query_str, con->uri.query);
 			split_get_params(p->get_params, p->query_str);
 
-			if (NULL == (get_param = (data_string *)array_get_element(p->get_params, "start"))) {
+			if (NULL == (get_param = (data_string *)array_get_element(p->get_params, CONST_STR_LEN("start")))) {
 				return HANDLER_GO_ON;
 			}
 

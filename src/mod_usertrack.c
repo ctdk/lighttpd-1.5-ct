@@ -182,7 +182,7 @@ URIHANDLER_FUNC(mod_usertrack_uri_handler) {
 
 	mod_usertrack_patch_connection(srv, con, p);
 
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Cookie"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Cookie")))) {
 		char *g;
 		/* we have a cookie, does it contain a valid name ? */
 

@@ -1026,7 +1026,7 @@ int connection_state_machine(server *srv, connection *con) {
 				con->send->is_closed = 1; /* there is no content */
 
 				connection_set_state(srv, con, CON_STATE_HANDLE_RESPONSE_HEADER);
-			} else if (array_get_element(con->request.headers, "Expect")) {
+			} else if (array_get_element(con->request.headers, CONST_STR_LEN("Expect"))) {
 				/* write */
 				con->http_status = 100;
 				con->send->is_closed = 1;

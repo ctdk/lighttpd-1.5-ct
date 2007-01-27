@@ -33,7 +33,7 @@ response_hdr ::= headers CRLF . {
 
     buffer_copy_string(resp->reason, ""); /* no reason */
 
-    if (NULL == (ds = (data_string *)array_get_element(resp->headers, "Status"))) { 
+    if (NULL == (ds = (data_string *)array_get_element(resp->headers, CONST_STR_LEN("Status")))) { 
         resp->status = 0;
     } else {
         char *err;

@@ -144,7 +144,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 	data_unset *du;
 	size_t j;
 
-	if (NULL != (du = array_get_element(src, config_key))) {
+	if (NULL != (du = array_get_element(src, config_key, strlen(config_key)))) {
 		data_array *keys = (data_array *)du;
 
 		if (keys->type != TYPE_ARRAY) {
@@ -277,7 +277,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		if (!buffer_is_empty(p->balance_buf)) {
 			data_integer *di;
 
-			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, BUF_STR(p->balance_buf)))) {
+			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, CONST_BUF_LEN(p->balance_buf)))) {
 				s->balancer = di->value;
 			}
 		}
@@ -665,7 +665,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 				do_x_rewrite = 1;
 				buffer_copy_string_buffer(con->request.http_host, header->value);
 				/* replace Host request header */
-				if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Host"))) {
+				if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Host")))) {
 					buffer_copy_string_buffer(ds->value, header->value);
 				} else {
 					/* insert Host request header */

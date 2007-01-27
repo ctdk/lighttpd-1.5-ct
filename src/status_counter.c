@@ -32,7 +32,7 @@ data_integer *status_counter_get_counter(const char *s, size_t len) {
 	data_integer *di;
 	array *status = status_counter_get_array();
 
-	if (NULL == (di = (data_integer *)array_get_element(status, s))) {
+	if (NULL == (di = (data_integer *)array_get_element(status, s, len))) {
 		/* not found, create it */
 
 		if (NULL == (di = (data_integer *)array_get_unused_element(status, TYPE_INTEGER))) {

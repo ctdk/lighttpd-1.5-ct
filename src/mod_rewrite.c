@@ -88,7 +88,7 @@ FREE_FUNC(mod_rewrite_free) {
 static int parse_config_entry(server *srv, plugin_config *s, array *ca, const char *option, int once) {
 	data_unset *du;
 
-	if (NULL != (du = array_get_element(ca, option))) {
+	if (NULL != (du = array_get_element(ca, option, strlen(option)))) {
 		data_array *da = (data_array *)du;
 		size_t j;
 

@@ -6,7 +6,6 @@
 # include <crypt.h>
 #elif defined(__linux__)
 /* linux needs _XOPEN_SOURCE */
-# define _XOPEN_SOURCE
 #endif
 
 #ifdef HAVE_LIBCRYPT
@@ -322,7 +321,7 @@ static int http_auth_match_rules(server *srv, mod_auth_plugin_data *p, const cha
 
 	req = ((data_array *)(p->conf.auth_require->data[i]))->value;
 
-	require = (data_string *)array_get_element(req, "require");
+	require = (data_string *)array_get_element(req, CONST_STR_LEN("require"));
 
 	/* if we get here, the user we got a authed user */
 	if (buffer_is_equal_string(require->value, CONST_STR_LEN("valid-user"))) {
@@ -828,7 +827,7 @@ int http_auth_basic_check(server *srv, connection *con, mod_auth_plugin_data *p,
 
 	data_string *realm;
 
-	realm = (data_string *)array_get_element(req, "realm");
+	realm = (data_string *)array_get_element(req, CONST_STR_LEN("realm"));
 
 	username = buffer_init();
 	password = buffer_init();

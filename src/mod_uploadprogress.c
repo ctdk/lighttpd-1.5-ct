@@ -208,7 +208,7 @@ buffer *get_tracking_id(plugin_data *p, connection *con) {
 	size_t i;
 
 	/* the request has to contain a 32byte ID */
-	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, "X-Progress-ID"))) {
+	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("X-Progress-ID")))) {
 		/* perhaps the POST request is using the querystring to pass the X-Progress-ID */
 		if (buffer_is_empty(con->uri.query)) {
 			/*

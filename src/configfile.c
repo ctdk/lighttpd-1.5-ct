@@ -977,13 +977,13 @@ int config_read(server *srv, const char *fn) {
 		return ret;
 	}
 
-	if (NULL != (dc = (data_config *)array_get_element(srv->config_context, "global"))) {
+	if (NULL != (dc = (data_config *)array_get_element(srv->config_context, CONST_STR_LEN("global")))) {
 		srv->config = dc->value;
 	} else {
 		return -1;
 	}
 
-	if (NULL != (modules = (data_array *)array_get_element(srv->config, "server.modules"))) {
+	if (NULL != (modules = (data_array *)array_get_element(srv->config, CONST_STR_LEN("server.modules")))) {
 		data_string *ds;
 		data_array *prepends;
 
@@ -995,7 +995,7 @@ int config_read(server *srv, const char *fn) {
 		prepends = data_array_init();
 
 		/* prepend default modules */
-		if (NULL == array_get_element(modules->value, "mod_indexfile")) {
+		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_indexfile"))) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_indexfile");
 			array_insert_unique(prepends->value, (data_unset *)ds);
@@ -1008,19 +1008,19 @@ int config_read(server *srv, const char *fn) {
 		modules = prepends;
 
 		/* append default modules */
-		if (NULL == array_get_element(modules->value, "mod_dirlisting")) {
+		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_dirlisting"))) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_dirlisting");
 			array_insert_unique(modules->value, (data_unset *)ds);
 		}
 
-		if (NULL == array_get_element(modules->value, "mod_staticfile")) {
+		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_staticfile"))) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_staticfile");
 			array_insert_unique(modules->value, (data_unset *)ds);
 		}
 
-		if (NULL == array_get_element(modules->value, "mod_chunked")) {
+		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_chunked"))) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_chunked");
 			array_insert_unique(modules->value, (data_unset *)ds);

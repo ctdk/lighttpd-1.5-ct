@@ -336,7 +336,7 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 	if (!p->conf.mc) return HANDLER_GO_ON;
 # endif
 
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "X-Forwarded-For"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("X-Forwarded-For")))) {
 		/* X-Forwarded-For contains the ip behind the proxy */
 
 		remote_ip = ds->value->ptr;

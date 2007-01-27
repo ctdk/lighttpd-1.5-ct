@@ -79,6 +79,8 @@ FREE_FUNC(mod_auth_free) {
 			buffer_free(s->auth_ldap_bindpw);
 			buffer_free(s->auth_ldap_filter);
 			buffer_free(s->auth_ldap_cafile);
+			buffer_free(s->auth_ldap_cert);
+			buffer_free(s->auth_ldap_key);
 
 #ifdef USE_LDAP
 			buffer_free(s->ldap_filter_pre);
@@ -114,6 +116,8 @@ static int mod_auth_patch_connection(server *srv, connection *con, mod_auth_plug
 	PATCH_OPTION(auth_ldap_bindpw);
 	PATCH_OPTION(auth_ldap_filter);
 	PATCH_OPTION(auth_ldap_cafile);
+	PATCH_OPTION(auth_ldap_cert);
+	PATCH_OPTION(auth_ldap_key);
 	PATCH_OPTION(auth_ldap_starttls);
 	PATCH_OPTION(auth_ldap_allow_empty_pw);
 #ifdef USE_LDAP
@@ -161,6 +165,10 @@ static int mod_auth_patch_connection(server *srv, connection *con, mod_auth_plug
 				PATCH_OPTION(auth_ldap_filter);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("auth.backend.ldap.ca-file"))) {
 				PATCH_OPTION(auth_ldap_cafile);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("auth.backend.ldap.cert"))) {
+				PATCH_OPTION(auth_ldap_cert);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("auth.backend.ldap.key"))) {
+				PATCH_OPTION(auth_ldap_key);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("auth.backend.ldap.starttls"))) {
 				PATCH_OPTION(auth_ldap_starttls);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("auth.backend.ldap.allow-empty-pw"))) {
@@ -306,20 +314,22 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 
 	config_values_t cv[] = {
 		{ "auth.backend",                   NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 0 */
-		{ "auth.backend.plain.groupfile",   NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.plain.userfile",    NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.require",                   NULL, T_CONFIG_LOCAL, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.ldap.hostname",     NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.ldap.base-dn",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.ldap.filter",       NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.ldap.ca-file",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.ldap.starttls",     NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
- 		{ "auth.backend.ldap.bind-dn",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
- 		{ "auth.backend.ldap.bind-pw",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 10 */
-		{ "auth.backend.ldap.allow-empty-pw",     NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.htdigest.userfile", NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.backend.htpasswd.userfile", NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
-		{ "auth.debug",                     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },  /* 13 */
+		{ "auth.backend.plain.groupfile",   NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 1 */
+		{ "auth.backend.plain.userfile",    NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 2 */
+		{ "auth.require",                   NULL, T_CONFIG_LOCAL, T_CONFIG_SCOPE_CONNECTION },  /* 3 */
+		{ "auth.backend.ldap.hostname",     NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 4 */
+		{ "auth.backend.ldap.base-dn",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 5 */
+		{ "auth.backend.ldap.filter",       NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 6 */
+		{ "auth.backend.ldap.ca-file",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 7 */
+		{ "auth.backend.ldap.cert",         NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 8 */
+		{ "auth.backend.ldap.key",          NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 9 */
+		{ "auth.backend.ldap.starttls",     NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 10 */
+ 		{ "auth.backend.ldap.bind-dn",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 11 */
+ 		{ "auth.backend.ldap.bind-pw",      NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 12 */
+		{ "auth.backend.ldap.allow-empty-pw",     NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 13 */
+		{ "auth.backend.htdigest.userfile", NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 14 */
+		{ "auth.backend.htpasswd.userfile", NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 15 */
+		{ "auth.debug",                     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },  /* 16 */
 		{ NULL,                             NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -344,6 +354,8 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 		s->auth_ldap_bindpw = buffer_init();
 		s->auth_ldap_filter = buffer_init();
 		s->auth_ldap_cafile = buffer_init();
+		s->auth_ldap_cert   = buffer_init();
+		s->auth_ldap_key    = buffer_init();
 		s->auth_ldap_starttls = 0;
 		s->auth_debug = 0;
 
@@ -363,13 +375,15 @@ SETDEFAULTS_FUNC(mod_auth_set_defaults) {
 		cv[5].destination = s->auth_ldap_basedn;
 		cv[6].destination = s->auth_ldap_filter;
 		cv[7].destination = s->auth_ldap_cafile;
-		cv[8].destination = &(s->auth_ldap_starttls);
-		cv[9].destination = s->auth_ldap_binddn;
-		cv[10].destination = s->auth_ldap_bindpw;
-		cv[11].destination = &(s->auth_ldap_allow_empty_pw);
-		cv[12].destination = s->auth_htdigest_userfile;
-		cv[13].destination = s->auth_htpasswd_userfile;
-		cv[14].destination = &(s->auth_debug);
+		cv[8].destination = s->auth_ldap_cert;
+		cv[9].destination = s->auth_ldap_key;
+		cv[10].destination = &(s->auth_ldap_starttls);
+		cv[11].destination = s->auth_ldap_binddn;
+		cv[12].destination = s->auth_ldap_bindpw;
+		cv[13].destination = &(s->auth_ldap_allow_empty_pw);
+		cv[14].destination = s->auth_htdigest_userfile;
+		cv[15].destination = s->auth_htpasswd_userfile;
+		cv[16].destination = &(s->auth_debug);
 
 		p->config_storage[i] = s;
 		ca = ((data_config *)srv->config_context->data[i])->value;
@@ -608,6 +622,26 @@ handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s) {
 							log_error_write(srv, __FILE__, __LINE__, "ss",
 									"Loading CA certificate failed:", ldap_err2string(ret));
 
+							return HANDLER_ERROR;
+						}
+					}
+
+					if (!buffer_is_empty(s->auth_ldap_cert)) {
+						if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_CERTFILE, 
+										s->auth_ldap_cert->ptr))) {
+							log_error_write(srv, __FILE__, __LINE__, "ss", 
+									"Loading TLS certificate failed:", ldap_err2string(ret));
+						
+							return HANDLER_ERROR;
+						}
+					}
+					
+					if (!buffer_is_empty(s->auth_ldap_key)) {
+						if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_KEYFILE, 
+										s->auth_ldap_key->ptr))) {
+							log_error_write(srv, __FILE__, __LINE__, "ss", 
+									"Loading TLS key certificate failed:", ldap_err2string(ret));
+						
 							return HANDLER_ERROR;
 						}
 					}

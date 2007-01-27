@@ -168,6 +168,10 @@ Configuration
   # certificate
   auth.backend.ldap.starttls   = "enable"
   auth.backend.ldap.ca-file   = "/etc/CAcertificate.pem"
+  # if server performs client certificates validation we can 
+  # connect using user defined client certificates
+  auth.backend.ldap.cert      = "/etc/cert.pem"
+  auth.backend.ldap.key       = "/etc/req.pem"
 
   ## restrictions
   # set restrictions:

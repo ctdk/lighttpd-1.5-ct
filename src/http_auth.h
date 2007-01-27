@@ -35,6 +35,8 @@ typedef struct {
 	buffer *auth_ldap_bindpw;
 	buffer *auth_ldap_filter;
 	buffer *auth_ldap_cafile;
+	buffer *auth_ldap_cert;
+	buffer *auth_ldap_key;
 	unsigned short auth_ldap_starttls;
 	unsigned short auth_ldap_allow_empty_pw;
 

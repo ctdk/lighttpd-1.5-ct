@@ -1370,7 +1370,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			break;
 		}
 		chunkqueue_remove_finished_chunks(sess->recv_raw);
-		if (sess->recv_raw->is_closed || sess->is_closing) {
+		if (sess->recv_raw->is_closed /* || sess->is_closing */) {
 			sess->recv->is_closed = 1;
 		}
 

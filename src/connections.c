@@ -602,6 +602,7 @@ handler_t connection_handle_read_request_header(server *srv, connection *con)  {
 	switch (http_request_parse_cq(con->recv_raw, con->http_req)) {
 	case PARSE_ERROR:
 		con->http_status = 400; /* the header is broken */
+		con->send->is_closed = 1; /* we have nothing to send */
 
 		chunkqueue_remove_finished_chunks(con->recv_raw);
 

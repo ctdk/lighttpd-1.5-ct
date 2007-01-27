@@ -229,6 +229,12 @@ LEMON_PARSER(mod_ssi_exprparser.y)
 
 SET(L_INSTALL_TARGETS)
 
+ADD_EXECUTABLE(fcgi-stat-accel fcgi-stat-accel.c)
+TARGET_LINK_LIBRARIES(fcgi-stat-accel fcgi)
+SET_TARGET_PROPERTIES(fcgi-stat-accel PROPERTIES LINK_FLAGS "-pthread")
+
+ADD_EXECUTABLE(spawn-fcgi spawn-fcgi.c)
+
 ADD_EXECUTABLE(lighttpd
 	server.c
 	network.c

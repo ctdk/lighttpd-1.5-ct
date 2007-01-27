@@ -9,15 +9,15 @@
 */
 
 
-#include <pthread.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <pthread.h>
+#include <unistd.h>
+#include <string.h>
+#include <fcntl.h>
+
 #include <stdlib.h>
-#include <stdio.h>
 
 #include <fastcgi/fcgiapp.h>
 
@@ -35,11 +35,11 @@ static void *doit(void *a){
         FCGX_Request request;
         int rc;
         char *filename;
-        FILE *fd;
 
         FCGX_InitRequest(&request, 0, FCGI_FAIL_ACCEPT_ON_INTR);
 
         while(1){
+		int fd;
                 //Some platforms require accept() serialization, some don't. The documentation claims it to be thread safe
 //              static pthread_mutex_t accept_mutex = PTHREAD_MUTEX_INITIALIZER;
 //              pthread_mutex_lock(&accept_mutex);
@@ -56,13 +56,13 @@ static void *doit(void *a){
                 }else if(filename[strlen(filename)-1] == '/'){
                         FORBIDDEN(request.out);
         //open the file
-                }else if((fd = fopen(filename, "r")) == NULL){
+                }else if((fd = open(filename, O_RDONLY)) == -1){
                         NOTFOUND(request.out, filename);
         //no error, serve it
                 }else{
                         SENDFILE(request.out, filename);
 
-                        fclose(fd);
+                        close(fd);
                 }
 
                 FCGX_Finish_r(&request);
@@ -92,8 +92,15 @@ int main(void){
                 pthread_create(&id[i], NULL, doit, NULL);
         }
 
+	/* block the current thread by executing one */
         doit(NULL);
+	
+	for (i = 0; i < thread_count; i++) {
+                pthread_join(id[i], NULL);
+        }
+
         free(id);
+
         return 0;
 }
 

@@ -697,6 +697,7 @@ network_status_t network_write_chunkqueue(server *srv, connection *con, chunkque
 	}
 
 	switch (ret) {
+	case NETWORK_STATUS_WAIT_FOR_FD:
 	case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
 	case NETWORK_STATUS_WAIT_FOR_EVENT:
 	case NETWORK_STATUS_SUCCESS:

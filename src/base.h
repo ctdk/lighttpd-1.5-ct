@@ -431,6 +431,7 @@ typedef enum {
 	NETWORK_STATUS_CONNECTION_CLOSE,
 	NETWORK_STATUS_WAIT_FOR_EVENT,
 	NETWORK_STATUS_WAIT_FOR_AIO_EVENT,
+	NETWORK_STATUS_WAIT_FOR_FD,
 	NETWORK_STATUS_INTERRUPTED
 } network_status_t;
 
@@ -600,5 +601,6 @@ typedef struct server {
 
 } server;
 
+int server_out_of_fds(server *srv);
 
 #endif

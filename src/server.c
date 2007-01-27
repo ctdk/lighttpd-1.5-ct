@@ -635,6 +635,18 @@ static void *posix_aio_getevents_thread(void *_data) {
 #endif
 #endif
 
+/**
+ * call this function whenever you get a EMFILE or ENFILE as return-value 
+ *
+ * after each socket(), accept(), connect() or open() call
+ *
+ */
+int server_out_of_fds(server *srv) {
+	srv->cur_fds = srv->max_fds;
+
+	return 0;
+}
+
 int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
 	int poll_errno;
@@ -855,21 +867,6 @@ int lighty_mainloop(server *srv) {
 			}
 		}
 
-		/* take probe to get an idea how many fds are currently open
-		 *
-		 * isn't there an easier way than calling open() ?
-		 *  */
-		if (1) {
-			int cur_max_fd;
-
-			if (-1 != (cur_max_fd = open("/dev/null", O_RDONLY))) {
-				close(cur_max_fd);
-				srv->cur_fds = cur_max_fd;
-			} else if (errno == EMFILE) {
-				srv->cur_fds = srv->max_fds;
-			}
-		}
-
 		if (srv->sockets_disabled) {
 			/* our server sockets are disabled, why ? */
 
@@ -994,10 +991,11 @@ int lighty_mainloop(server *srv) {
 				if (revent->handler == network_server_handle_fdevent) continue;
 
 				switch (r = (*(revent->handler))(srv, revent->context, revent->revents)) {
+				case HANDLER_WAIT_FOR_FD:
+					server_out_of_fds(srv);
 				case HANDLER_FINISHED:
 				case HANDLER_GO_ON:
 				case HANDLER_WAIT_FOR_EVENT:
-				case HANDLER_WAIT_FOR_FD:
 					break;
 				case HANDLER_ERROR:
 					/* should never happen */
@@ -1017,10 +1015,11 @@ int lighty_mainloop(server *srv) {
 				if (revent->handler != network_server_handle_fdevent) continue;
 
 				switch (r = (*(revent->handler))(srv, revent->context, revent->revents)) {
+				case HANDLER_WAIT_FOR_FD:
+					server_out_of_fds(srv);
 				case HANDLER_FINISHED:
 				case HANDLER_GO_ON:
 				case HANDLER_WAIT_FOR_EVENT:
-				case HANDLER_WAIT_FOR_FD:
 					break;
 				case HANDLER_ERROR:
 					/* should never happen */

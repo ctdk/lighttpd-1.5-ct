@@ -848,7 +848,10 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 			/* we were stopped _before_ we had a connection */
 		case ECONNABORTED: /* this is a FreeBSD thingy */
 			/* we were stopped _after_ we had a connection */
+			break;
+			
 		case EMFILE: /* we are out of FDs */
+			server_out_of_fds(srv);
 			break;
 		default:
 			ERROR("accept failed on fd=%d with error: (%d) %s", srv_socket->sock->fd, errno, strerror(errno));
@@ -1058,6 +1061,8 @@ int connection_state_machine(server *srv, connection *con) {
 				fdwaitqueue_append(srv, con);
 
 				connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
+
+				server_out_of_fds(srv);
 
 				break;
 			case HANDLER_COMEBACK:
@@ -1319,6 +1324,11 @@ int connection_state_machine(server *srv, connection *con) {
 				fdevent_event_add(srv->ev, con->sock, FDEVENT_OUT);
 
 				return HANDLER_WAIT_FOR_EVENT;
+			case NETWORK_STATUS_WAIT_FOR_FD:
+				/* the backend received a EMFILE 
+				 * - e.g. for a mmap() of /dev/zero */
+
+				return HANDLER_WAIT_FOR_FD;
 			case NETWORK_STATUS_INTERRUPTED:
 			case NETWORK_STATUS_UNSET:
 				break;

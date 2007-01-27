@@ -156,6 +156,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 							if (errno != EMFILE) {
 								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d, falling back to sync-io",
 									errno, strerror(errno), srv->cur_fds);
+							} else {
+								return NETWORK_STATUS_WAIT_FOR_FD;
 							}
 						} else {
 							c->file.mmap.offset = 0;

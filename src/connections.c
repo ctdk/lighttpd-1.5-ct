@@ -332,10 +332,6 @@ static int connection_handle_response_header(server *srv, connection *con) {
 		break;
 	}
 
-	if (con->request.http_method == HTTP_METHOD_HEAD) {
-		no_response_body = 1;
-	}
-
 	if (no_response_body) {
 		/* disable chunked encoding again as we have no body */
 		con->response.transfer_encoding &= ~HTTP_TRANSFER_ENCODING_CHUNKED;
@@ -1233,6 +1229,8 @@ int connection_state_machine(server *srv, connection *con) {
 				break;
 			}
 
+			/* all the response-headers are set, check if we have a */
+
 			connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
 
 			break;
@@ -1241,6 +1239,13 @@ int connection_state_machine(server *srv, connection *con) {
 			http_response_write_header(srv, con, con->send_raw);
 
 			connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_CONTENT);
+
+			if (con->request.http_method == HTTP_METHOD_HEAD) {
+				/* remove the content now */
+				chunkqueue_reset(con->send);
+
+				con->send->is_closed = 1;
+			}
 
 			break;
 		case CON_STATE_WRITE_RESPONSE_CONTENT:

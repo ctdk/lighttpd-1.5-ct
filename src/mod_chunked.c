@@ -202,7 +202,10 @@ URIHANDLER_FUNC(mod_chunked_response_header) {
 		if (p->conf.debug > 0) TRACE("%s", "response content finished disable chunked encoding");
 		con->response.content_length = chunkqueue_length(in);
 		use_chunked = 0;
-	} else {
+	} else if (con->request.http_method != HTTP_METHOD_HEAD) {
+		/* a HEAD request never gets a chunk-encoding, but might stay with keep-alive
+		 * in case the queue was closed already (above) we still have the content-length */
+		
 		/* we don't know the size of the content yet
 		 * - either enable chunking
 		 * - or disable keep-alive  */

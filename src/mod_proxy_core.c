@@ -281,7 +281,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, CONST_BUF_LEN(p->balance_buf)))) {
 				s->balancer = di->value;
 			} else {
-				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf' got %s", BUF_STR(p->balance_buf));
+				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf', 'static' got %s", BUF_STR(p->balance_buf));
 				return HANDLER_ERROR;
 			}
 		}

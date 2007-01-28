@@ -8,6 +8,9 @@
   The default value, if spawned from lighttpd, is 20.
 */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -18,8 +21,11 @@
 #include <fcntl.h>
 
 #include <stdlib.h>
-
+#ifdef HAVE_FASTCGI_FASTCGI_H
 #include <fastcgi/fcgiapp.h>
+#elif defined (HAVE_FASTCGI_H)
+#include <fcgiapp.h>
+#endif
 
 #define THREAD_COUNT 20
 
@@ -36,7 +42,7 @@ static void *doit(void *a){
         int rc;
         char *filename;
 
-        FCGX_InitRequest(&request, 0, FCGI_FAIL_ACCEPT_ON_INTR);
+        FCGX_InitRequest(&request, 0, /* FCGI_FAIL_ACCEPT_ON_INTR */ 0);
 
         while(1){
 		int fd;

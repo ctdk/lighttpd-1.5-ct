@@ -82,7 +82,7 @@ spawn_fcgi_SOURCES=spawn-fcgi.c
 
 if CHECK_WITH_FASTCGI
 fcgi_stat_accel_SOURCES=fcgi-stat-accel.c
-fcgi_stat_accel_LDADD = $(FCGI_LIB)
+fcgi_stat_accel_LDADD = -lfcgi
 endif
 
 lib_LTLIBRARIES = 

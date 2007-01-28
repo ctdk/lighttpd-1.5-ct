@@ -28,7 +28,8 @@ typedef enum {
 	PROXY_BALANCE_UNSET,
 	PROXY_BALANCE_SQF,
 	PROXY_BALANCE_CARP,
-	PROXY_BALANCE_RR
+	PROXY_BALANCE_RR,
+	PROXY_BALANCE_STATIC
 } proxy_balance_t;
 
 typedef struct {

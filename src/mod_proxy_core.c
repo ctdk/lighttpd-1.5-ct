@@ -73,6 +73,7 @@ INIT_FUNC(mod_proxy_core_init) {
 	array_insert_int(p->possible_balancers, "sqf", PROXY_BALANCE_SQF);
 	array_insert_int(p->possible_balancers, "carp", PROXY_BALANCE_CARP);
 	array_insert_int(p->possible_balancers, "round-robin", PROXY_BALANCE_RR);
+	array_insert_int(p->possible_balancers, "static", PROXY_BALANCE_STATIC);
 
 	p->proxy_register_protocol = mod_proxy_core_register_protocol;
 
@@ -1480,6 +1481,19 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_session
 
 				address = cur_address;
 			}
+		}
+
+		break;
+	case PROXY_BALANCE_STATIC:
+		/* static (only fail-over) */
+
+		for (i = 0; i < address_pool->used; i++) {
+			cur_address = address_pool->ptr[i];
+
+			if (cur_address->state != PROXY_ADDRESS_STATE_ACTIVE) continue;
+
+			address = cur_address;
+			break;
 		}
 
 		break;

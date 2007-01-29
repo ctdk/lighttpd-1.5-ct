@@ -21,6 +21,7 @@ OPTION(WITH_ZLIB "with deflate-support for mod_compress [default: on]" ON)
 OPTION(WITH_FAM "with FAM-support for the stat-cache [default: off]")
 OPTION(WITH_LDAP "with LDAP-support for the mod_auth [default: off]")
 OPTION(WITH_LIBAIO "with libaio for the linux [default: off]")
+OPTION(WITH_LIBFCGI "with libfcgi for fcgi-stat-accel [default: off]")
 
 OPTION(BUILD_STATIC "build a static lighttpd with all modules added")
 IF(BUILD_STATIC)
@@ -115,6 +116,14 @@ IF(WITH_SQLITE3)
   CHECK_INCLUDE_FILES(sqlite3.h HAVE_SQLITE3_H)
   CHECK_LIBRARY_EXISTS(sqlite3 sqlite3_reset "" HAVE_LIBPCRE)
 ENDIF(WITH_SQLITE3)
+
+IF(WITH_LIBFCGI)
+  CHECK_INCLUDE_FILES(fastcgi.h HAVE_FASTCGI_H)
+  CHECK_INCLUDE_FILES(fastcgi/fastcgi.h HAVE_FASTCGI_FASTCGI_H)
+  IF(HAVE_FASTCGI_H)
+    CHECK_LIBRARY_EXISTS(fcgi FCGI_Accept "" HAVE_LIBFCGI)
+  ENDIF(HAVE_FASTCGI_H)
+ENDIF(WITH_LIBFCGI)
 
 CHECK_INCLUDE_FILES(stddef.h HAVE_STDDEF_H)
 CHECK_INCLUDE_FILES(stdint.h HAVE_STDINT_H)
@@ -229,9 +238,11 @@ LEMON_PARSER(mod_ssi_exprparser.y)
 
 SET(L_INSTALL_TARGETS)
 
+IF(HAVE_LIBFCGI)
 ADD_EXECUTABLE(fcgi-stat-accel fcgi-stat-accel.c)
 TARGET_LINK_LIBRARIES(fcgi-stat-accel fcgi)
 SET_TARGET_PROPERTIES(fcgi-stat-accel PROPERTIES LINK_FLAGS "-pthread")
+ENDIF(HAVE_LIBFCGI)
 
 ADD_EXECUTABLE(spawn-fcgi spawn-fcgi.c)
 

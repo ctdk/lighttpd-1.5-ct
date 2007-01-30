@@ -390,10 +390,10 @@ connection *connection_init(server *srv) {
 	/* send is the chunkqueue of the first send filter */
 	con->send = con->send_filters->first->cq;
 	con->recv = chunkqueue_init();
+	chunkqueue_set_tempdirs(con->recv, srv->srvconf.upload_tempdirs);
 
 	con->send_raw = chunkqueue_init();
 	con->recv_raw = chunkqueue_init();
-	chunkqueue_set_tempdirs(con->recv_raw, srv->srvconf.upload_tempdirs);
 
 	con->request.headers      = array_init();
 	con->response.headers     = array_init();

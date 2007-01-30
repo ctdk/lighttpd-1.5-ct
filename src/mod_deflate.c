@@ -256,7 +256,6 @@ SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 			s->allowed_encodings = HTTP_ACCEPT_ENCODING_IDENTITY | HTTP_ACCEPT_ENCODING_GZIP |
 				HTTP_ACCEPT_ENCODING_DEFLATE | HTTP_ACCEPT_ENCODING_COMPRESS | HTTP_ACCEPT_ENCODING_BZIP2;
 		}
-		TRACE("allowed_encodings = %X", s->allowed_encodings);
 
 		if((s->compression_level < 1 || s->compression_level > 9) &&
 				s->compression_level != Z_DEFAULT_COMPRESSION) {
@@ -960,59 +959,49 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	size_t chunks_written = 0;
 	int chunk_finished = 0;
 	int rc=-1;
-	int len = 0;
+	int we_want = 0, we_have = 0;
 	int out = 0, max = 0;
 	
-	len = chunkqueue_length(hctx->in);
+	we_have = chunkqueue_length(hctx->in);
 	if(p->conf.debug) {
 		log_error_write(srv, __FILE__, __LINE__, "sd",
-				"compress: in_queue len=", len);
+				"compress: in_queue len=", we_have);
 	}
 	/* calculate max bytes to compress for this call. */
 	if(!end) {
 		max = p->conf.work_block_size * 1024;
-		if(max == 0 || max > len) max = len;
+		if(max == 0 || max > we_have) max = we_have;
 	} else {
-		max = len;
+		max = we_have;
 	}
 
 	/* Compress chunks from in queue into chunks for out queue */
-	for(c = hctx->in->first; c && out < max; c = c->next) {
+	for(c = hctx->in->first; c && max > 0; c = c->next) {
 		chunk_finished = 0;
-		len = 0;
+		we_have = 0;
+		we_want = 0;
 		
 		switch(c->type) {
 		case MEM_CHUNK:
 			if (c->mem->used == 0) continue;
-			len = c->mem->used - 1;
-			if (len > (max - out)) len = max - out;
-			if (mod_deflate_compress(srv, con, hctx, (unsigned char *)c->mem->ptr, len) < 0) {
+			we_have = c->mem->used - c->offset - 1;
+			if (we_have == 0) continue;
+			we_want = we_have < max ? we_have : max;
+			if (mod_deflate_compress(srv, con, hctx, (unsigned char *)(c->mem->ptr + c->offset), we_want) < 0) {
 				log_error_write(srv, __FILE__, __LINE__, "s", 
 						"compress failed.");
 				return HANDLER_ERROR;
 			}
-			hctx->in->bytes_out += len;
-			c->offset += len;
-			out += len;
-			if (c->offset == c->mem->used - 1) {
-				chunk_finished = 1;
-				chunks_written++;
-			}
 			break;
 		case FILE_CHUNK:
 			if (c->file.length == 0) continue;
-			len = c->file.length - c->offset;
-			if (len > (max - out)) len = max - out;
-			if ((len = mod_deflate_file_chunk(srv, con, hctx, c, len)) < 0) {
+			we_have = c->file.length - c->offset;
+			if (we_have == 0) continue;
+			we_want = we_have < max ? we_have : max;
+			if ((we_want = mod_deflate_file_chunk(srv, con, hctx, c, we_want)) < 0) {
 				log_error_write(srv, __FILE__, __LINE__, "s", 
 						"compress file chunk failed.");
 				return HANDLER_ERROR;
-			}
-			hctx->in->bytes_out += len;
-			out += len;
-			if (c->offset == c->file.length) {
-				chunk_finished = 1;
-				chunks_written++;
 			}
 			break;
 		default:
@@ -1021,6 +1010,16 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 			
 			return HANDLER_ERROR;
 		}
+		hctx->in->bytes_out += we_want;
+		c->offset += we_want;
+		out += we_want;
+		max -= we_want;
+		if (we_have == we_want) {
+			/* chunk finished */
+			chunk_finished = 1;
+			chunks_written++;
+		}
+		/* make sure we finished compressing the chunk before going to the next chunk */
 		if(!chunk_finished) break;
 	}
 	if(p->conf.debug) {
@@ -1032,11 +1031,15 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 		chunkqueue_remove_finished_chunks(hctx->in);
 	}
 
-	rc = mod_deflate_stream_flush(srv, con, hctx, hctx->in->is_closed);
+	/* check if we finished compressing all the content. */
+	end = (hctx->in->is_closed && hctx->in->bytes_in == hctx->in->bytes_out);
+
+	/* flush the output buffer to make room for more data. */
+	rc = mod_deflate_stream_flush(srv, con, hctx, end);
 	if(rc < 0) {
 		log_error_write(srv, __FILE__, __LINE__, "s", "flush error");
 	}
-	if(hctx->in->is_closed) {
+	if(end) {
 		hctx->out->is_closed = 1;
 		deflate_compress_cleanup(srv, con, hctx);
 		if(p->conf.debug) {

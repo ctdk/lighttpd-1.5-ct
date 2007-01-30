@@ -4,6 +4,10 @@
 #include <assert.h>
 #include <setjmp.h>
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "base.h"
 #include "log.h"
 #include "buffer.h"
@@ -299,7 +303,7 @@ static int magnet_reqhdr_get(lua_State *L) {
 	con = lua_touserdata(L, -1);
 	lua_pop(L, 1);
 
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, key))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, key, strlen(key)))) {
 		if (ds->value->used) {
 			lua_pushlstring(L, ds->value->ptr, ds->value->used - 1);
 		} else {
@@ -323,7 +327,7 @@ static int magnet_status_get(lua_State *L) {
 	srv = lua_touserdata(L, -1);
 	lua_pop(L, 1);
 
-	di = status_counter_get_counter(srv, key, key_len);
+	di = status_counter_get_counter(key, key_len);
 
 	lua_pushnumber(L, (double)di->value);
 
@@ -342,7 +346,7 @@ static int magnet_status_set(lua_State *L) {
 	srv = lua_touserdata(L, -1);
 	lua_pop(L, 1);
 
-	status_counter_set(srv, key, key_len, counter);
+	status_counter_set(key, key_len, counter);
 
 	return 0;
 }
@@ -557,7 +561,7 @@ static int magnet_attach_content(server *srv, connection *con, plugin_data *p, l
 				size_t s_len = 0;
 				const char *s = lua_tolstring(L, -1, &s_len);
 
-				chunkqueue_append_mem(con->write_queue, s, s_len + 1);
+				chunkqueue_append_mem(con->send, s, s_len + 1);
 			} else if (lua_istable(L, -1)) {
 				lua_getfield(L, -1, "filename");
 				lua_getfield(L, -2, "length");
@@ -591,7 +595,7 @@ static int magnet_attach_content(server *srv, connection *con, plugin_data *p, l
 							return luaL_error(L, "offset > length for '%s'", fn->ptr);
 						}
 
-						chunkqueue_append_file(con->write_queue, fn, off, len - off);
+						chunkqueue_append_file(con->send, fn, off, len - off);
 					}
 
 					buffer_free(fn);
@@ -761,7 +765,7 @@ static handler_t magnet_attract(server *srv, connection *con, plugin_data *p, bu
 
 	if (lua_return_value > 99) {
 		con->http_status = lua_return_value;
-		con->file_finished = 1;
+		con->send->is_closed = 1;
 
 		/* try { ...*/
 		if (0 == setjmp(exceptionjmp)) {

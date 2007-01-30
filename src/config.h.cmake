@@ -84,6 +84,10 @@
 #cmakedefine  HAVE_ZLIB_H
 #cmakedefine  HAVE_LIBZ
 
+/* lua */
+#cmakedefine  HAVE_LUA_H
+#cmakedefine  HAVE_LIBLUA
+
 /* Types */
 #cmakedefine  HAVE_SOCKLEN_T
 

@@ -296,10 +296,12 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					case EINTR:
 					case EAGAIN:
 						return NETWORK_STATUS_WAIT_FOR_EVENT;
+					case EPIPE:
 					case ECONNRESET:
 						return NETWORK_STATUS_CONNECTION_CLOSE;
 					default:
-						ERROR("write failed: %d (%s)", errno, strerror(errno));
+						ERROR("write failed: %d (%s) [%lld, %p, %lld]", 
+								errno, strerror(errno), c->file.copy.length, c->file.mmap.start, c->file.copy.offset);
 						return NETWORK_STATUS_FATAL_ERROR;
 					}
 				}

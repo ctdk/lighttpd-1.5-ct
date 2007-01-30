@@ -143,6 +143,7 @@ PLUGIN_STATIC(mod_uploadprogress);
 PLUGIN_STATIC(mod_userdir);
 PLUGIN_STATIC(mod_usertrack);
 PLUGIN_STATIC(mod_webdav);
+PLUGIN_STATIC(mod_magnet);
 
 #undef PLUGIN_STATIC
 
@@ -180,6 +181,7 @@ PLUGIN_STATIC(mod_uploadprogress),
 PLUGIN_STATIC(mod_userdir),
 PLUGIN_STATIC(mod_usertrack),
 PLUGIN_STATIC(mod_webdav),
+PLUGIN_STATIC(mod_magnet),
 
 	{ NULL, NULL }
 };

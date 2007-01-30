@@ -774,8 +774,13 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 	int fd;
 
 	if (-1 == (fd = socket(con->address->addr.plain.sa_family, SOCK_STREAM, 0))) {
-		ERROR("socket failed: %s", strerror(errno));
-		return HANDLER_ERROR;
+		switch (errno) {
+		case EMFILE:
+			return HANDLER_WAIT_FOR_FD;
+		default:
+			ERROR("socket failed: %s (%d)", strerror(errno), errno);
+			return HANDLER_ERROR;
+		}
 	}
 
 	fcntl(fd, F_SETFL, O_NONBLOCK | O_RDWR);
@@ -1119,6 +1124,9 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			fdevent_register(srv->ev, sess->proxy_con->sock, proxy_handle_fdevent, sess);
 
 			break;
+		case HANDLER_WAIT_FOR_FD:
+			/* we have to come back later when we have a fd */
+			return HANDLER_WAIT_FOR_FD;
 		case HANDLER_ERROR:
 		default:
 			/* not good, something failed */
@@ -1889,6 +1897,8 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			if (p->conf.debug) TRACE("%s", "write failed, restarting request");
 			proxy_remove_backend_connection(srv, sess);
 			break;
+		case HANDLER_WAIT_FOR_FD:
+			return HANDLER_WAIT_FOR_FD;
 		case HANDLER_GO_ON:
 			return HANDLER_GO_ON;
 		default:

@@ -45,11 +45,12 @@ int http_response_write_header(server *srv, connection *con, chunkqueue *raw) {
 	buffer_append_string(b, get_http_status_name(con->http_status));
 
 	if (con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) {
-		BUFFER_APPEND_STRING_CONST(b, "\r\nTransfer-Encoding: chunked");
+		response_header_overwrite(srv, con, CONST_STR_LEN("Transfer-Encoding"), CONST_STR_LEN("chunked"));
 		allow_keep_alive = 1;
 	} else if (con->response.content_length >= 0) {
-		BUFFER_APPEND_STRING_CONST(b, "\r\nContent-Length: ");
-		buffer_append_off_t(b, con->response.content_length);
+		buffer_copy_off_t(srv->tmp_buf, con->response.content_length);
+		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Length"), srv->tmp_buf->ptr, srv->tmp_buf->used - 1);
+
 		allow_keep_alive = 1;
 	}
 
@@ -57,8 +58,11 @@ int http_response_write_header(server *srv, connection *con, chunkqueue *raw) {
 	if (!allow_keep_alive) con->keep_alive = 0;
 
 	if (con->request.http_version != HTTP_VERSION_1_1 || con->keep_alive == 0) {
-		BUFFER_APPEND_STRING_CONST(b, "\r\nConnection: ");
-		buffer_append_string(b, con->keep_alive ? "keep-alive" : "close");
+		if (con->keep_alive) {
+			response_header_overwrite(srv, con, CONST_STR_LEN("Connection"), CONST_STR_LEN("keep-alive"));
+		} else {
+			response_header_overwrite(srv, con, CONST_STR_LEN("Connection"), CONST_STR_LEN("close"));
+		}
 	}
 
 

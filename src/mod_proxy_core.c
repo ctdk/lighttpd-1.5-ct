@@ -1665,6 +1665,8 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 		proxy_session_reset(sess);
 		if (NULL == backend) return HANDLER_GO_ON;
 		sess->proxy_backend = backend;
+	} else if (sess) {
+		proxy_session_reset(sess);
 	}
 
 	/* no proxy backends to handle this request. */

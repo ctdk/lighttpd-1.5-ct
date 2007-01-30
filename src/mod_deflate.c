@@ -53,6 +53,26 @@
 #define HTTP_ACCEPT_ENCODING_COMPRESS BV(3)
 #define HTTP_ACCEPT_ENCODING_BZIP2    BV(4)
 
+/* encoding names */
+#define ENCODING_NAME_IDENTITY   "identity"
+#define ENCODING_NAME_GZIP       "gzip"
+#define ENCODING_NAME_DEFLATE    "deflate"
+#define ENCODING_NAME_COMPRESS   "compress"
+#define ENCODING_NAME_BZIP2      "bzip2"
+
+
+#define CONFIG_DEFLATE_OUTPUT_BUFFER_SIZE "deflate.output-buffer-size"
+#define CONFIG_DEFLATE_MIMETYPES "deflate.mimetypes"
+#define CONFIG_DEFLATE_COMPRESSION_LEVEL "deflate.compression-level"
+#define CONFIG_DEFLATE_MEM_LEVEL "deflate.mem-level"
+#define CONFIG_DEFLATE_WINDOW_SIZE "deflate.window-size"
+#define CONFIG_DEFLATE_MIN_COMPRESS_SIZE "deflate.min-compress-size"
+#define CONFIG_DEFLATE_WORK_BLOCK_SIZE "deflate.work-block-size"
+#define CONFIG_DEFLATE_ENABLED "deflate.enabled"
+#define CONFIG_DEFLATE_DEBUG "deflate.debug"
+#define CONFIG_DEFLATE_ALLOWED_ENCODINGS "deflate.allowed_encodings"
+#define CONFIG_DEFLATE_SYNC_FLUSH "deflate.sync-flush"
+	
 #define KByte * 1024
 #define MByte * 1024 KByte
 #define GByte * 1024 MByte
@@ -60,11 +80,11 @@
 typedef struct {
 	unsigned short	debug;
 	unsigned short	enabled;
-	unsigned short	bzip2;
 	unsigned short	sync_flush;
 	unsigned short	output_buffer_size;
 	unsigned short	min_compress_size;
 	unsigned short	work_block_size;
+	int			allowed_encodings;
 	short		mem_level;
 	short		compression_level;
 	short		window_size;
@@ -74,6 +94,7 @@ typedef struct {
 typedef struct {
 	PLUGIN_DATA;
 	buffer *tmp_buf;
+	array  *encodings_arr;
 	
 	plugin_config **config_storage;
 	plugin_config conf; 
@@ -121,6 +142,7 @@ INIT_FUNC(mod_deflate_init) {
 	p = calloc(1, sizeof(*p));
 
 	p->tmp_buf = buffer_init();
+	p->encodings_arr = array_init();
 	
 	return p;
 }
@@ -146,6 +168,7 @@ FREE_FUNC(mod_deflate_free) {
 	}
 
 	buffer_free(p->tmp_buf);
+	array_free(p->encodings_arr);
 	
 	free(p);
 	
@@ -155,31 +178,34 @@ FREE_FUNC(mod_deflate_free) {
 SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 	plugin_data *p = p_d;
 	size_t i = 0;
+	int j = 0;
 	
 	config_values_t cv[] = { 
-		{ "deflate.output-buffer-size",    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.mimetypes",             NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.compression-level",     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.mem-level",             NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.window-size",           NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.min-compress-size",     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.work-block-size",       NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.enabled",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.debug",                 NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.bzip2",                 NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
-		{ "deflate.sync-flush",            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
-		{ NULL,                            NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
+		{ CONFIG_DEFLATE_OUTPUT_BUFFER_SIZE,    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_MIMETYPES,             NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_COMPRESSION_LEVEL,     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_MEM_LEVEL,             NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_WINDOW_SIZE,           NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_MIN_COMPRESS_SIZE,     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_WORK_BLOCK_SIZE,       NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_ENABLED,               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_DEBUG,                 NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_SYNC_FLUSH,            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_DEFLATE_ALLOWED_ENCODINGS,     NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
+		{ NULL,                                 NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 	
 	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 	
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
+
+		array_reset(p->encodings_arr);
 		
 		s = calloc(1, sizeof(plugin_config));
 		s->enabled = 1;
-		s->bzip2 = 1;
 		s->sync_flush = 0;
+		s->allowed_encodings = 0;
 		s->debug = 0;
 		s->output_buffer_size = 0;
 		s->mem_level = 9;
@@ -198,14 +224,39 @@ SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 		cv[6].destination = &(s->work_block_size);
 		cv[7].destination = &(s->enabled);
 		cv[8].destination = &(s->debug);
-		cv[9].destination = &(s->bzip2);
-		cv[10].destination = &(s->sync_flush);
+		cv[9].destination = &(s->sync_flush);
+		cv[10].destination = p->encodings_arr; /* temp array for allowed encodings list */
 		
 		p->config_storage[i] = s;
 	
 		if (0 != config_insert_values_global(srv, ((data_config *)srv->config_context->data[i])->value, cv)) {
 			return HANDLER_ERROR;
 		}
+
+		if (p->encodings_arr->used) {
+			for (j = 0; j < p->encodings_arr->used; j++) {
+				data_string *ds = (data_string *)p->encodings_arr->data[j];
+#ifdef USE_ZLIB
+				if (NULL != strstr(BUF_STR(ds->value), ENCODING_NAME_GZIP))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_GZIP;
+				if (NULL != strstr(BUF_STR(ds->value), ENCODING_NAME_DEFLATE))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_DEFLATE;
+#endif
+				/*
+				if (NULL != strstr(BUF_STR(ds->value), ENCODING_NAME_COMPRESS))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_COMPRESS;
+				*/
+#ifdef USE_BZ2LIB
+				if (NULL != strstr(BUF_STR(ds->value), ENCODING_NAME_BZIP2))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_BZIP2;
+#endif
+			}
+		} else {
+			/* default encodings */
+			s->allowed_encodings = HTTP_ACCEPT_ENCODING_IDENTITY | HTTP_ACCEPT_ENCODING_GZIP |
+				HTTP_ACCEPT_ENCODING_DEFLATE | HTTP_ACCEPT_ENCODING_COMPRESS | HTTP_ACCEPT_ENCODING_BZIP2;
+		}
+		TRACE("allowed_encodings = %X", s->allowed_encodings);
 
 		if((s->compression_level < 1 || s->compression_level > 9) &&
 				s->compression_level != Z_DEFAULT_COMPRESSION) {
@@ -1012,7 +1063,7 @@ static int mod_deflate_patch_connection(server *srv, connection *con, plugin_dat
 	PATCH_OPTION(work_block_size);
 	PATCH_OPTION(enabled);
 	PATCH_OPTION(debug);
-	PATCH_OPTION(bzip2);
+	PATCH_OPTION(allowed_encodings);
 	PATCH_OPTION(sync_flush);
 	
 	/* skip the first, the global context */
@@ -1027,27 +1078,27 @@ static int mod_deflate_patch_connection(server *srv, connection *con, plugin_dat
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 			
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.output-buffer-size"))) {
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_OUTPUT_BUFFER_SIZE))) {
 				PATCH_OPTION(output_buffer_size);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.mimetypes"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_MIMETYPES))) {
 				PATCH_OPTION(mimetypes);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.compression-level"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_COMPRESSION_LEVEL))) {
 				PATCH_OPTION(compression_level);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.mem-level"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_MEM_LEVEL))) {
 				PATCH_OPTION(mem_level);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.window-size"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_WINDOW_SIZE))) {
 				PATCH_OPTION(window_size);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.min-compress-size"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_MIN_COMPRESS_SIZE))) {
 				PATCH_OPTION(min_compress_size);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.work-block-size"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_WORK_BLOCK_SIZE))) {
 				PATCH_OPTION(work_block_size);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.enabled"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_ENABLED))) {
 				PATCH_OPTION(enabled);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.debug"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_DEBUG))) {
 				PATCH_OPTION(debug);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.bzip2"))) {
-				PATCH_OPTION(bzip2);
-			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("deflate.sync-flush"))) {
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_ALLOWED_ENCODINGS))) {
+				PATCH_OPTION(allowed_encodings);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_DEFLATE_SYNC_FLUSH))) {
 				PATCH_OPTION(sync_flush);
 			}
 		}
@@ -1064,11 +1115,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	data_string *ds;
 	int accept_encoding = 0;
 	char *value;
-	int srv_encodings = 0;
 	int matched_encodings = 0;
-	const char *dflt_gzip = "gzip";
-	const char *dflt_deflate = "deflate";
-	const char *dflt_bzip2 = "bzip2";
 	const char *compression_name = NULL;
 	int file_len=0;
 	int rc=-2;
@@ -1111,30 +1158,17 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	/* get client side support encodings */
 	value = ds->value->ptr;
 #ifdef USE_ZLIB
-	if (NULL != strstr(value, "gzip")) accept_encoding |= HTTP_ACCEPT_ENCODING_GZIP;
-	if (NULL != strstr(value, "deflate")) accept_encoding |= HTTP_ACCEPT_ENCODING_DEFLATE;
+	if (NULL != strstr(value, ENCODING_NAME_GZIP)) accept_encoding |= HTTP_ACCEPT_ENCODING_GZIP;
+	if (NULL != strstr(value, ENCODING_NAME_DEFLATE)) accept_encoding |= HTTP_ACCEPT_ENCODING_DEFLATE;
 #endif
-	/* if (NULL != strstr(value, "compress")) accept_encoding |= HTTP_ACCEPT_ENCODING_COMPRESS; */
+	/* if (NULL != strstr(value, ENCODING_NAME_COMPRESS)) accept_encoding |= HTTP_ACCEPT_ENCODING_COMPRESS; */
 #ifdef USE_BZ2LIB
-	if(p->conf.bzip2) {
-		if (NULL != strstr(value, "bzip2")) accept_encoding |= HTTP_ACCEPT_ENCODING_BZIP2;
-	}
+	if (NULL != strstr(value, ENCODING_NAME_BZIP2)) accept_encoding |= HTTP_ACCEPT_ENCODING_BZIP2;
 #endif
-	if (NULL != strstr(value, "identity")) accept_encoding |= HTTP_ACCEPT_ENCODING_IDENTITY;
-		
-	/* get server side supported ones */
-#ifdef USE_BZ2LIB
-	if(p->conf.bzip2) {
-		srv_encodings |= HTTP_ACCEPT_ENCODING_BZIP2;
-	}
-#endif
-#ifdef USE_ZLIB
-	srv_encodings |= HTTP_ACCEPT_ENCODING_GZIP;
-	srv_encodings |= HTTP_ACCEPT_ENCODING_DEFLATE;
-#endif
+	if (NULL != strstr(value, ENCODING_NAME_IDENTITY)) accept_encoding |= HTTP_ACCEPT_ENCODING_IDENTITY;
 		
 	/* find matching encodings */
-	matched_encodings = accept_encoding & srv_encodings;
+	matched_encodings = accept_encoding & p->conf.allowed_encodings;
 	if (!matched_encodings) {
 		return HANDLER_GO_ON;
 	}
@@ -1224,11 +1258,6 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 #endif
 	}
 	
-	if(p->conf.debug) {
-		log_error_write(srv, __FILE__, __LINE__, "sb",
-				"enable compression for ", con->uri.path);
-	}
-
 	/* the response might change according to Accept-Encoding */
 	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Vary")))) {
 		/* append Accept-Encoding to Vary header */
@@ -1259,21 +1288,26 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	if (matched_encodings & HTTP_ACCEPT_ENCODING_BZIP2) {
 #ifdef USE_BZ2LIB
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_BZIP2;
-		compression_name = dflt_bzip2;
+		compression_name = ENCODING_NAME_BZIP2;
 		rc = stream_bzip2_init(srv, con, hctx);
 #endif
 	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_GZIP) {
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_GZIP;
-		compression_name = dflt_gzip;
+		compression_name = ENCODING_NAME_GZIP;
 		rc = stream_deflate_init(srv, con, hctx);
 	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_DEFLATE) {
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_DEFLATE;
-		compression_name = dflt_deflate;
+		compression_name = ENCODING_NAME_DEFLATE;
 		rc = stream_deflate_init(srv, con, hctx);
 	}
 	if(rc == -1) {
 		log_error_write(srv, __FILE__, __LINE__, "s",
 				"Failed to initialize compression.");
+	}
+
+	if(p->conf.debug) {
+		log_error_write(srv, __FILE__, __LINE__, "sbss",
+				"enable compression for ", con->uri.path, ", type=", compression_name);
 	}
 
 	if(rc < 0) {

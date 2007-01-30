@@ -24,10 +24,6 @@
 #include <attr/attributes.h>
 #endif
 
-#ifdef HAVE_FAM_H
-# include <fam.h>
-#endif
-
 #include "sys-mmap.h"
 #include "sys-files.h"
 #include "sys-strings.h"
@@ -61,16 +57,18 @@
  *
  * */
 
-#ifdef HAVE_FAM_H
 typedef struct {
+#ifdef HAVE_FAM_H
 	FAMRequest *req;
 	FAMConnection *fc;
+#endif
 
 	buffer *name;
 
 	int version;
+
+	int wd;
 } fam_dir_entry;
-#endif
 
 /* the directory name is too long to always compare on it
  * - we need a hash
@@ -103,8 +101,10 @@ stat_cache *stat_cache_init(void) {
 
 	fc->dir_name = buffer_init();
 	fc->hash_key = buffer_init();
-#ifdef HAVE_FAM_H
+#if defined(HAVE_FAM_H)
 	fc->fam = calloc(1, sizeof(*fc->fam));
+#endif
+#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
 	fc->sock = iosocket_init();
 #endif
 
@@ -138,7 +138,6 @@ static void stat_cache_entry_free(void *data) {
 	free(sce);
 }
 
-#ifdef HAVE_FAM_H
 static fam_dir_entry * fam_dir_entry_init(void) {
 	fam_dir_entry *fam_dir = NULL;
 
@@ -154,14 +153,15 @@ static void fam_dir_entry_free(void *data) {
 
 	if (!fam_dir) return;
 
+#ifdef HAVE_FAM_H
 	FAMCancelMonitor(fam_dir->fc, fam_dir->req);
+	free(fam_dir->req);
+#endif
 
 	buffer_free(fam_dir->name);
-	free(fam_dir->req);
 
 	free(fam_dir);
 }
-#endif
 
 void stat_cache_free(stat_cache *sc) {
 	while (sc->files) {
@@ -179,7 +179,7 @@ void stat_cache_free(stat_cache *sc) {
 	buffer_free(sc->dir_name);
 	buffer_free(sc->hash_key);
 
-#ifdef HAVE_FAM_H
+#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
 	while (sc->dirs) {
 		int osize;
 		splay_tree *node = sc->dirs;
@@ -195,10 +195,12 @@ void stat_cache_free(stat_cache *sc) {
 			assert(osize == (sc->dirs->size + 1));
 		}
 	}
-
+		
+	if (sc->sock) iosocket_free(sc->sock);
+#endif
+#ifdef HAVE_FAM_H
 	if (sc->fam) {
 		FAMClose(sc->fam);
-		iosocket_free(sc->sock);
 		free(sc->fam);
 	}
 #endif
@@ -235,7 +237,7 @@ static uint32_t hashme(buffer *str) {
 }
 
 #ifdef HAVE_FAM_H
-handler_t stat_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
+handler_t stat_cache_handle_fdevent_fam(void *_srv, void *_fce, int revent) {
 	size_t i;
 	server *srv = _srv;
 	stat_cache *sc = srv->stat_cache;
@@ -311,6 +313,7 @@ handler_t stat_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 
 	return HANDLER_GO_ON;
 }
+#endif
 
 static int buffer_copy_dirname(buffer *dst, buffer *file) {
 	size_t i;
@@ -326,8 +329,106 @@ static int buffer_copy_dirname(buffer *dst, buffer *file) {
 
 	return -1;
 }
+
+#ifdef HAVE_SYS_INOTIFY_H
+handler_t stat_cache_handle_fdevent_inotify(void *_srv, void *_fce, int revent) {
+	server *srv = _srv;
+	stat_cache *sc = srv->stat_cache;
+
+	if (revent & FDEVENT_IN) {
+		struct inotify_event *ev;
+		ssize_t we_read;
+		int to_read;
+		char *s;
+
+		if (0 != ioctl(srv->stat_cache->sock->fd, FIONREAD, &to_read)) {
+			assert(0);
+		}
+
+		s = calloc(1, to_read);
+
+		if (to_read == (we_read = read(srv->stat_cache->sock->fd, s, to_read))) {
+			if (we_read != to_read) {
+				ERROR("read from inotify socket failed with: %ld, expected: %ld", we_read, sizeof(ev));
+			} else {
+				for (ev = (struct inotify_event *)s; (char *)ev < ((char *)(s)) + to_read;  ) {
+					int j;
+#if 0
+					TRACE("we got: wd: %d, mask: %x, cookie: %x, len: %d, name: %s", 
+						ev->wd, 
+						ev->mask,
+						ev->cookie,
+						ev->len,
+						ev->name ? ev->name : "(null)");
 #endif
 
+					/* do we have this file in the cache */
+
+					for (j = 0; j < 2; j++) {
+						int ndx;
+						splay_tree *node;
+
+						buffer_copy_string(sc->hash_key, ev->name);
+						buffer_append_long(sc->hash_key, j);
+
+						ndx = hashme(sc->hash_key);
+
+						sc->dirs = splaytree_splay(sc->dirs, ndx);
+						node = sc->dirs;
+
+						if (node && (node->key == ndx)) {
+							fam_dir_entry *fam_dir = (fam_dir_entry *)node;
+							
+							fam_dir->version++;
+							
+							if ((ev->mask & IN_UNMOUNT) ||
+							    (ev->mask & IN_DELETE) ||
+							    (ev->mask & IN_DELETE_SELF) ||
+							    (ev->mask & IN_MOVED_FROM) ||
+							    (ev->mask & IN_MOVE_SELF)) {
+								int osize = splaytree_size(sc->dirs);
+
+								fam_dir_entry_free(node->data);
+								sc->dirs = splaytree_delete(sc->dirs, ndx);
+
+								assert(osize - 1 == splaytree_size(sc->dirs));
+							}
+						}
+					}
+
+					/* funky pointer algo :) */	
+					ev = (struct inotify_event *)((char *)ev + (ev->len + sizeof(struct inotify_event)));
+				}
+			}
+		}
+
+		free(s);
+
+		if (errno != EAGAIN) {
+			ERROR("read from inotify socket failed with: %s", strerror(errno));
+		}
+	}
+	
+	return HANDLER_GO_ON;
+}
+#endif
+
+handler_t stat_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
+	server *srv = _srv;
+
+	switch (srv->srvconf.stat_cache_engine) {
+#ifdef HAVE_SYS_INOTIFY_H
+	case STAT_CACHE_ENGINE_INOTIFY:
+		return stat_cache_handle_fdevent_inotify(_srv, _fce, revent);
+#endif
+#ifdef HAVE_FAM_H
+	case STAT_CACHE_ENGINE_FAM:
+		return stat_cache_handle_fdevent_fam(_srv, _fce, revent);
+#endif
+	default:
+		return HANDLER_GO_ON;
+	}
+}
 #ifdef HAVE_LSTAT
 static int stat_cache_lstat(server *srv, buffer *dname, struct stat *lst) {
 	if (lstat(dname->ptr, lst) == 0) {
@@ -352,7 +453,7 @@ static int stat_cache_lstat(server *srv, buffer *dname, struct stat *lst) {
  */
 
 handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_cache_entry **ret_sce) {
-#ifdef HAVE_FAM_H
+#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
 	fam_dir_entry *fam_dir = NULL;
 	int dir_ndx = -1;
 	splay_tree *dir_node = NULL;
@@ -434,9 +535,10 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 #endif
 	}
 
-#ifdef HAVE_FAM_H
+#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H) 
 	/* dir-check */
-	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_FAM) {
+	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_FAM ||
+	    srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
 		if (0 != buffer_copy_dirname(sc->dir_name, name)) {
 			SEGFAULT();
 		}
@@ -531,6 +633,7 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 	 *
 	 * per default it is not a symlink
 	 * */
+
 #ifdef HAVE_LSTAT
 	sce->is_symlink = 0;
 
@@ -645,6 +748,51 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 				assert(sc->dirs);
 				assert(sc->dirs->data == fam_dir);
 				assert(osize == (sc->dirs->size - 1));
+			}
+		} else {
+			fam_dir = dir_node->data;
+		}
+
+		/* bind the fam_fc to the stat() cache entry */
+
+		if (fam_dir) {
+			sce->dir_version = fam_dir->version;
+			sce->dir_ndx     = dir_ndx;
+		}
+	}
+#endif
+
+#ifdef HAVE_SYS_INOTIFY_H
+	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
+		
+		if (!dir_node) {
+			/* generate the dir-node */
+			fam_dir = fam_dir_entry_init();
+			
+			buffer_copy_string_buffer(fam_dir->name, sc->dir_name);
+
+			fam_dir->version = 1;
+
+			fam_dir->wd = inotify_add_watch(srv->stat_cache->sock->fd, fam_dir->name->ptr, 
+					IN_ATTRIB | IN_DELETE | IN_DELETE_SELF | IN_MODIFY | IN_MOVE_SELF | IN_MOVED_FROM);
+			
+			if (fam_dir->wd < 0) {
+				ERROR("inotify_add_watch() failed for %s with %s (%d)", 
+						fam_dir->name->ptr,
+						strerror(errno),
+						errno);
+			} else {
+				int osize = 0;
+
+			       	if (sc->dirs) {
+					osize = sc->dirs->size;
+				}
+
+				sc->dirs = splaytree_insert(sc->dirs, dir_ndx, fam_dir);
+				assert(sc->dirs);
+				assert(sc->dirs->data == fam_dir);
+				assert(osize == (sc->dirs->size - 1));
+
 			}
 		} else {
 			fam_dir = dir_node->data;

@@ -36,6 +36,10 @@
 # include <fam.h>
 #endif
 
+#ifdef HAVE_SYS_INOTIFY_H
+# include <sys/inotify.h>
+#endif
+
 #ifdef HAVE_LIBAIO_H
 # include <libaio.h>
 #endif
@@ -191,7 +195,7 @@ typedef struct {
 	char is_symlink;
 #endif
 
-#ifdef HAVE_FAM_H
+#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
 	int    dir_version;
 	int    dir_ndx;
 #endif
@@ -204,11 +208,14 @@ typedef struct {
 
 	buffer *dir_name; /* for building the dirname from the filename */
 	buffer *hash_key;
-#ifdef HAVE_FAM_H
+
+#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
 	splay_tree *dirs; /* the nodes of the tree are fam_dir_entry */
 
-	FAMConnection *fam;
 	iosocket *sock;
+#endif
+#if defined(HAVE_FAM_H)
+	FAMConnection *fam;
 #endif
 } stat_cache;
 
@@ -466,7 +473,8 @@ typedef struct {
 	enum { STAT_CACHE_ENGINE_UNSET,
 			STAT_CACHE_ENGINE_NONE,
 			STAT_CACHE_ENGINE_SIMPLE,
-			STAT_CACHE_ENGINE_FAM
+			STAT_CACHE_ENGINE_FAM,
+			STAT_CACHE_ENGINE_INOTIFY
 	} stat_cache_engine;
 	unsigned short enable_cores;
 

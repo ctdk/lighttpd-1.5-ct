@@ -1667,6 +1667,15 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif
 
+#ifdef HAVE_SYS_INOTIFY_H
+	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
+		srv->stat_cache->sock->fd = inotify_init();
+
+		fdevent_register(srv->ev, srv->stat_cache->sock, stat_cache_handle_fdevent, NULL);
+		fdevent_event_add(srv->ev, srv->stat_cache->sock, FDEVENT_IN);
+	}
+#endif
+
 #ifdef HAVE_LIBAIO_H
 	if (0 != io_setup(LINUX_IO_MAX_IOCBS, &(srv->linux_io_ctx))) {
 		ERROR("io-setup() failed somehow %s", "");

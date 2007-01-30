@@ -88,6 +88,10 @@
 #cmakedefine  HAVE_LUA_H
 #cmakedefine  HAVE_LIBLUA
 
+/* inotify */
+#cmakedefine  HAVE_INOTIFY_INIT
+#cmakedefine  HAVE_SYS_INOTIFY_H
+
 /* Types */
 #cmakedefine  HAVE_SOCKLEN_T
 

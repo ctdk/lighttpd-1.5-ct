@@ -1333,6 +1333,15 @@ int connection_state_machine(server *srv, connection *con) {
 			case NETWORK_STATUS_WAIT_FOR_FD:
 				/* the backend received a EMFILE 
 				 * - e.g. for a mmap() of /dev/zero */
+				srv->want_fds++;
+
+				fdwaitqueue_append(srv, con);
+
+				connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
+
+				server_out_of_fds(srv);
+				
+				TRACE("suspending connection for: %s", BUF_STR(con->uri.path));
 
 				return HANDLER_WAIT_FOR_FD;
 			case NETWORK_STATUS_INTERRUPTED:

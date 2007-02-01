@@ -149,8 +149,13 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 	mod_indexfile_patch_connection(srv, con, p);
 
 	/* is the physical-path really a dir ? */
-	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+	switch(stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+	case HANDLER_WAIT_FOR_EVENT:
+		return HANDLER_WAIT_FOR_EVENT;
+	case HANDLER_ERROR:
 		return HANDLER_GO_ON;
+	default:
+		break;
 	}
 
 	if (!S_ISDIR(sce->st.st_mode)) {
@@ -177,7 +182,10 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 		}
 		buffer_append_string_buffer(p->tmp_buf, ds->value);
 
-		if (HANDLER_ERROR == stat_cache_get_entry(srv, con, p->tmp_buf, &sce)) {
+		switch(stat_cache_get_entry(srv, con, p->tmp_buf, &sce)) {
+		case HANDLER_WAIT_FOR_EVENT:
+			return HANDLER_WAIT_FOR_EVENT;
+		case HANDLER_ERROR:
 			if (errno == EACCES) {
 				con->http_status = 403;
 				buffer_reset(con->physical.path);
@@ -201,6 +209,8 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 				return HANDLER_FINISHED;
 			}
 			continue;
+		default:
+			break;
 		}
 
 		/* rewrite uri.path to the real path (/ -> /index.php) */

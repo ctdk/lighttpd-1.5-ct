@@ -152,6 +152,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | /* O_DIRECT | */ (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
+					if (errno == EMFILE) return NETWORK_STATUS_WAIT_FOR_FD;
+
 					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -202,6 +204,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						munmap(c->file.mmap.start, c->file.mmap.length);
 
 						close(c->file.copy.fd);
+						srv->cur_fds--;
 						c->file.copy.fd = -1;
 					}
 

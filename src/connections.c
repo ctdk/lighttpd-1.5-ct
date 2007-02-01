@@ -1341,8 +1341,6 @@ int connection_state_machine(server *srv, connection *con) {
 
 				server_out_of_fds(srv);
 				
-				TRACE("suspending connection for: %s", BUF_STR(con->uri.path));
-
 				return HANDLER_WAIT_FOR_FD;
 			case NETWORK_STATUS_INTERRUPTED:
 			case NETWORK_STATUS_UNSET:

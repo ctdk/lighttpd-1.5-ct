@@ -44,13 +44,13 @@ typedef struct {
 	int sock_fd;
 } write_job;
 
-write_job *write_job_init() {
+static write_job *write_job_init() {
 	write_job *wj = calloc(1, sizeof(*wj));
 
 	return wj;
 }
 
-void write_job_free(write_job *wj) {
+static void write_job_free(write_job *wj) {
 	if (!wj) return;
 
 	free(wj);

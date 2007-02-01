@@ -16,6 +16,8 @@
 typedef struct {
 	pcre_keyvalue_buffer *redirect;
 	data_config *context; /* to which apply me */
+
+	unsigned short redirect_code;
 } plugin_config;
 
 typedef struct {
@@ -74,6 +76,7 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 
 	config_values_t cv[] = {
 		{ "url.redirect",               NULL, T_CONFIG_LOCAL, T_CONFIG_SCOPE_CONNECTION }, /* 0 */
+		{ "url.redirect-code",          NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION }, /* 1 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -92,6 +95,7 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 		s->redirect   = pcre_keyvalue_buffer_init();
 
 		cv[0].destination = s->redirect;
+		cv[1].destination = &(s->redirect_code);
 
 		p->config_storage[i] = s;
 		ca = ((data_config *)srv->config_context->data[i])->value;
@@ -141,7 +145,8 @@ static int mod_redirect_patch_connection(server *srv, connection *con, plugin_da
 	size_t i, j;
 	plugin_config *s = p->config_storage[0];
 
-	p->conf.redirect = s->redirect;
+	PATCH_OPTION(redirect);
+	PATCH_OPTION(redirect_code);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -155,9 +160,11 @@ static int mod_redirect_patch_connection(server *srv, connection *con, plugin_da
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 
-			if (0 == strcmp(du->key->ptr, "url.redirect")) {
-				p->conf.redirect = s->redirect;
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.redirect"))) {
+				PATCH_OPTION(redirect);
 				p->conf.context = dc;
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.redirect-code"))) {
+				PATCH_OPTION(redirect_code);
 			}
 		}
 	}
@@ -185,7 +192,7 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 	if (i >= 0) {
 		response_header_insert(srv, con, CONST_STR_LEN("Location"), CONST_BUF_LEN(p->location));
 
-		con->http_status = 301;
+		con->http_status = p->conf.redirect_code > 99 && p->conf.redirect_code < 1000 ? p->conf.redirect_code : 301;
 		con->send->is_closed = 1;
 
 		return HANDLER_FINISHED;

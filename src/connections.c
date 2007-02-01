@@ -792,7 +792,7 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 		case CON_STATE_CLOSE:
 			break;
 		default:
-			ERROR("%s", "I thought only READ_REQUEST_* need fdevent-in");
+			ERROR("I thought only READ_REQUEST_* need fdevent-in: %d, %04x for (%s)", con->state, revents, BUF_STR(con->uri.path));
 			break;
 		}
 	}

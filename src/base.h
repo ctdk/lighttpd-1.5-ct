@@ -632,6 +632,7 @@ typedef struct server {
 	GAsyncQueue *aio_write_queue;
 
 	network_backend_t network_backend;
+	int is_shutdown;
 } server;
 
 int server_out_of_fds(server *srv);

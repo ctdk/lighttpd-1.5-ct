@@ -107,16 +107,23 @@ gpointer stat_cache_thread(gpointer _srv) {
 	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
 
 	/* */
-	while ((sj = g_async_queue_pop(inq))) {
+	while (!srv->is_shutdown) {
 		/* let's see what we have to stat */
 		struct stat st;
-	
-		/* don't care about the return code for now */
-		stat(sj->name->ptr, &st);
+		GTimeVal ts;
 
-		g_async_queue_push(outq, sj->con);
+		/* wait one second as the poll() */
+		g_get_current_time(&ts);
+		g_time_val_add(&ts, 500 * 1000); 
+
+		if ((sj = g_async_queue_timed_pop(inq, &ts))) {
+			/* don't care about the return code for now */
+			stat(sj->name->ptr, &st);
+
+			g_async_queue_push(outq, sj->con);
 		
-		stat_job_free(sj);
+			stat_job_free(sj);
+		}
 	}
 
 	g_async_queue_unref(srv->stat_queue);

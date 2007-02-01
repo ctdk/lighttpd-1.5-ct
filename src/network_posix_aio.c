@@ -68,6 +68,14 @@ static void posix_aio_completion_handler(sigval_t foo) {
 
 	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
 
+	if (srv->is_shutdown) {
+		write_job_free(wj);
+	
+		g_async_queue_unref(outq);
+
+		return;
+	}
+
 	res = aio_error(iocb);
 
 	if (res != EINPROGRESS) {

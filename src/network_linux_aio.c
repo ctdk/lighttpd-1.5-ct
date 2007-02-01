@@ -37,6 +37,7 @@
 
 #include "sys-files.h"
 
+/* the completion handler */
 gpointer linux_aio_read_thread(gpointer _srv) {
         server *srv = (server *)_srv;
 
@@ -44,7 +45,7 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
 
 	/* */
-	while (1) {
+	while (!srv->is_shutdown) {
 		/* let's see what we have to stat */
 		struct io_event event[16];
 	        struct timespec io_ts;

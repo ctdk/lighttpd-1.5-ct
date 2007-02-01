@@ -513,7 +513,11 @@ static void *joblist_queue_thread(void *_data) {
 		pthread_cond_wait(&joblist_queue_cond, &joblist_queue_mutex);
 		/* wait for getting signaled */
 
-		if (srv_shutdown) break;
+		if (srv_shutdown) {
+			pthread_mutex_unlock(&joblist_queue_mutex);
+
+			break;
+		}
 
 		/* wait one second as the poll() */
 		g_get_current_time(&ts);
@@ -540,8 +544,6 @@ static void *joblist_queue_thread(void *_data) {
 		pthread_mutex_unlock(&joblist_queue_mutex);
 	}
 	
-	pthread_mutex_unlock(&joblist_queue_mutex);
-
 	return NULL;
 }
 
@@ -970,8 +972,8 @@ int main (int argc, char **argv, char **envp) {
 	int pid_fd = -1, fd;
 	size_t i;
 	GThread **stat_cache_threads;
-	GThread **aio_write_threads;
-	GThread *linux_aio_read_thread_id;
+	GThread **aio_write_threads = NULL;
+	GThread *linux_aio_read_thread_id = NULL;
 	GError *gerr = NULL;
 #ifdef _WIN32
 	char *optarg = NULL;
@@ -1628,7 +1630,35 @@ int main (int argc, char **argv, char **envp) {
 
 	/* kill the threads */
 
-	
+	srv->is_shutdown = 1;
+
+#ifdef HAVE_LIBAIO_H
+	if (srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE) {
+		g_thread_join(linux_aio_read_thread_id);
+		free(srv->linux_io_iocbs);
+	}
+#endif
+#ifdef HAVE_AIO_H
+	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO) {
+		free(srv->posix_aio_iocbs);
+	}
+#endif
+	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
+		for (i = 0; i < srv->srvconf.max_write_threads; i++) {
+			g_thread_join(aio_write_threads[i]);
+		}
+		free(aio_write_threads);
+	}
+
+	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
+		g_thread_join(stat_cache_threads[i]);
+	}
+
+	/* the ref-count should be 0 now */
+	g_async_queue_unref(srv->stat_queue);
+	g_async_queue_unref(srv->joblist_queue);
+	g_async_queue_unref(srv->aio_write_queue);
+
 	/* clean-up */
 	network_close(srv);
 	connections_free(srv);

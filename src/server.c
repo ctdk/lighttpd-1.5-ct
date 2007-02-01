@@ -84,6 +84,7 @@ static volatile sig_atomic_t handle_sig_hup = 0;
 
 gpointer stat_cache_thread(gpointer );
 gpointer aio_write_thread(gpointer );
+gpointer linux_aio_read_thread(gpointer );
 
 #if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
 #include <pthread.h>
@@ -509,61 +510,6 @@ static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
  *
  * If no io-event is pending, linux_io_getevents_thread() won't be activated
  */
-#if defined(HAVE_LIBAIO_H)
-static void *linux_io_getevents_thread(void *_data) {
-	server *srv = _data;
-
-	while (!srv_shutdown) {
-		struct io_event event[16];
-	        struct timespec io_ts;
-		int res;
-		int waiting;
-
-		pthread_cond_wait(&getevents_cond, &getevents_mutex);
-
-		if (srv_shutdown) {
-			pthread_mutex_unlock(&getevents_mutex);
-
-			break;
-		}
-
-		/* wait one second as the poll() */
-		io_ts.tv_sec = 1;
-	        io_ts.tv_nsec = 0;
-
-		waiting = srv->have_aio_waiting;
-
-		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
-			int i;
-			for (i = 0; i < res; i++) {
-				connection *con = event[i].data;
-
-				if ((long)event[i].res <= 0) {
-					TRACE("async-read failed with %d (%s), waiting: %d, was asked for %s (fd = %d)",
-						event[i].res, strerror(-event[i].res), waiting, BUF_STR(con->uri.path), con->sock->fd);
-					connection_set_state(srv, con, CON_STATE_ERROR);
-				}
-
-				/* free the iocb */
-				event[i].obj->data = NULL;
-
-				joblist_append(srv, con);
-				srv->have_aio_waiting--;
-			}
-
-			/* interrupt the poll() */
-			kill(getpid(), SIGUSR1);
-		} else if (res < 0) {
-			TRACE("getevents - failed: %d", res);
-		}
-
-		pthread_mutex_unlock(&getevents_mutex);
-	}
-
-	return NULL;
-}
-#endif
-
 #if defined(HAVE_AIO_H)
 static void *posix_aio_getevents_thread(void *_data) {
 	server *srv = _data;
@@ -720,19 +666,11 @@ int lighty_mainloop(server *srv) {
 
 	pthread_create(&joblist_queue_thread_id, NULL, joblist_queue_thread, srv);
 
-#if defined(HAVE_LIBAIO_H)
-	if (!aio_backend) aio_backend = (srv->network_backend_write == network_write_chunkqueue_linuxaiosendfile) << 0;
-#endif
 #if defined(HAVE_AIO_H)
 	if (!aio_backend) aio_backend = (srv->network_backend_write == network_write_chunkqueue_posixaio) << 1;
 #endif
 
 	switch (aio_backend) {
-#if defined(HAVE_LIBAIO_H)
-	case 1:
-		pthread_create(&getevents_thread, NULL, linux_io_getevents_thread, srv);
-		break;
-#endif
 #if defined(HAVE_AIO_H)
 	case 2:
 		pthread_create(&getevents_thread, NULL, posix_aio_getevents_thread, srv);
@@ -1170,6 +1108,7 @@ int main (int argc, char **argv, char **envp) {
 	size_t i;
 	GThread **stat_cache_threads;
 	GThread **aio_write_threads;
+	GThread *linux_aio_read_thread_id;
 	GError *gerr = NULL;
 #ifdef _WIN32
 	char *optarg = NULL;
@@ -1794,6 +1733,14 @@ int main (int argc, char **argv, char **envp) {
 #endif
 	
 #ifdef HAVE_LIBAIO_H
+	linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
+	if (gerr) {
+		ERROR("g_thread_create failed: %s", gerr->message);
+
+		return -1;
+	}
+
+
 	srv->linux_io_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->linux_io_iocbs));
 	if (0 != io_setup(srv->srvconf.max_write_threads, &(srv->linux_io_ctx))) {
 		ERROR("io-setup() failed somehow %s", "");

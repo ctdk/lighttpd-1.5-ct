@@ -36,6 +36,51 @@
 
 #include "sys-files.h"
 
+gpointer linux_aio_read_thread(gpointer _srv) {
+        server *srv = (server *)_srv;
+
+	/* take the stat-job-queue */
+	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
+
+	/* */
+	while (1) {
+		/* let's see what we have to stat */
+		struct io_event event[16];
+	        struct timespec io_ts;
+		int res;
+		int waiting;
+
+		io_ts.tv_sec = 1;
+	        io_ts.tv_nsec = 0;
+
+		waiting = srv->have_aio_waiting;
+
+		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
+			int i;
+			for (i = 0; i < res; i++) {
+				connection *con = event[i].data;
+
+				if ((long)event[i].res <= 0) {
+					TRACE("async-read failed with %d (%s), waiting: %d, was asked for %s (fd = %d)",
+						event[i].res, strerror(-event[i].res), waiting, BUF_STR(con->uri.path), con->sock->fd);
+				}
+
+				/* free the iocb */
+				event[i].obj->data = NULL;
+
+				g_async_queue_push(outq, con);
+			}
+		} else if (res < 0) {
+			TRACE("getevents - failed: %d", res);
+		}
+	}
+	
+	g_async_queue_unref(srv->joblist_queue);
+
+	return NULL;
+}
+
+
 NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 	chunk *c, *tc;
 	size_t chunks_written = 0;

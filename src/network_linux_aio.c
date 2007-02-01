@@ -187,6 +187,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						munmap(c->file.mmap.start, c->file.mmap.length);
 
 						close(c->file.copy.fd);
+						srv->cur_fds--;
 						c->file.copy.fd = -1;
 					}
 

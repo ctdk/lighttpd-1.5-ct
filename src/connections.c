@@ -789,10 +789,24 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 		case CON_STATE_READ_REQUEST_CONTENT:
 			joblist_append(srv, con);
 			break;
-		case CON_STATE_CLOSE:
+		case CON_STATE_CLOSE: /* ignore the even, we will clean-up soon */
+			break;
+		case CON_STATE_ERROR:
+			ERROR("we are in (CON_STATE_ERROR), but still get a FDEVENT_IN, removing event from fd = %d, %04x for (%s)", 
+					con->sock->fd,
+					revents, 
+					BUF_STR(con->uri.path));
+			
+			fdevent_event_del(srv->ev, con->sock);
+
+			joblist_append(srv, con);
 			break;
 		default:
-			ERROR("I thought only READ_REQUEST_* need fdevent-in: %d, %04x for (%s)", con->state, revents, BUF_STR(con->uri.path));
+			ERROR("I thought only READ_REQUEST_* need fdevent-in: %d, fd = %d, %04x for (%s)", 
+					con->state, 
+					con->sock->fd,
+					revents, 
+					BUF_STR(con->uri.path));
 			break;
 		}
 	}

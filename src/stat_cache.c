@@ -257,7 +257,7 @@ int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
  *  - HANDLER_ERROR on stat() failed -> see errno for problem
  */
 
-handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_cache_entry **ret_sce) {
+static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buffer *name, stat_cache_entry **ret_sce, int async) {
 	stat_cache_entry *sce = NULL;
 	stat_cache *sc;
 	struct stat st;
@@ -306,7 +306,8 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 
 	/* pass a job to the stat-queue */
 
-	if (sce->state == STAT_CACHE_ENTRY_UNSET) {
+	if (async &&
+	    sce->state == STAT_CACHE_ENTRY_UNSET) {
 		stat_job *sj = stat_job_init();
 
 		buffer_copy_string_buffer(sj->name, name);
@@ -434,6 +435,15 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
 	*ret_sce = sce;
 
 	return HANDLER_GO_ON;
+}
+
+
+handler_t stat_cache_get_entry_async(server *srv, connection *con, buffer *name, stat_cache_entry **ret_sce) {
+	return stat_cache_get_entry_internal(srv, con, name, ret_sce, 1);
+}
+
+handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_cache_entry **ret_sce) {
+	return stat_cache_get_entry_internal(srv, con, name, ret_sce, 0);
 }
 
 /**

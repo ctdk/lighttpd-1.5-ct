@@ -485,7 +485,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
 		}
 
-		switch (stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+		switch (stat_cache_get_entry_async(srv, con, con->physical.path, &sce)) {
 		case HANDLER_GO_ON:
 			/* file exists */
 

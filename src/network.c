@@ -436,25 +436,6 @@ int network_close(server *srv) {
 	return 0;
 }
 
-typedef enum {
-	NETWORK_BACKEND_UNSET,
-
-	NETWORK_BACKEND_WRITE,
-	NETWORK_BACKEND_WRITEV,
-
-	NETWORK_BACKEND_LINUX_SENDFILE,
-	NETWORK_BACKEND_LINUX_AIO_SENDFILE,
-	NETWORK_BACKEND_POSIX_AIO,
-	NETWORK_BACKEND_GTHREAD_AIO,
-
-	NETWORK_BACKEND_FREEBSD_SENDFILE,
-	NETWORK_BACKEND_SOLARIS_SENDFILEV,
-
-	NETWORK_BACKEND_WIN32_SEND,
-	NETWORK_BACKEND_WIN32_TRANSMITFILE,
-
-} network_backend_t;
-
 int network_init(server *srv) {
 	buffer *b;
 	size_t i;
@@ -598,6 +579,9 @@ int network_init(server *srv) {
 	default:
 		return -1;
 	}
+
+	srv->network_backend = backend;
+
 #ifdef USE_OPENSSL
         SET_NETWORK_BACKEND_SSL(openssl, openssl);
 #endif

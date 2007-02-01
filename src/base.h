@@ -489,6 +489,26 @@ typedef struct {
 	unsigned short max_write_threads;
 } server_config;
 
+typedef enum {
+	NETWORK_BACKEND_UNSET,
+
+	NETWORK_BACKEND_WRITE,
+	NETWORK_BACKEND_WRITEV,
+
+	NETWORK_BACKEND_LINUX_SENDFILE,
+	NETWORK_BACKEND_LINUX_AIO_SENDFILE,
+	NETWORK_BACKEND_POSIX_AIO,
+	NETWORK_BACKEND_GTHREAD_AIO,
+
+	NETWORK_BACKEND_FREEBSD_SENDFILE,
+	NETWORK_BACKEND_SOLARIS_SENDFILEV,
+
+	NETWORK_BACKEND_WIN32_SEND,
+	NETWORK_BACKEND_WIN32_TRANSMITFILE,
+
+} network_backend_t;
+
+
 typedef struct {
 	sock_addr addr;
 	iosocket *sock;
@@ -597,8 +617,6 @@ typedef struct server {
 	gid_t gid;
 #endif
 
-	int have_aio_waiting;
-
 #ifdef HAVE_LIBAIO_H
 	io_context_t linux_io_ctx;
 
@@ -607,14 +625,13 @@ typedef struct server {
 #endif
 #ifdef HAVE_AIO_H
 	struct aiocb *posix_aio_iocbs;
-	struct aiocb ** posix_aio_iocbs_watch;
-
-	void **posix_aio_data;
 #endif
 
 	GAsyncQueue *stat_queue; /* send a stat_job into this queue and joblist_queue will get a wakeup when the stat is finished */
 	GAsyncQueue *joblist_queue;
 	GAsyncQueue *aio_write_queue;
+
+	network_backend_t network_backend;
 } server;
 
 int server_out_of_fds(server *srv);

@@ -35,6 +35,75 @@
 #include "joblist.h"
 
 #include "sys-files.h"
+#include "status_counter.h"
+
+typedef struct {
+	server *srv;
+	connection *con;
+
+	struct aiocb *iocb;
+
+	chunk *c;
+} write_job;
+
+static write_job *write_job_init() {
+	write_job *wj = calloc(1, sizeof(*wj));
+
+	return wj;
+}
+
+static void write_job_free(write_job *wj) {
+	if (!wj) return;
+
+	free(wj);
+}
+
+static void posix_aio_completion_handler(sigval_t foo) {
+	write_job *wj = (write_job *)foo.sival_ptr;
+	server *srv        = wj->srv;
+	connection *con    = wj->con;
+	struct aiocb *iocb = wj->iocb;
+	chunk *c           = wj->c;
+	int res;
+
+	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
+
+	res = aio_error(iocb);
+
+	if (res != EINPROGRESS) {
+		switch (res) {
+		case ECANCELED:
+			TRACE("aio-op was canceled, was asked for %s (fd = %d)",
+				BUF_STR(con->uri.path), con->sock->fd);
+			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+			break;
+		case 0:
+			break;
+		default:
+			TRACE("aio-op failed with %d (%s), was asked for %s (fd = %d)",
+				res, strerror(res), BUF_STR(con->uri.path), con->sock->fd);
+			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+			break;
+		}
+
+		if ((res = aio_return(iocb)) < 0) {
+			/* we have an error */
+
+			TRACE("aio-return returned %d (%s), was asked for %s (fd = %d)",
+				res, strerror(res), BUF_STR(con->uri.path), con->sock->fd);
+
+			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+		}
+
+		g_async_queue_push(outq, con);
+
+		iocb->aio_nbytes = 0; /* mark the entry as unused */
+	}
+
+	write_job_free(wj);
+	
+	g_async_queue_unref(outq);
+}
 
 NETWORK_BACKEND_WRITE(posixaio) {
 	chunk *c, *tc;
@@ -89,7 +158,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 			do {
 				size_t toSend;
-				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				const off_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
 				off_t offset;
 
 				offset = c->file.start + c->offset;
@@ -131,7 +200,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					/* do we have a IOCB we can use ? */
 
 					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < srv->srvconf.max_write_threads; iocb_ndx++) {
-						if (NULL == srv->posix_aio_data[iocb_ndx]) {
+						if (0 == srv->posix_aio_iocbs[iocb_ndx].aio_nbytes) {
 							break;
 						}
 					}
@@ -178,6 +247,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					/* looks like we couldn't get a temp-file [disk-full] */
 					if (async_error == 0 && c->file.mmap.start != MAP_FAILED) {
 						struct aiocb *iocb = NULL;
+						write_job *wj;
 
 						assert(c->file.copy.length > 0);
 
@@ -186,23 +256,27 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						memset(iocb, 0, sizeof(*iocb));
 
 						iocb->aio_fildes = c->file.fd;
-						iocb->aio_buf = c->file.mmap.start;
+						iocb->aio_buf    = c->file.mmap.start;
 						iocb->aio_nbytes = c->file.copy.length;
 						iocb->aio_offset = c->file.start + c->offset;
 
+						wj = write_job_init();
+						wj->srv = srv;
+						wj->con = con;
+						wj->iocb = iocb;
+
+						iocb->aio_sigevent.sigev_notify_function = posix_aio_completion_handler;
+						iocb->aio_sigevent.sigev_notify_attributes = NULL;
+						iocb->aio_sigevent.sigev_value.sival_ptr = wj;
+						iocb->aio_sigevent.sigev_notify = SIGEV_THREAD;
+
 					       	if (0 == aio_read(iocb)) {
-							srv->have_aio_waiting++;
-
-							srv->posix_aio_iocbs_watch[iocb_ndx] = iocb;
-							srv->posix_aio_data[iocb_ndx] = con;
-
+							status_counter_inc(CONST_STR_LEN("server.io.posix-aio.async-read"));
 							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 						} else {
-							srv->posix_aio_data[iocb_ndx] = NULL;
-
 							if (errno != EAGAIN) {
-								TRACE("aio_read returned: %d (%s), waiting jobs: %d, falling back to sync-io",
-									errno, strerror(errno), srv->have_aio_waiting);
+								TRACE("aio_read returned: %d (%s), falling back to sync-io",
+									errno, strerror(errno));
 							} else {
 								TRACE("aio_read returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
 							}
@@ -212,6 +286,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					/* fall back to a blocking read */
 
 					if (c->file.mmap.start != MAP_FAILED) {
+						status_counter_inc(CONST_STR_LEN("server.io.posix-aio.sync-read"));
+
 						lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
 
 						if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
@@ -320,10 +396,6 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					c->file.mmap.start = MAP_FAILED;
 					c->file.copy.length = 0;
 				}
-#if 0
-				/* return as soon as possible again */
-				fcntl(sock->fd, F_SETFL, fcntl(sock->fd, F_GETFL) | O_NONBLOCK);
-#endif
 
 				if (c->offset == c->file.length) {
 					chunk_finished = 1;

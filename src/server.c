@@ -487,115 +487,22 @@ static void show_help (void) {
 static pthread_mutex_t joblist_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t joblist_queue_cond = PTHREAD_COND_INITIALIZER;
 
-
-#if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
-
-static pthread_mutex_t getevents_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t getevents_cond = PTHREAD_COND_INITIALIZER;
-
 /**
- * a async event handler for libaio
+ * a async handler
  *
  * The problem:
  * - poll(..., 1000) is blocking
- * - getevents(..., 1000) is blocking too
+ * - g_async_queue_timed_pop(..., 1000) is blocking too
  *
- * I havn't found a way to monitor getevents with poll or friends
+ * I havn't found a way to monitor g_async_queue_timed_pop with poll or friends
  *
- * So ... we run io_getevents() and fdevents_poll() at the same time. As long
- * as the poll() is running io_getevents() running too.
+ * So ... we run g_async_queue_timed_pop() and fdevents_poll() at the same time. As long
+ * as the poll() is running g_async_queue_timed_pop() running too.
  *
  * The one who finishes earlier fires a kill(getpid(), SIGUSR1); to interrupt
  * the other system call. We use mutexes to synchronize the two functions.
  *
- * If no io-event is pending, linux_io_getevents_thread() won't be activated
  */
-#if defined(HAVE_AIO_H)
-static void *posix_aio_getevents_thread(void *_data) {
-	server *srv = _data;
-
-	while (!srv_shutdown) {
-	        struct timespec io_ts;
-		int waiting;
-
-		pthread_cond_wait(&getevents_cond, &getevents_mutex);
-
-		if (srv_shutdown) {
-			pthread_mutex_unlock(&getevents_mutex);
-
-			break;
-		}
-
-		/* wait one second as the poll() */
-		io_ts.tv_sec = 1;
-	        io_ts.tv_nsec = 0;
-
-		waiting = srv->have_aio_waiting;
-
-		if (0 == aio_suspend(srv->posix_aio_iocbs_watch, srv->srvconf.max_write_threads, &io_ts)) {
-			int i;
-
-			for (i = 0; i < srv->srvconf.max_write_threads && srv->have_aio_waiting > 0; i++) {
-				connection *con;
-				struct aiocb *iocb;
-				int res;
-
-				if (srv->posix_aio_iocbs_watch[i] == NULL) continue;
-
-				con = srv->posix_aio_data[i];
-				iocb = srv->posix_aio_iocbs_watch[i];
-
-				res = aio_error(iocb);
-
-				if (res != EINPROGRESS) {
-					switch (res) {
-					case ECANCELED:
-						connection_set_state(srv, con, CON_STATE_ERROR);
-
-						TRACE("aio-op was canceled, waiting: %d, was asked for %s (fd = %d)",
-							waiting, BUF_STR(con->uri.path), con->sock->fd);
-						connection_set_state(srv, con, CON_STATE_ERROR);
-						break;
-					case 0:
-						break;
-					default:
-						connection_set_state(srv, con, CON_STATE_ERROR);
-
-						TRACE("aio-op failed with %d (%s), waiting: %d, was asked for %s (fd = %d)",
-							res, strerror(res), waiting, BUF_STR(con->uri.path), con->sock->fd);
-						connection_set_state(srv, con, CON_STATE_ERROR);
-						break;
-					}
-
-					if ((res = aio_return(iocb)) < 0) {
-						/* we have an error */
-
-						TRACE("aio-return returned %d (%s), waiting: %d, was asked for %s (fd = %d)",
-							res, strerror(res), waiting, BUF_STR(con->uri.path), con->sock->fd);
-						connection_set_state(srv, con, CON_STATE_ERROR);
-					}
-
-					/* free the iocb */
-					srv->posix_aio_data[i] = NULL;
-					srv->posix_aio_iocbs_watch[i] = NULL;
-
-					joblist_append(srv, con);
-					srv->have_aio_waiting--;
-				}
-			}
-
-			/* interrupt the poll() */
-			kill(getpid(), SIGUSR1);
-		}
-
-		pthread_mutex_unlock(&getevents_mutex);
-	}
-
-	return NULL;
-}
-#endif
-#endif
-
 static void *joblist_queue_thread(void *_data) {
 	server *srv = _data;
 
@@ -626,6 +533,7 @@ static void *joblist_queue_thread(void *_data) {
 				}
 			} while ((con = g_async_queue_try_pop(srv->joblist_queue)));
 
+			/* interrupt the poll() */
 			if (killme) kill(getpid(), SIGUSR1);
 		}
 
@@ -654,32 +562,15 @@ int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
 	int poll_errno;
 
-#if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
 	/* the getevents and the poll() have to run in parallel
 	 * as soon as one has data, it has to interrupt the otherone */
 
-	pthread_t getevents_thread, joblist_queue_thread_id;
-	int aio_backend = 0;
+	pthread_t joblist_queue_thread_id;
 
-	pthread_mutex_lock(&getevents_mutex);
 	pthread_mutex_lock(&joblist_queue_mutex);
 
 	pthread_create(&joblist_queue_thread_id, NULL, joblist_queue_thread, srv);
 
-#if defined(HAVE_AIO_H)
-	if (!aio_backend) aio_backend = (srv->network_backend_write == network_write_chunkqueue_posixaio) << 1;
-#endif
-
-	switch (aio_backend) {
-#if defined(HAVE_AIO_H)
-	case 2:
-		pthread_create(&getevents_thread, NULL, posix_aio_getevents_thread, srv);
-		break;
-#endif
-	default:
-		break;
-	}
-#endif
 	/* main-loop */
 	while (!srv_shutdown) {
 		int n;
@@ -939,25 +830,12 @@ int lighty_mainloop(server *srv) {
 			}
 		}
 
-#if defined(HAVE_LIBAIO_H) || defined (HAVE_AIO_H)
-		if (aio_backend) {
-			pthread_mutex_unlock(&getevents_mutex);
-			pthread_cond_signal(&getevents_cond);
-		}
-#endif
-
 		/* open the joblist-queue handling */
 		pthread_mutex_unlock(&joblist_queue_mutex);
 		pthread_cond_signal(&joblist_queue_cond);
 
 		n = fdevent_poll(srv->ev, 1000);
 		poll_errno = errno;
-
-		/* if the other side didn't interrupted us, we interrupt the getevents() */
-
-		if (n != -1 || poll_errno != EINTR) {
-			kill(getpid(), SIGUSR1);
-		}
 
 		if (-1 == pthread_mutex_trylock(&joblist_queue_mutex)) {
 			switch (errno) {
@@ -972,12 +850,6 @@ int lighty_mainloop(server *srv) {
 				break;
 			}
 		}
-
-#if defined(HAVE_LIBAIO_H) || defined (HAVE_AIO_H)
-		if (aio_backend) {
-			pthread_mutex_lock(&getevents_mutex);
-		}
-#endif
 
 		if (n > 0) {
 			/* n is the number of events */
@@ -1080,19 +952,10 @@ int lighty_mainloop(server *srv) {
 
 	fdevent_revents_free(revents);
 
-#ifdef HAVE_LIBAIO_H
-	pthread_mutex_unlock(&getevents_mutex);
-	pthread_cond_signal(&getevents_cond); /* set the thread shutdown */
-
-	if (aio_backend) {
-		pthread_join(getevents_thread, NULL);
-	}
-
 	pthread_mutex_unlock(&joblist_queue_mutex);
 	pthread_cond_signal(&joblist_queue_cond); /* set the thread shutdown */
 	pthread_join(joblist_queue_thread_id, NULL);
 
-#endif
 	return 0;
 }
 
@@ -1654,7 +1517,6 @@ int main (int argc, char **argv, char **envp) {
 	srv->aio_write_queue = g_async_queue_new();
 
 	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
-	aio_write_threads = calloc(srv->srvconf.max_write_threads, sizeof(*aio_write_threads));
 
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
 		stat_cache_threads[i] = g_thread_create(stat_cache_thread, srv, 1, &gerr);
@@ -1665,12 +1527,15 @@ int main (int argc, char **argv, char **envp) {
 		}
 	}
 
-	for (i = 0; i < srv->srvconf.max_write_threads; i++) {
-		aio_write_threads[i] = g_thread_create(aio_write_thread, srv, 1, &gerr);
-		if (gerr) {
-			ERROR("g_thread_create failed: %s", gerr->message);
+	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
+		aio_write_threads = calloc(srv->srvconf.max_write_threads, sizeof(*aio_write_threads));
+		for (i = 0; i < srv->srvconf.max_write_threads; i++) {
+			aio_write_threads[i] = g_thread_create(aio_write_thread, srv, 1, &gerr);
+			if (gerr) {
+				ERROR("g_thread_create failed: %s", gerr->message);
 
-			return -1;
+				return -1;
+			}
 		}
 	}
 
@@ -1699,24 +1564,6 @@ int main (int argc, char **argv, char **envp) {
 		return -1;
 	}
 
-#ifdef HAVE_FAM_H
-	/* setup FAM */
-	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_FAM) {
-		if (0 != FAMOpen2(srv->stat_cache->fam, "lighttpd")) {
-			log_error_write(srv, __FILE__, __LINE__, "s",
-					 "could not open a fam connection, dieing.");
-			return -1;
-		}
-#ifdef HAVE_FAMNOEXISTS
-		FAMNoExists(srv->stat_cache->fam);
-#endif
-		srv->stat_cache->sock->fd = FAMCONNECTION_GETFD(srv->stat_cache->fam);
-
-		fdevent_register(srv->ev, srv->stat_cache->sock, stat_cache_handle_fdevent, NULL);
-		fdevent_event_add(srv->ev, srv->stat_cache->sock, FDEVENT_IN);
-	}
-#endif
-
 #ifdef HAVE_SYS_INOTIFY_H
 	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
 		srv->stat_cache->sock->fd = inotify_init();
@@ -1727,25 +1574,25 @@ int main (int argc, char **argv, char **envp) {
 #endif
 
 #ifdef HAVE_AIO_H
-	srv->posix_aio_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->posix_aio_iocbs));
-	srv->posix_aio_iocbs_watch = calloc(srv->srvconf.max_write_threads, sizeof(*srv->posix_aio_iocbs_watch));
-	srv->posix_aio_data = calloc(srv->srvconf.max_write_threads, sizeof(*srv->posix_aio_data));
+	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO) {
+		srv->posix_aio_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->posix_aio_iocbs));
+	}
 #endif
 	
 #ifdef HAVE_LIBAIO_H
-	linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
-	if (gerr) {
-		ERROR("g_thread_create failed: %s", gerr->message);
+	if (srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE) {
+		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
+		if (gerr) {
+			ERROR("g_thread_create failed: %s", gerr->message);
 
-		return -1;
-	}
+			return -1;
+		}		
+		srv->linux_io_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->linux_io_iocbs));
+		if (0 != io_setup(srv->srvconf.max_write_threads, &(srv->linux_io_ctx))) {
+			ERROR("io-setup() failed somehow %s", "");
 
-
-	srv->linux_io_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->linux_io_iocbs));
-	if (0 != io_setup(srv->srvconf.max_write_threads, &(srv->linux_io_ctx))) {
-		ERROR("io-setup() failed somehow %s", "");
-
-		return -1;
+			return -1;
+		}
 	}
 #endif
 

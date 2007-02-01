@@ -33,6 +33,7 @@
 #include "log.h"
 #include "stat_cache.h"
 #include "joblist.h"
+#include "status_counter.h"
 
 #include "sys-files.h"
 
@@ -48,12 +49,9 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 		struct io_event event[16];
 	        struct timespec io_ts;
 		int res;
-		int waiting;
 
 		io_ts.tv_sec = 1;
 	        io_ts.tv_nsec = 0;
-
-		waiting = srv->have_aio_waiting;
 
 		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
 			int i;
@@ -61,8 +59,8 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 				connection *con = event[i].data;
 
 				if ((long)event[i].res <= 0) {
-					TRACE("async-read failed with %d (%s), waiting: %d, was asked for %s (fd = %d)",
-						event[i].res, strerror(-event[i].res), waiting, BUF_STR(con->uri.path), con->sock->fd);
+					TRACE("async-read failed with %d (%s), was asked for %s (fd = %d)",
+						event[i].res, strerror(-event[i].res), BUF_STR(con->uri.path), con->sock->fd);
 				}
 
 				/* free the iocb */
@@ -148,7 +146,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 			do {
 				size_t toSend;
-				const size_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				const off_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
 				int file_fd;
 				off_t offset;
 
@@ -268,15 +266,14 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						iocb->data = con;
 
 					       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
-							srv->have_aio_waiting++;
-
+							status_counter_inc(CONST_STR_LEN("server.io.linux-aio.async-read"));
 							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 						} else {
 							iocb->data = NULL;
 
 							if (-res != EAGAIN) {
-								TRACE("io_submit returned: %d (%s), waiting jobs: %d, falling back to sync-io",
-									res, strerror(-res), srv->have_aio_waiting);
+								TRACE("io_submit returned: %d (%s), falling back to sync-io",
+									res, strerror(-res));
 							} else {
 								TRACE("io_submit returned EAGAIN on (%d - %d), -> sync-io", c->file.fd, c->file.copy.fd);
 							}
@@ -305,6 +302,8 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				}
 
 				if (c->file.copy.fd == -1) {
+					status_counter_inc(CONST_STR_LEN("server.io.linux-aio.sync-read"));
+
 					file_fd = c->file.fd;
 				} else {
 					file_fd = c->file.copy.fd;

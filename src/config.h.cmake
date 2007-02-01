@@ -94,6 +94,8 @@
 
 /* Types */
 #cmakedefine  HAVE_SOCKLEN_T
+#cmakedefine  SIZEOF_LONG ${SIZEOF_LONG}
+#cmakedefine  SIZEOF_OFF_T ${SIZEOF_OFF_T}
 
 /* Functions */
 #cmakedefine  HAVE_CHROOT

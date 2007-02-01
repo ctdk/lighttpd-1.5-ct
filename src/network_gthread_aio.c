@@ -175,7 +175,6 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 			break;
 		case FILE_CHUNK: {
-			stat_cache_entry *sce = NULL;
 			ssize_t r;
 
 			/* we might be on our way back from the async request and have a status-code */
@@ -204,19 +203,84 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 			/* check if we have content */
 			if (c->file.copy.length == 0) {
-				write_job *wj;
+				const off_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				size_t toSend;
+				off_t offset;
 
-				wj = write_job_init();
-				wj->c = c;
-				wj->con = con;
-				wj->sock_fd = sock->fd;
+				offset = c->file.start + c->offset;
 
-				c->async.written = -1;
-				c->async.ret_val = NETWORK_STATUS_UNSET;
+				toSend = c->file.length - c->offset > max_toSend ?
+					max_toSend : c->file.length - c->offset;
 
-				g_async_queue_push(srv->aio_write_queue, wj);
+				/* we small files don't take the overhead of a full async-loop */
+				if (toSend < 16 * 1024) {
+					int mmap_fd;
+			
+					c->file.copy.offset = 0;
+					c->file.copy.length = toSend;
+			
+					/* open a file in /dev/shm to write to */
+					if (c->file.mmap.start == MAP_FAILED) {
+						if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
+							if (errno != EMFILE) {
+								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",
+									errno, strerror(errno), srv->cur_fds);
+								return NETWORK_STATUS_FATAL_ERROR;
+							} else {
+								return NETWORK_STATUS_WAIT_FOR_FD;
+							}
+						} else {
+							c->file.mmap.offset = 0;
+							c->file.mmap.length = c->file.copy.length; /* align to page-size */
+				
+							c->file.mmap.start = mmap(0, c->file.mmap.length,
+									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
+							if (c->file.mmap.start == MAP_FAILED) {
+								return NETWORK_STATUS_FATAL_ERROR;
+							}
+				
+							close(mmap_fd);
+							mmap_fd = -1;
+						}
+					}
+					
+					if (c->file.mmap.start != MAP_FAILED) {
+						lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
+			
+						if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
+							switch(errno) {
+							default:
+								ERROR("reading file failed: %d (%s)", errno, strerror(errno));
+			
+								return NETWORK_STATUS_FATAL_ERROR;
+							}
+						} else if (r == 0) {
+							ERROR("read() returned 0 ... not good: %s", "");
+			
+							return NETWORK_STATUS_FATAL_ERROR;
+						} else if (r != c->file.copy.length) {
+							ERROR("read() returned %d instead of %d", r, c->file.copy.length);
+			
+							return NETWORK_STATUS_FATAL_ERROR;
+						}
+					} else {
+						return NETWORK_STATUS_FATAL_ERROR;
+					}
+				} else {
+					write_job *wj;
 
-				return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+					wj = write_job_init();
+					wj->c = c;
+					wj->con = con;
+					wj->sock_fd = sock->fd;
+
+					c->async.written = -1;
+					c->async.ret_val = NETWORK_STATUS_UNSET;
+
+					g_async_queue_push(srv->aio_write_queue, wj);
+
+					return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
+				}
 			}
 
 			if (-1 == (r = write(sock->fd, c->file.mmap.start + c->file.copy.offset, c->file.copy.length - c->file.copy.offset))) {

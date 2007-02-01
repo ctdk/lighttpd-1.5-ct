@@ -58,80 +58,88 @@ static void write_job_free(write_job *wj) {
 
 gpointer aio_write_thread(gpointer _srv) {
         server *srv = (server *)_srv;
-        write_job *wj = NULL;
 
 	/* take the stat-job-queue */
 	GAsyncQueue * inq = g_async_queue_ref(srv->aio_write_queue);
 	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
 
 	/* */
-	while ((wj = g_async_queue_pop(inq))) {
-		/* let's see what we have to stat */
-		ssize_t r;
-		off_t offset;
-		size_t toSend;
-		const off_t max_toSend = 4 * 256 * 1024; /** should be larger than the send buffer */
-		chunk *c = wj->c;
-		int mmap_fd;
+	while (!srv->is_shutdown) {
+		GTimeVal ts;
+        	write_job *wj = NULL;
+
+		/* wait one second as the poll() */
+		g_get_current_time(&ts);
+		g_time_val_add(&ts, 500 * 1000);
+
+		if ((wj = g_async_queue_timed_pop(inq, &ts))) {
+			/* let's see what we have to stat */
+			ssize_t r;
+			off_t offset;
+			size_t toSend;
+			const off_t max_toSend = 4 * 256 * 1024; /** should be larger than the send buffer */
+			chunk *c = wj->c;
+			int mmap_fd;
 			
-		offset = c->file.start + c->offset;
+			offset = c->file.start + c->offset;
 
-		toSend = c->file.length - c->offset > max_toSend ?
-			max_toSend : c->file.length - c->offset;
+			toSend = c->file.length - c->offset > max_toSend ?
+				max_toSend : c->file.length - c->offset;
 
-		c->file.copy.offset = 0;
-		c->file.copy.length = toSend;
+			c->file.copy.offset = 0;
+			c->file.copy.length = toSend;
 
-		/* open a file in /dev/shm to write to */
-		if (c->file.mmap.start == MAP_FAILED) {
-			if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
-				if (errno != EMFILE) {
-					TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",
-						errno, strerror(errno), srv->cur_fds);
-					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+			/* open a file in /dev/shm to write to */
+			if (c->file.mmap.start == MAP_FAILED) {
+				if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
+					if (errno != EMFILE) {
+						TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",
+							errno, strerror(errno), srv->cur_fds);
+						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+					} else {
+						c->async.ret_val = NETWORK_STATUS_WAIT_FOR_FD;
+					}
 				} else {
-					c->async.ret_val = NETWORK_STATUS_WAIT_FOR_FD;
-				}
-			} else {
-				c->file.mmap.offset = 0;
-				c->file.mmap.length = c->file.copy.length; /* align to page-size */
+					c->file.mmap.offset = 0;
+					c->file.mmap.length = c->file.copy.length; /* align to page-size */
 	
-				c->file.mmap.start = mmap(0, c->file.mmap.length,
-						PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
-				if (c->file.mmap.start == MAP_FAILED) {
-					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
-				}
+					c->file.mmap.start = mmap(0, c->file.mmap.length,
+							PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
+					if (c->file.mmap.start == MAP_FAILED) {
+						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+					}
 	
-				close(mmap_fd);
-				mmap_fd = -1;
+					close(mmap_fd);
+					mmap_fd = -1;
+				}
 			}
-		}
 		
-		if (c->file.mmap.start != MAP_FAILED) {
-			lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
+			if (c->file.mmap.start != MAP_FAILED) {
+				lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
 
-			if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
-				switch(errno) {
-				default:
-					ERROR("reading file failed: %d (%s)", errno, strerror(errno));
+				if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
+					switch(errno) {
+					default:
+						ERROR("reading file failed: %d (%s)", errno, strerror(errno));
 
+						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+					}
+				} else if (r == 0) {
+					ERROR("read() returned 0 ... not good: %s", "");
+	
+					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+				} else if (r != c->file.copy.length) {
+					ERROR("read() returned %d instead of %d", r, c->file.copy.length);
+	
 					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 				}
-			} else if (r == 0) {
-				ERROR("read() returned 0 ... not good: %s", "");
-
-				c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
-			} else if (r != c->file.copy.length) {
-				ERROR("read() returned %d instead of %d", r, c->file.copy.length);
-
-				c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 			}
-		}
 
-		/* read async, write as usual */ 
-		g_async_queue_push(outq, wj->con);
+			/* read async, write as usual */ 
+			g_async_queue_push(outq, wj->con);
 	
-		write_job_free(wj);
+			write_job_free(wj);
+		}
 	}
 	
 	g_async_queue_unref(srv->aio_write_queue);

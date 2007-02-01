@@ -147,7 +147,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 			do {
 				size_t toSend;
-				const off_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				const off_t max_toSend = 4 * 256 * 1024; /** should be larger than the send buffer */
 				int file_fd;
 				off_t offset;
 

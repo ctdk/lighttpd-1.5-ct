@@ -70,7 +70,7 @@ gpointer aio_write_thread(gpointer _srv) {
 		ssize_t r;
 		off_t offset;
 		size_t toSend;
-		const off_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+		const off_t max_toSend = 4 * 256 * 1024; /** should be larger than the send buffer */
 		chunk *c = wj->c;
 		int mmap_fd;
 			

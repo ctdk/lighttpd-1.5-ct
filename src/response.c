@@ -485,7 +485,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
 		}
 
-		if (HANDLER_ERROR != stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+		switch (stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+		case HANDLER_GO_ON:
 			/* file exists */
 
 			if (con->conf.log_request_handling) {
@@ -524,7 +525,10 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 
 			}
-		} else {
+			break;
+		case HANDLER_WAIT_FOR_EVENT:
+			return HANDLER_WAIT_FOR_EVENT;
+		case HANDLER_ERROR:
 			switch (errno) {
 			case EACCES:
 				con->http_status = 403;

@@ -130,13 +130,13 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					/* do we have a IOCB we can use ? */
 
-					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < POSIX_AIO_MAX_IOCBS; iocb_ndx++) {
+					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < srv->srvconf.max_write_threads; iocb_ndx++) {
 						if (NULL == srv->posix_aio_data[iocb_ndx]) {
 							break;
 						}
 					}
 
-					if (iocb_ndx == POSIX_AIO_MAX_IOCBS) {
+					if (iocb_ndx == srv->srvconf.max_write_threads) {
 						async_error = 1;
 					}
 

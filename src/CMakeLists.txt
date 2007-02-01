@@ -18,7 +18,6 @@ OPTION(WITH_PCRE "with regex support [default: on]" ON)
 OPTION(WITH_WEBPAV_PROPS "with property-support for mod_webdav [default: off]")
 OPTION(WITH_BZIP "with bzip2-support for mod_compress [default: off]")
 OPTION(WITH_ZLIB "with deflate-support for mod_compress [default: on]" ON)
-OPTION(WITH_FAM "with FAM-support for the stat-cache [default: off]")
 OPTION(WITH_LDAP "with LDAP-support for the mod_auth [default: off]")
 OPTION(WITH_LIBAIO "with libaio for the linux [default: off]")
 OPTION(WITH_LIBFCGI "with libfcgi for fcgi-stat-accel [default: off]")
@@ -55,6 +54,8 @@ CHECK_INCLUDE_FILES(sys/wait.h HAVE_SYS_WAIT_H)
 CHECK_INCLUDE_FILES(sys/time.h HAVE_SYS_TIME_H)
 CHECK_INCLUDE_FILES(time.h HAVE_TIME_H)
 
+INCLUDE_DIRECTORIES(/opt/gnome/include/glib-2.0 /opt/gnome/lib64/glib-2.0/include/)
+
 IF(WITH_XATTR)
   CHECK_INCLUDE_FILES(attr/attributes.h HAVE_ATTR_ATTRIBUTES_H)
 ENDIF(WITH_XATTR)
@@ -84,9 +85,7 @@ IF(WITH_BZIP)
   CHECK_INCLUDE_FILES(bzlib.h HAVE_BZLIB_H)
   CHECK_LIBRARY_EXISTS(bz2 BZ2_bzCompressInit "" HAVE_LIBBZ2)
 ENDIF(WITH_BZIP)
-IF(WITH_FAM)
-  CHECK_INCLUDE_FILES(fam.h HAVE_FAM_H)
-ENDIF(WITH_FAM)
+
 CHECK_INCLUDE_FILES(getopt.h HAVE_GETOPT_H)
 CHECK_INCLUDE_FILES(inttypes.h HAVE_INTTYPES_H)
 IF(WITH_LDAP)
@@ -230,6 +229,7 @@ SET(COMMON_SRC
       network_openssl.c
       network_linux_aio.c
       network_posix_aio.c
+      network_gthread_aio.c
       http_resp.c
       http_resp_parser.c
       http_req.c
@@ -369,6 +369,8 @@ IF(CMAKE_SYSTEM MATCHES "Linux")
   SET_TARGET_PROPERTIES(lighttpd PROPERTIES LINK_FLAGS "-pthread -lrt")
 ENDIF(CMAKE_SYSTEM MATCHES "Linux")
 
+TARGET_LINK_LIBRARIES(lighttpd glib-2.0 gthread-2.0)
+SET_TARGET_PROPERTIES(lighttpd PROPERTIES LINK_FLAGS "-L/opt/gnome/lib64/ -pthread -lrt")
 SET_TARGET_PROPERTIES(lighttpd PROPERTIES CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
 
 IF(NOT BUILD_STATIC)
@@ -382,10 +384,6 @@ ENDIF(HAVE_LIBAIO_H)
 IF(HAVE_PCRE_H)
   TARGET_LINK_LIBRARIES(lighttpd pcre)
 ENDIF(HAVE_PCRE_H)
-
-IF(HAVE_FAM_H)
-  TARGET_LINK_LIBRARIES(lighttpd fam)
-ENDIF(HAVE_FAM_H)
 
 IF(HAVE_LIBSSL AND HAVE_LIBCRYPTO)
   TARGET_LINK_LIBRARIES(lighttpd ssl)

@@ -1,4 +1,4 @@
-AM_CFLAGS = $(FAM_CFLAGS)
+AM_CFLAGS = $(GTHREAD_CFLAGS)
 
 noinst_PROGRAMS=proc_open lemon # simple-fcgi 
 if CHECK_WITH_FASTCGI
@@ -70,6 +70,7 @@ common_src=buffer.c log.c \
       network_solaris_sendfilev.c network_openssl.c \
       network_linux_aio.c \
       network_posix_aio.c \
+      network_gthread_aio.c \
       splaytree.c \
       http_resp.c http_resp_parser.c \
       http_req.c http_req_parser.c \
@@ -123,11 +124,11 @@ mod_webdav_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) $(SQLITE_CFLAGS)
 mod_webdav_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_webdav_la_LIBADD = $(common_libadd) $(XML_LIBS) $(SQLITE_LIBS) $(UUID_LIB)
 
-#lib_LTLIBRARIES += mod_cml.la
-#mod_cml_la_SOURCES = mod_cml.c mod_cml_lua.c mod_cml_funcs.c
-#mod_cml_la_CFLAGS = $(AM_CFLAGS) $(LUA_CFLAGS)
-#mod_cml_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-#mod_cml_la_LIBADD = $(MEMCACHE_LIB) $(common_libadd) $(LUA_LIBS) -lm
+lib_LTLIBRARIES += mod_magnet.la
+mod_magnet_la_SOURCES = mod_magnet.c mod_magnet_cache.c
+mod_magnet_la_CFLAGS = $(AM_CFLAGS) $(LUA_CFLAGS)
+mod_magnet_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_magnet_la_LIBADD = $(MEMCACHE_LIB) $(common_libadd) $(LUA_LIBS) -lm
 
 lib_LTLIBRARIES += mod_trigger_b4_dl.la
 mod_trigger_b4_dl_la_SOURCES = mod_trigger_b4_dl.c
@@ -319,12 +320,13 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       http_resp_parser.h \
       http_parser.h \
       ajp13.h \
-      mod_proxy_core_protocol.h
+      mod_proxy_core_protocol.h \
+      mod_magnet_cache.h
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 
 lighttpd_SOURCES = $(src)
-lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB) $(FAM_LIBS) $(AIO_LIB) $(POSIX_AIO_LIB)
+lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB) $(FAM_LIBS) $(AIO_LIB) $(POSIX_AIO_LIB) $(GTHREAD_LIBS)
 lighttpd_LDFLAGS = -export-dynamic
 lighttpd_CCPFLAGS = $(FAM_CFLAGS)
 

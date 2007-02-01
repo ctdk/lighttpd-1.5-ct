@@ -48,6 +48,8 @@
 # include <aio.h>
 #endif
 
+#include <glib.h>
+
 #ifndef O_BINARY
 # define O_BINARY 0
 #endif
@@ -191,12 +193,18 @@ typedef struct {
 
 	time_t stat_ts;
 
+	enum {
+		STAT_CACHE_ENTRY_UNSET, 
+		STAT_CACHE_ENTRY_ASYNC_STAT, 
+		STAT_CACHE_ENTRY_STAT_FINISHED
+	} state;
+
 #ifdef HAVE_LSTAT
 	char is_symlink;
 #endif
 
-#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
-	int    dir_version;
+#if defined(HAVE_SYS_INOTIFY_H)
+	int    dir_version; /* when this entry was created the dir had this version */
 	int    dir_ndx;
 #endif
 
@@ -204,18 +212,14 @@ typedef struct {
 } stat_cache_entry;
 
 typedef struct {
-	splay_tree *files; /* the nodes of the tree are stat_cache_entries */
+	GHashTable *files; /* a HashTable of stat_cache_entries for the files */
+	GHashTable *dirs;  /* a HashTable of stat_cache_entries for the dirs */
 
-	buffer *dir_name; /* for building the dirname from the filename */
-	buffer *hash_key;
+	buffer *dir_name;  /* for building the dirname from the filename */
+	buffer *hash_key;  /* tmp-buf for building the hash-key */
 
-#if defined(HAVE_FAM_H) || defined(HAVE_SYS_INOTIFY_H)
-	splay_tree *dirs; /* the nodes of the tree are fam_dir_entry */
-
-	iosocket *sock;
-#endif
-#if defined(HAVE_FAM_H)
-	FAMConnection *fam;
+#if defined(HAVE_SYS_INOTIFY_H)
+	iosocket *sock;    /* socket to the inotify fd (this should be in a backend struct */
 #endif
 } stat_cache;
 
@@ -480,6 +484,9 @@ typedef struct {
 
 	buffer *errorlog_file;
 	unsigned short errorlog_use_syslog;
+
+	unsigned short max_stat_threads;
+	unsigned short max_write_threads;
 } server_config;
 
 typedef struct {
@@ -593,20 +600,21 @@ typedef struct server {
 	int have_aio_waiting;
 
 #ifdef HAVE_LIBAIO_H
-#define LINUX_IO_MAX_IOCBS 128
 	io_context_t linux_io_ctx;
 
-	struct iocb linux_io_iocbs[LINUX_IO_MAX_IOCBS];
+	struct iocb *linux_io_iocbs;
 
 #endif
 #ifdef HAVE_AIO_H
-#define POSIX_AIO_MAX_IOCBS 128
-	struct aiocb posix_aio_iocbs[POSIX_AIO_MAX_IOCBS];
-	struct aiocb * posix_aio_iocbs_watch[POSIX_AIO_MAX_IOCBS];
+	struct aiocb *posix_aio_iocbs;
+	struct aiocb ** posix_aio_iocbs_watch;
 
-	void *posix_aio_data[POSIX_AIO_MAX_IOCBS];
+	void **posix_aio_data;
 #endif
 
+	GAsyncQueue *stat_queue; /* send a stat_job into this queue and joblist_queue will get a wakeup when the stat is finished */
+	GAsyncQueue *joblist_queue;
+	GAsyncQueue *aio_write_queue;
 } server;
 
 int server_out_of_fds(server *srv);

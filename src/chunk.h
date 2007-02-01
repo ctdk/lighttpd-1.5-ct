@@ -37,6 +37,11 @@ typedef struct chunk {
 			  - file-chunk: file.length
 			*/
 
+	struct {
+		off_t written;
+		int ret_val;
+	} async;
+
 	struct chunk *next;
 } chunk;
 

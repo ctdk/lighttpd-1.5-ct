@@ -82,6 +82,7 @@ NETWORK_BACKEND_WRITE(writev);
 NETWORK_BACKEND_WRITE(linuxsendfile);
 NETWORK_BACKEND_WRITE(linuxaiosendfile);
 NETWORK_BACKEND_WRITE(posixaio);
+NETWORK_BACKEND_WRITE(gthreadaio);
 NETWORK_BACKEND_WRITE(freebsdsendfile);
 NETWORK_BACKEND_WRITE(solarissendfilev);
 

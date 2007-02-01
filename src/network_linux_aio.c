@@ -148,14 +148,14 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 					/* do we have a IOCB we can use ? */
 
-					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < LINUX_IO_MAX_IOCBS; iocb_ndx++) {
+					for (iocb_ndx = 0; async_error == 0 && iocb_ndx < srv->srvconf.max_write_threads; iocb_ndx++) {
 						if (NULL == srv->linux_io_iocbs[iocb_ndx].data) {
 							iocb = &srv->linux_io_iocbs[iocb_ndx];
 							break;
 						}
 					}
 
-					if (iocb_ndx == LINUX_IO_MAX_IOCBS) {
+					if (iocb_ndx == srv->srvconf.max_write_threads) {
 						async_error = 1;
 					}
 

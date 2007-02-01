@@ -44,6 +44,8 @@ static chunk *chunk_init(void) {
 	c->file.copy.fd = -1;
 	c->file.mmap.start = MAP_FAILED;
 	c->next = NULL;
+	
+	c->async.written = -1;
 
 	return c;
 }
@@ -85,6 +87,9 @@ static void chunk_reset(chunk *c) {
 
 	c->file.copy.length = 0;
 	c->file.copy.offset = 0;
+
+	c->async.written = -1;
+	c->async.ret_val = 0;
 }
 
 

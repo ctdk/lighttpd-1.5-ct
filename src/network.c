@@ -445,6 +445,7 @@ typedef enum {
 	NETWORK_BACKEND_LINUX_SENDFILE,
 	NETWORK_BACKEND_LINUX_AIO_SENDFILE,
 	NETWORK_BACKEND_POSIX_AIO,
+	NETWORK_BACKEND_GTHREAD_AIO,
 
 	NETWORK_BACKEND_FREEBSD_SENDFILE,
 	NETWORK_BACKEND_SOLARIS_SENDFILEV,
@@ -470,16 +471,16 @@ int network_init(server *srv) {
 #if defined USE_LINUX_AIO_SENDFILE
 		{ NETWORK_BACKEND_LINUX_AIO_SENDFILE,   "linux-aio-sendfile" },
 #endif
-#if defined USE_POSIX_AIO
-		{ NETWORK_BACKEND_POSIX_AIO,            "posix-aio" },
-#endif
-
 #if defined USE_FREEBSD_SENDFILE
 		{ NETWORK_BACKEND_FREEBSD_SENDFILE,     "freebsd-sendfile" },
 #endif
 #if defined USE_SOLARIS_SENDFILEV
 		{ NETWORK_BACKEND_SOLARIS_SENDFILEV,	"solaris-sendfilev" },
 #endif
+#if defined USE_POSIX_AIO
+		{ NETWORK_BACKEND_POSIX_AIO,            "posix-aio" },
+#endif
+		{ NETWORK_BACKEND_GTHREAD_AIO,          "gthread-aio" },
 #if defined USE_WRITEV
 		{ NETWORK_BACKEND_WRITEV,		"writev" },
 #endif
@@ -580,7 +581,9 @@ int network_init(server *srv) {
 		SET_NETWORK_BACKEND(read, posixaio);
 		break;
 #endif
-
+	case NETWORK_BACKEND_GTHREAD_AIO:
+		SET_NETWORK_BACKEND(read, gthreadaio);
+		break;
 #ifdef USE_FREEBSD_SENDFILE
 	case NETWORK_BACKEND_FREEBSD_SENDFILE:
 		SET_NETWORK_BACKEND(read, freebsdsendfile);

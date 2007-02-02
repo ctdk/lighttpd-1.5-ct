@@ -215,8 +215,8 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 							async_error = 1;
 
 							if (errno != EMFILE) {
-								TRACE("mkstemp returned: %d (%s), open fds: %d, falling back to sync-io",
-									errno, strerror(errno), srv->cur_fds);
+								TRACE("mkstemp returned: %d (%s) for %s, open fds: %d, falling back to sync-io",
+									errno, strerror(errno), tmpfile_name, srv->cur_fds);
 							}
 						}
 

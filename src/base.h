@@ -16,6 +16,10 @@
 # include <inttypes.h>
 #endif
 
+/* include glib.h before our buffer.h and array.h to make sure their parameter-names
+ * don't clash with our type-names */
+#include <glib.h>
+
 #include "buffer.h"
 #include "array.h"
 #include "chunk.h"
@@ -47,8 +51,6 @@
 #ifdef HAVE_AIO_H
 # include <aio.h>
 #endif
-
-#include <glib.h>
 
 #ifndef O_BINARY
 # define O_BINARY 0

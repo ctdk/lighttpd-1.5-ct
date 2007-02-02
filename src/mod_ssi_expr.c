@@ -1,11 +1,12 @@
 #include <ctype.h>
 #include <string.h>
 
-#include "buffer.h"
-#include "log.h"
 #include "mod_ssi.h"
 #include "mod_ssi_expr.h"
 #include "mod_ssi_exprparser.h"
+
+#include "buffer.h"
+#include "log.h"
 
 typedef struct {
 	const char *input;

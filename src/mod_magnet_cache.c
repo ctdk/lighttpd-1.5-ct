@@ -2,8 +2,8 @@
 #include <time.h>
 #include <assert.h>
 
-#include "mod_magnet_cache.h"
 #include "stat_cache.h"
+#include "mod_magnet_cache.h"
 
 #ifdef HAVE_LUA_H
 #include <lualib.h>

@@ -1,15 +1,16 @@
 #ifndef _MOD_PROXY_CORE_H_
 #define _MOD_PROXY_CORE_H_
 
-#include "buffer.h"
 #include "plugin.h"
-#include "http_resp.h"
-#include "array.h"
 
 #include "mod_proxy_core_pool.h"
 #include "mod_proxy_core_backend.h"
 #include "mod_proxy_core_backlog.h"
 #include "mod_proxy_core_rewrites.h"
+
+#include "buffer.h"
+#include "http_resp.h"
+#include "array.h"
 
 #define MAX_INTERNAL_REDIRECTS 8
 

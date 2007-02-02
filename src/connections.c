@@ -7,11 +7,10 @@
 #include <fcntl.h>
 #include <assert.h>
 
-#include "buffer.h"
 #include "server.h"
-#include "log.h"
 #include "connections.h"
 #include "fdevent.h"
+#include "log.h"
 
 #include "request.h"
 #include "response.h"

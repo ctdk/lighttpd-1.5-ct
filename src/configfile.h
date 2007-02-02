@@ -1,9 +1,9 @@
 #ifndef _CONFIG_PARSER_H_
 #define _CONFIG_PARSER_H_
 
+#include "server.h"
 #include "array.h"
 #include "buffer.h"
-#include "server.h"
 
 typedef struct {
 	server *srv;

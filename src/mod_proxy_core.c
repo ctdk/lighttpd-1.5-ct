@@ -5,11 +5,6 @@
 #include <ctype.h>
 #include <assert.h>
 
-#include "buffer.h"
-#include "array.h"
-#include "log.h"
-
-#include "base.h"
 #include "plugin.h"
 #include "joblist.h"
 #include "sys-files.h"
@@ -17,6 +12,9 @@
 #include "crc32.h"
 #include "configfile.h"
 #include "stat_cache.h"
+#include "buffer.h"
+#include "array.h"
+#include "log.h"
 
 #include "mod_proxy_core.h"
 #include "mod_proxy_core_protocol.h"

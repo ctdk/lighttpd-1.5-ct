@@ -31,14 +31,4 @@ typedef enum { HANDLER_UNSET,
 		HANDLER_WAIT_FOR_FD
 } handler_t;
 
-
-/* we use it in a enum */
-#ifdef TRUE
-#undef TRUE
-#endif
-
-#ifdef FALSE
-#undef FALSE
-#endif
-
 #endif

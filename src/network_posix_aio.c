@@ -66,7 +66,11 @@ static void posix_aio_completion_handler(sigval_t foo) {
 	chunk *c           = wj->c;
 	int res;
 
-	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
+	GAsyncQueue * outq;
+
+	g_async_queue_ref(srv->joblist_queue);
+
+	outq = srv->joblist_queue;
 
 	if (srv->is_shutdown) {
 		write_job_free(wj);

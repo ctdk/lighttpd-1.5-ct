@@ -1,13 +1,8 @@
 /*
  * make sure _GNU_SOURCE is defined
  */
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE /* we need O_DIRECT */
-#endif
-
 #include "network_backends.h"
 
-#ifdef USE_POSIX_AIO
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -25,8 +20,6 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <assert.h>
-
-#include <aio.h>
 
 #include "network.h"
 #include "fdevent.h"
@@ -59,9 +52,14 @@ static void write_job_free(write_job *wj) {
 gpointer aio_write_thread(gpointer _srv) {
         server *srv = (server *)_srv;
 
-	/* take the stat-job-queue */
-	GAsyncQueue * inq = g_async_queue_ref(srv->aio_write_queue);
-	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
+	GAsyncQueue * inq;
+	GAsyncQueue * outq;
+
+	g_async_queue_ref(srv->joblist_queue);
+	g_async_queue_ref(srv->aio_write_queue);
+
+	outq = srv->joblist_queue;
+	inq = srv->aio_write_queue;
 
 	/* */
 	while (!srv->is_shutdown) {
@@ -357,5 +355,4 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 	return NETWORK_STATUS_SUCCESS;
 }
 
-#endif
 

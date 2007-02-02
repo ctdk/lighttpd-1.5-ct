@@ -41,8 +41,11 @@
 gpointer linux_aio_read_thread(gpointer _srv) {
         server *srv = (server *)_srv;
 
-	/* take the stat-job-queue */
-	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
+	GAsyncQueue * outq;
+
+	g_async_queue_ref(srv->joblist_queue);
+
+	outq = srv->joblist_queue;
 
 	/* */
 	while (!srv->is_shutdown) {

@@ -15,6 +15,8 @@
 #include <fcntl.h>
 #include <assert.h>
 
+#include <glib.h>
+
 #include "log.h"
 #include "stat_cache.h"
 #include "fdevent.h"
@@ -30,9 +32,6 @@
 
 #undef HAVE_FAM_H
 #undef HAVE_SYS_INOTIFY_H
-
-#include <glib.h>
-#include <pthread.h>
 
 #if 0
 /* enables debug code for testing if all nodes in the stat-cache as accessable */
@@ -103,8 +102,14 @@ gpointer stat_cache_thread(gpointer _srv) {
 	stat_job *sj = NULL;
 	
 	/* take the stat-job-queue */
-	GAsyncQueue * inq = g_async_queue_ref(srv->stat_queue);
-	GAsyncQueue * outq = g_async_queue_ref(srv->joblist_queue);
+	GAsyncQueue * inq; 
+	GAsyncQueue * outq;
+
+	g_async_queue_ref(srv->joblist_queue);
+	g_async_queue_ref(srv->stat_queue);
+
+	inq = srv->stat_queue;
+	outq = srv->joblist_queue;
 
 	/* */
 	while (!srv->is_shutdown) {

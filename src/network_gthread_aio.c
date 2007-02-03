@@ -4,18 +4,11 @@
 #include "network_backends.h"
 #ifdef USE_GTHREAD
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/resource.h>
-
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -28,6 +21,7 @@
 #include "joblist.h"
 
 #include "sys-files.h"
+#include "sys-socket.h"
 
 typedef struct {
 	chunk *c;

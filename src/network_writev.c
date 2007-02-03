@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE /* we need O_DIRECT */
+#endif
+
 #include "network_backends.h"
 
 #ifdef USE_WRITEV
@@ -25,6 +29,7 @@
 #include "fdevent.h"
 #include "log.h"
 #include "stat_cache.h"
+#include "sys-files.h"
 
 #ifndef UIO_MAXIOV
 # if defined(__FreeBSD__) || defined(__APPLE__) || defined(__NetBSD__)

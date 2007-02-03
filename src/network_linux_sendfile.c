@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE /* we need O_DIRECT */
+#endif
+
 #include "network_backends.h"
 
 #ifdef USE_LINUX_SENDFILE
@@ -22,6 +26,7 @@
 #include "fdevent.h"
 #include "log.h"
 #include "stat_cache.h"
+#include "sys-files.h"
 
 /* on linux 2.4.29 + debian/ubuntu we have crashes if this is enabled */
 #undef HAVE_POSIX_FADVISE

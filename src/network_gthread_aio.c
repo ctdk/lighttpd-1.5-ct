@@ -2,7 +2,7 @@
  * make sure _GNU_SOURCE is defined
  */
 #include "network_backends.h"
-
+#ifdef USE_GTHREAD
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -355,4 +355,4 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 	return NETWORK_STATUS_SUCCESS;
 }
 
-
+#endif

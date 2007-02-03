@@ -74,7 +74,7 @@
  * - remove entries which are fresh but havn't been used since 60s
  * - if we don't have a stat-cache entry for a directory, release it from the monitor
  */
-
+#ifdef USE_GTHREAD
 typedef struct { 
 	buffer *name;
 
@@ -136,7 +136,7 @@ gpointer stat_cache_thread(gpointer _srv) {
 
 	return NULL;
 }
-
+#endif
 guint sc_key_hash(gconstpointer v) {
 	buffer *b = (buffer *)v;
 
@@ -317,8 +317,9 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 	 * */
 
 	/* pass a job to the stat-queue */
-
+#ifdef USE_GTHREAD
 	if (async &&
+	    srv->srvconf.max_stat_threads > 0 &&
 	    sce->state == STAT_CACHE_ENTRY_UNSET) {
 		stat_job *sj = stat_job_init();
 
@@ -334,7 +335,7 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 
 		return HANDLER_WAIT_FOR_EVENT;
 	}
-
+#endif
 	/* second round */
 	if (-1 == stat(name->ptr, &st)) {
 		return HANDLER_ERROR;

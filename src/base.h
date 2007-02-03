@@ -16,6 +16,8 @@
 # include <inttypes.h>
 #endif
 
+#include "settings.h"
+
 /* include glib.h before our buffer.h and array.h to make sure their parameter-names
  * don't clash with our type-names */
 #include <glib.h>
@@ -36,22 +38,19 @@
 # include <openssl/ssl.h>
 #endif
 
-#ifdef HAVE_FAM_H
-# include <fam.h>
-#endif
-
 #ifdef HAVE_SYS_INOTIFY_H
 # include <sys/inotify.h>
 #endif
 
-#ifdef HAVE_LIBAIO_H
+#ifdef USE_LINUX_AIO_SENDFILE
 # include <libaio.h>
 #endif
 
-#ifdef HAVE_AIO_H
+#ifdef USE_POSIX_AIO
 # include <aio.h>
 #endif
 
+/** some compat */
 #ifndef O_BINARY
 # define O_BINARY 0
 #endif
@@ -488,7 +487,7 @@ typedef struct {
 	unsigned short errorlog_use_syslog;
 
 	unsigned short max_stat_threads;
-	unsigned short max_write_threads;
+	unsigned short max_read_threads;
 } server_config;
 
 typedef enum {
@@ -618,21 +617,21 @@ typedef struct server {
 	uid_t uid;
 	gid_t gid;
 #endif
-
-#ifdef HAVE_LIBAIO_H
+#ifdef USE_GTHREAD
+#ifdef USE_LINUX_AIO_SENDFILE
 	io_context_t linux_io_ctx;
 
 	struct iocb *linux_io_iocbs;
 
 #endif
-#ifdef HAVE_AIO_H
+#ifdef USE_POSIX_AIO
 	struct aiocb *posix_aio_iocbs;
 #endif
 
 	GAsyncQueue *stat_queue; /* send a stat_job into this queue and joblist_queue will get a wakeup when the stat is finished */
 	GAsyncQueue *joblist_queue;
 	GAsyncQueue *aio_write_queue;
-
+#endif
 	network_backend_t network_backend;
 	int is_shutdown;
 } server;

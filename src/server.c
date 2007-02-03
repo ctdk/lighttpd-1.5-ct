@@ -26,7 +26,6 @@
 #include "stat_cache.h"
 #include "plugin.h"
 #include "joblist.h"
-#include "network_backends.h"
 #include "status_counter.h"
 #ifdef _WIN32
 /* use local getopt implementation */
@@ -82,13 +81,12 @@ static volatile sig_atomic_t graceful_restart = 0;
 static volatile sig_atomic_t handle_sig_alarm = 1;
 static volatile sig_atomic_t handle_sig_hup = 0;
 
+#ifdef USE_GTHREAD
 gpointer stat_cache_thread(gpointer );
 gpointer aio_write_thread(gpointer );
 gpointer linux_aio_read_thread(gpointer );
-
-#if defined(HAVE_LIBAIO_H) || defined(HAVE_AIO_H)
-#include <pthread.h>
 #endif
+
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
 static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 	UNUSED(si);
@@ -209,7 +207,7 @@ static server *server_init(void) {
 
 	srv->split_vals = array_init();
 
-#ifdef HAVE_LIBAIO_H
+#ifdef USE_LINUX_AIO_SENDFILE
 	srv->linux_io_ctx = NULL;
 	/**
 	 * we can't call io_setup before the fork() in daemonize()
@@ -227,7 +225,7 @@ static void server_free(server *srv) {
 	}
 
 
-#ifdef HAVE_LIBAIO_H
+#ifdef USE_LINUX_AIO_SENDFILE
 	if (srv->linux_io_ctx) {
 		io_destroy(srv->linux_io_ctx);
 	}
@@ -483,9 +481,10 @@ static void show_help (void) {
 		exit(-1);
 	}
 }
-
-static pthread_mutex_t joblist_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t joblist_queue_cond = PTHREAD_COND_INITIALIZER;
+#ifdef USE_GTHREAD
+static GMutex *joblist_queue_mutex = NULL;
+static GCond  *joblist_queue_cond = NULL;
+#endif
 
 /**
  * a async handler
@@ -503,6 +502,7 @@ static pthread_cond_t joblist_queue_cond = PTHREAD_COND_INITIALIZER;
  * the other system call. We use mutexes to synchronize the two functions.
  *
  */
+#ifdef USE_GTHREAD
 static void *joblist_queue_thread(void *_data) {
 	server *srv = _data;
 
@@ -510,11 +510,12 @@ static void *joblist_queue_thread(void *_data) {
 		GTimeVal ts;
 		connection *con;
 		
-		pthread_cond_wait(&joblist_queue_cond, &joblist_queue_mutex);
+		g_cond_wait(joblist_queue_cond, joblist_queue_mutex);
 		/* wait for getting signaled */
 
 		if (srv_shutdown) {
-			pthread_mutex_unlock(&joblist_queue_mutex);
+			TRACE("leaving and unlocking mutex after cond-wait: %s", "");
+			g_mutex_unlock(joblist_queue_mutex);
 
 			break;
 		}
@@ -541,12 +542,13 @@ static void *joblist_queue_thread(void *_data) {
 			if (killme) kill(getpid(), SIGUSR1);
 		}
 
-		pthread_mutex_unlock(&joblist_queue_mutex);
+		g_mutex_unlock(joblist_queue_mutex);
 	}
+	TRACE("leaving thread: %s", __FUNCTION__);
 	
 	return NULL;
 }
-
+#endif
 
 /**
  * call this function whenever you get a EMFILE or ENFILE as return-value 
@@ -566,12 +568,6 @@ int lighty_mainloop(server *srv) {
 
 	/* the getevents and the poll() have to run in parallel
 	 * as soon as one has data, it has to interrupt the otherone */
-
-	pthread_t joblist_queue_thread_id;
-
-	pthread_mutex_lock(&joblist_queue_mutex);
-
-	pthread_create(&joblist_queue_thread_id, NULL, joblist_queue_thread, srv);
 
 	/* main-loop */
 	while (!srv_shutdown) {
@@ -831,28 +827,27 @@ int lighty_mainloop(server *srv) {
 				srv->want_fds--;
 			}
 		}
-
+#ifdef USE_GTHREAD
 		/* open the joblist-queue handling */
-		pthread_mutex_unlock(&joblist_queue_mutex);
-		pthread_cond_signal(&joblist_queue_cond);
-
+		g_mutex_unlock(joblist_queue_mutex);
+		g_cond_signal(joblist_queue_cond);
+#endif
 		n = fdevent_poll(srv->ev, 1000);
 		poll_errno = errno;
 
-		if (-1 == pthread_mutex_trylock(&joblist_queue_mutex)) {
-			switch (errno) {
-			case EBUSY:
-				g_async_queue_push(srv->joblist_queue, (void *)1); /* HACK to wakeup the g_async_queue_timed_pop() */
+#ifdef USE_GTHREAD
+		if (FALSE == g_mutex_trylock(joblist_queue_mutex)) {
+			/**
+			 * we couldn't get the lock, looks like the joblist-thread 
+			 * is still blocking on g_async_queue_timed_pop()
+			 *
+			 * let's send it a bogus job to jump out of the blocking mode
+			 */
+			g_async_queue_push(srv->joblist_queue, (void *)1); /* HACK to wakeup the g_async_queue_timed_pop() */
 
-				pthread_mutex_lock(&joblist_queue_mutex);
-				break;
-			default:
-				ERROR("pthread_mutex_trylock() failed: %s (%d)", strerror(errno), errno);
-				pthread_mutex_lock(&joblist_queue_mutex);
-				break;
-			}
+			g_mutex_lock(joblist_queue_mutex);
 		}
-
+#endif
 		if (n > 0) {
 			/* n is the number of events */
 			size_t i;
@@ -916,10 +911,10 @@ int lighty_mainloop(server *srv) {
 				}
 			}
 
-		} else if (n < 0 && errno != EINTR) {
+		} else if (n < 0 && poll_errno != EINTR) {
 			log_error_write(srv, __FILE__, __LINE__, "ss",
 					"fdevent_poll failed:",
-					strerror(errno));
+					strerror(poll_errno));
 		}
 
 		/*
@@ -954,10 +949,6 @@ int lighty_mainloop(server *srv) {
 
 	fdevent_revents_free(revents);
 
-	pthread_mutex_unlock(&joblist_queue_mutex);
-	pthread_cond_signal(&joblist_queue_cond); /* set the thread shutdown */
-	pthread_join(joblist_queue_thread_id, NULL);
-
 	return 0;
 }
 
@@ -971,10 +962,14 @@ int main (int argc, char **argv, char **envp) {
 	int num_childs = 0;
 	int pid_fd = -1, fd;
 	size_t i;
+#ifdef USE_GTHREAD
 	GThread **stat_cache_threads;
 	GThread **aio_write_threads = NULL;
 	GThread *linux_aio_read_thread_id = NULL;
+	GThread * joblist_queue_thread_id = NULL;
 	GError *gerr = NULL;
+#endif
+
 #ifdef _WIN32
 	char *optarg = NULL;
 #endif
@@ -1018,7 +1013,7 @@ int main (int argc, char **argv, char **envp) {
 #endif
 	srv->srvconf.dont_daemonize = 0;
 	srv->srvconf.max_stat_threads = 4;
-	srv->srvconf.max_write_threads = 8;
+	srv->srvconf.max_read_threads = 8;
 
 	while(-1 != (o = getopt(argc, argv, "f:m:hvVDpt"))) {
 		switch(o) {
@@ -1512,35 +1507,6 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif
 
-	g_thread_init(NULL);
-
-	srv->stat_queue = g_async_queue_new();
-	srv->joblist_queue = g_async_queue_new();
-	srv->aio_write_queue = g_async_queue_new();
-
-	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
-
-	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
-		stat_cache_threads[i] = g_thread_create(stat_cache_thread, srv, 1, &gerr);
-		if (gerr) {
-			ERROR("g_thread_create failed: %s", gerr->message);
-
-			return -1;
-		}
-	}
-
-	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
-		aio_write_threads = calloc(srv->srvconf.max_write_threads, sizeof(*aio_write_threads));
-		for (i = 0; i < srv->srvconf.max_write_threads; i++) {
-			aio_write_threads[i] = g_thread_create(aio_write_thread, srv, 1, &gerr);
-			if (gerr) {
-				ERROR("g_thread_create failed: %s", gerr->message);
-
-				return -1;
-			}
-		}
-	}
-
 	if (NULL == (srv->ev = fdevent_init(/*srv->max_fds + 1*/ 4096, srv->event_handler))) {
 		log_error_write(srv, __FILE__, __LINE__,
 				"s", "fdevent_init failed");
@@ -1566,6 +1532,14 @@ int main (int argc, char **argv, char **envp) {
 		return -1;
 	}
 
+#ifdef USE_GTHREAD
+	g_thread_init(NULL);
+
+	srv->stat_queue = g_async_queue_new();
+	srv->joblist_queue = g_async_queue_new();
+	srv->aio_write_queue = g_async_queue_new();
+
+
 #ifdef HAVE_SYS_INOTIFY_H
 	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
 		srv->stat_cache->sock->fd = inotify_init();
@@ -1574,14 +1548,22 @@ int main (int argc, char **argv, char **envp) {
 		fdevent_event_add(srv->ev, srv->stat_cache->sock, FDEVENT_IN);
 	}
 #endif
+	joblist_queue_mutex = g_mutex_new();
+	joblist_queue_cond = g_cond_new();
+	g_mutex_lock(joblist_queue_mutex);
 
-#ifdef HAVE_AIO_H
+	joblist_queue_thread_id = g_thread_create(joblist_queue_thread, srv, 1, &gerr);
+	if (gerr) {
+		return -1;
+	}
+
+#ifdef USE_POSIX_AIO
 	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO) {
-		srv->posix_aio_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->posix_aio_iocbs));
+		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));
 	}
 #endif
 	
-#ifdef HAVE_LIBAIO_H
+#ifdef USE_LINUX_AIO_SENDFILE
 	if (srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE) {
 		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
 		if (gerr) {
@@ -1589,11 +1571,35 @@ int main (int argc, char **argv, char **envp) {
 
 			return -1;
 		}		
-		srv->linux_io_iocbs = calloc(srv->srvconf.max_write_threads, sizeof(*srv->linux_io_iocbs));
-		if (0 != io_setup(srv->srvconf.max_write_threads, &(srv->linux_io_ctx))) {
+		srv->linux_io_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->linux_io_iocbs));
+		if (0 != io_setup(srv->srvconf.max_read_threads, &(srv->linux_io_ctx))) {
 			ERROR("io-setup() failed somehow %s", "");
 
 			return -1;
+		}
+	}
+#endif
+
+	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
+
+	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
+		stat_cache_threads[i] = g_thread_create(stat_cache_thread, srv, 1, &gerr);
+		if (gerr) {
+			ERROR("g_thread_create failed: %s", gerr->message);
+
+			return -1;
+		}
+	}
+
+	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
+		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
+		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
+			aio_write_threads[i] = g_thread_create(aio_write_thread, srv, 1, &gerr);
+			if (gerr) {
+				ERROR("g_thread_create failed: %s", gerr->message);
+
+				return -1;
+			}
 		}
 	}
 #endif
@@ -1631,20 +1637,20 @@ int main (int argc, char **argv, char **envp) {
 	/* kill the threads */
 
 	srv->is_shutdown = 1;
-
-#ifdef HAVE_LIBAIO_H
+#ifdef USE_GTHREAD
+#ifdef USE_LINUX_AIO_SENDFILE
 	if (srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE) {
 		g_thread_join(linux_aio_read_thread_id);
 		free(srv->linux_io_iocbs);
 	}
 #endif
-#ifdef HAVE_AIO_H
+#ifdef USE_POSIX_AIO
 	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO) {
 		free(srv->posix_aio_iocbs);
 	}
 #endif
 	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
-		for (i = 0; i < srv->srvconf.max_write_threads; i++) {
+		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
 			g_thread_join(aio_write_threads[i]);
 		}
 		free(aio_write_threads);
@@ -1654,11 +1660,41 @@ int main (int argc, char **argv, char **envp) {
 		g_thread_join(stat_cache_threads[i]);
 	}
 
+	/* in case the thread is still running, take it down now
+	 * as it might be blocked in g_cond_wait() send a signal and
+	 * let it shutdown */
+	g_mutex_unlock(joblist_queue_mutex);
+	g_cond_signal(joblist_queue_cond);
+
+	g_thread_join(joblist_queue_thread_id);
+	
+#if 0
+	g_mutex_lock(joblist_queue_mutex);
+
+	g_cond_free(joblist_queue_cond);
+	
+	g_mutex_unlock(joblist_queue_mutex);
+
+	/* if I leave this enabled I get:
+	 *
+	 * GThread-ERROR **: file gthread-posix.c: line 160 (): error 'Device or resource busy' during 'pthread_mutex_destroy ((pthread_mutex_t *) mutex)'
+	 * aborting...
+	 *
+	 * $ man pthread_mutex_destroy 
+	 *
+	 *        EBUSY  The implementation has detected an attempt to destroy the object referenced by mutex while it is locked 
+	 *               or referenced (for example, while being used in a pthread_cond_timedwait() or pthread_cond_wait()) 
+	 *               by another thread.
+	 *
+	 * */
+	g_mutex_free(joblist_queue_mutex);
+#endif
+
 	/* the ref-count should be 0 now */
 	g_async_queue_unref(srv->stat_queue);
 	g_async_queue_unref(srv->joblist_queue);
 	g_async_queue_unref(srv->aio_write_queue);
-
+#endif
 	/* clean-up */
 	network_close(srv);
 	connections_free(srv);

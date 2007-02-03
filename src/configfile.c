@@ -92,7 +92,7 @@ static int config_insert(server *srv) {
 		{ "debug.log-condition-cache-handling", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },    /* 46 */
 		{ "server.use-noatime",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 47 */
 		{ "server.max-stat-threads",     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 48 */
-		{ "server.max-write-threads",    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 49 */
+		{ "server.max-read-threads",    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 49 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -137,7 +137,7 @@ static int config_insert(server *srv) {
 	cv[12].destination = &(srv->srvconf.max_request_size);
 	cv[47].destination = &(srv->srvconf.use_noatime);
 	cv[48].destination = &(srv->srvconf.max_stat_threads);
-	cv[49].destination = &(srv->srvconf.max_write_threads);
+	cv[49].destination = &(srv->srvconf.max_read_threads);
 
 	srv->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 

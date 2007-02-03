@@ -3,11 +3,6 @@
 
 #include "base.h"
 
-typedef struct {
-	char *key;
-	char *value;
-} two_strings;
-
 typedef enum { CONFIG_UNSET, CONFIG_DOCUMENT_ROOT } config_var_t;
 
 int config_read(server *srv, const char *fn);

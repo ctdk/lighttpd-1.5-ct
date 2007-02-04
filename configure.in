@@ -405,7 +405,7 @@ fi
  AC_SEARCH_LIBS(aio_suspend, rt, [
          AC_CHECK_HEADERS([aio.h],[
        	         if test "$ac_cv_search_aio_suspend" != no; then
-			if "$ac_cv_search_aio_suspend" = "none required"; then
+			if test "$ac_cv_search_aio_suspend" = "none required"; then
 				POSIX_AIO_LIB="$ac_cv_search_aio_suspend -pthread"
 			else
 				POSIX_AIO_LIB="-pthread"

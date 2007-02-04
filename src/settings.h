@@ -50,7 +50,8 @@
 # if defined(USE_LINUX_SENDFILE) && defined(HAVE_LIBAIO_H)
 #  define USE_LINUX_AIO_SENDFILE
 # endif
-# ifdef HAVE_AIO_H
+# if defined(HAVE_AIO_H) && (!defined(__FreeBSD__))
+/* FreeBSD has no SIGEV_THREAD for us */
 #  define USE_POSIX_AIO
 #  include <aio.h>
 # endif

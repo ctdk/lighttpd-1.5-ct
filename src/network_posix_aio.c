@@ -58,7 +58,19 @@ static void write_job_free(write_job *wj) {
 	free(wj);
 }
 
-static void posix_aio_completion_handler(sigval_t foo) {
+#if (defined(__FreeBSD__) || defined(__DragonFly__))
+/* someone is wrong here, both (MacOS X and FreeBSD) reference POSIX 1003.1b but have
+ * different names (in /usr/include/sys/signal.h) */
+#define sival_ptr sigval_ptr
+#endif
+
+/**
+ * handle the completion of a AIO-read() operation
+ *
+ * Linux has 'union sigval' and 'sigval_t'
+ * MacOS X and FreeBSD only 'union sigval'
+ * */
+static void posix_aio_completion_handler(union sigval foo) {
 	write_job *wj = (write_job *)foo.sival_ptr;
 	server *srv        = wj->srv;
 	connection *con    = wj->con;

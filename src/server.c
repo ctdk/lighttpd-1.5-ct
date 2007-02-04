@@ -514,7 +514,6 @@ static void *joblist_queue_thread(void *_data) {
 		/* wait for getting signaled */
 
 		if (srv_shutdown) {
-			TRACE("leaving and unlocking mutex after cond-wait: %s", "");
 			g_mutex_unlock(joblist_queue_mutex);
 
 			break;
@@ -544,8 +543,7 @@ static void *joblist_queue_thread(void *_data) {
 
 		g_mutex_unlock(joblist_queue_mutex);
 	}
-	TRACE("leaving thread: %s", __FUNCTION__);
-	
+		
 	return NULL;
 }
 #endif
@@ -1539,7 +1537,6 @@ int main (int argc, char **argv, char **envp) {
 	srv->joblist_queue = g_async_queue_new();
 	srv->aio_write_queue = g_async_queue_new();
 
-
 #ifdef HAVE_SYS_INOTIFY_H
 	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
 		srv->stat_cache->sock->fd = inotify_init();
@@ -1552,9 +1549,21 @@ int main (int argc, char **argv, char **envp) {
 	joblist_queue_cond = g_cond_new();
 	g_mutex_lock(joblist_queue_mutex);
 
-	joblist_queue_thread_id = g_thread_create(joblist_queue_thread, srv, 1, &gerr);
-	if (gerr) {
-		return -1;
+	/* check if we really need this thread 
+	 *
+	 * it simplifies debugging if there is no 'futex()' making noise in the strace()s
+	 *
+	 * 
+	 * */
+
+	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO ||
+	    srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE ||
+	    srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO ||
+	    srv->srvconf.max_stat_threads > 0) {
+		joblist_queue_thread_id = g_thread_create(joblist_queue_thread, srv, 1, &gerr);
+		if (gerr) {
+			return -1;
+		}
 	}
 
 #ifdef USE_POSIX_AIO
@@ -1666,7 +1675,7 @@ int main (int argc, char **argv, char **envp) {
 	g_mutex_unlock(joblist_queue_mutex);
 	g_cond_signal(joblist_queue_cond);
 
-	g_thread_join(joblist_queue_thread_id);
+	if (joblist_queue_thread_id) g_thread_join(joblist_queue_thread_id);
 	
 #if 0
 	g_mutex_lock(joblist_queue_mutex);

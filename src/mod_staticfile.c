@@ -451,6 +451,7 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	chunkqueue_append_file(con->send, con->physical.path, 0, sce->st.st_size);
 
 	con->send->is_closed = 1;
+	con->send->bytes_in = sce->st.st_size;
 
 	return HANDLER_FINISHED;
 }

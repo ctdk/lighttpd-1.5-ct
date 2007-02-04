@@ -783,8 +783,9 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 	abs_offset = c->file.start + c->offset;
 	
 	if (abs_offset > sce->st.st_size) {
-		log_error_write(srv, __FILE__, __LINE__, "sb", 
-				"file was shrinked:", c->file.name);
+		ERROR("file '%s' was shrinked: was %lld, is %lld (%lld, %lld)", 
+				BUF_STR(c->file.name), abs_offset, sce->st.st_size,
+				c->file.start, c->offset);
 		
 		return -1;
 	}
@@ -908,15 +909,6 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 		return -1;
 	}
 
-	c->offset += toSend;
-	if (c->offset == c->file.length) {
-		/* we don't need the mmaping anymore */
-		if (c->file.mmap.start != MAP_FAILED) {
-			munmap(c->file.mmap.start, c->file.mmap.length);
-			c->file.mmap.start = MAP_FAILED;
-		}
-	}
-
 	return toSend;
 }
 
@@ -1014,6 +1006,15 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 		c->offset += we_want;
 		out += we_want;
 		max -= we_want;
+	
+		if (c->type == FILE_CHUNK && 
+		    c->offset == c->file.length &&
+		    c->file.mmap.start != MAP_FAILED) {
+			/* we don't need the mmaping anymore */
+			munmap(c->file.mmap.start, c->file.mmap.length);
+			c->file.mmap.start = MAP_FAILED;
+		}
+
 		if (we_have == we_want) {
 			/* chunk finished */
 			chunk_finished = 1;
@@ -1033,6 +1034,10 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 
 	/* check if we finished compressing all the content. */
 	end = (hctx->in->is_closed && hctx->in->bytes_in == hctx->in->bytes_out);
+
+	if (p->conf.debug) {
+		TRACE("end: %d - %lld - %lld", hctx->in->is_closed, hctx->in->bytes_in, hctx->in->bytes_out);
+	}
 
 	/* flush the output buffer to make room for more data. */
 	rc = mod_deflate_stream_flush(srv, con, hctx, end);

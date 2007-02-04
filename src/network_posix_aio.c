@@ -273,11 +273,13 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					/* looks like we couldn't get a temp-file [disk-full]
 					 *
-					 * if we only have 16k to send we can fall back to sync-read as either the read-ahead
+					 * if we only have 4k to send we can fall back to sync-read as either the read-ahead
 					 * or the stat() has put the data into the fs-buffers
 					 *
+					 * the 4kbyte are guessed ... someone should benchmark it.
+					 *
 					 *  */
-					if (async_error == 0 && c->file.mmap.start != MAP_FAILED && toSend > 16 * 1024) {
+					if (async_error == 0 && c->file.mmap.start != MAP_FAILED && toSend > 4 * 1024) {
 						struct aiocb *iocb = NULL;
 						write_job *wj;
 

@@ -213,7 +213,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 					max_toSend : c->file.length - c->offset;
 
 				/* we small files don't take the overhead of a full async-loop */
-				if (toSend < 16 * 1024) {
+				if (toSend < 4 * 1024) {
 					int mmap_fd;
 			
 					c->file.copy.offset = 0;

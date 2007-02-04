@@ -20,6 +20,7 @@
  * - scgi
  * - http
  * - fastcgi
+ * - ajp13
  *
  * request-url-rewrite
  * response-url-rewrite

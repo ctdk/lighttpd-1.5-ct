@@ -255,10 +255,11 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 		hctx = con->plugin_ctx[p->id];
 
 		if (hctx->loops++ > 100) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",
-					"ENDLESS LOOP IN rewrite-rule DETECTED ... aborting request, perhaps you want to use url.rewrite-once instead of url.rewrite-repeat");
+			ERROR("ENDLESS LOOP IN rewrite-rule DETECTED ... aborting request after %d loops at %s", hctx->loops, BUF_STR(con->request.uri));
 
-			return HANDLER_ERROR;
+			con->http_status = 500;
+
+			return HANDLER_FINISHED;
 		}
 
 		if (hctx->state == REWRITE_STATE_FINISHED) return HANDLER_GO_ON;
@@ -278,6 +279,21 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 
 		if (p->conf.once->ptr[i] == '1')
 			hctx->state = REWRITE_STATE_FINISHED;
+
+		/* looks like we finished the rewrite 
+		 *
+		 * start the uri-splitting again
+		 * */
+
+		if (con->request.uri->used == 0 ||
+		    con->request.uri->ptr[0] != '/') {
+			con->http_status = 500;
+
+			ERROR("url.rewrite contains a regex for '%s' which leads to a URI without a leading slash: %s", 
+					BUF_STR(p->match_buf), BUF_STR(con->request.uri));
+
+			return HANDLER_FINISHED;
+		}
 
 		return HANDLER_COMEBACK;
 	}

@@ -310,6 +310,8 @@ static int connection_handle_response_header(server *srv, connection *con) {
 					     "</html>\n"
 					     );
 
+			con->send->bytes_in += b->used - 1;
+
 			response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
 		}
 		/* fall through */

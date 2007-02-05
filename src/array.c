@@ -96,7 +96,7 @@ static int array_get_index(array *a, const char *key, size_t keylen, int *rndx) 
 		} else if (pos >= (int)a->used) {
 			pos -= i;
 		} else {
-			cmp = buffer_caseless_compare(key, keylen + 1, a->data[a->sorted[pos]]->key->ptr, a->data[a->sorted[pos]]->key->used);
+			cmp = buffer_caseless_compare(key, keylen, a->data[a->sorted[pos]]->key->ptr, a->data[a->sorted[pos]]->key->used);
 
 			if (cmp == 0) {
 				/* found */
@@ -119,7 +119,7 @@ static int array_get_index(array *a, const char *key, size_t keylen, int *rndx) 
 data_unset *array_get_element(array *a, const char *key, size_t keylen) {
 	int ndx;
 
-	if (-1 != (ndx = array_get_index(a, key, keylen, NULL))) {
+	if (-1 != (ndx = array_get_index(a, key, keylen + 1, NULL))) {
 		/* found, leave here */
 
 		return a->data[ndx];

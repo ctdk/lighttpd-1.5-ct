@@ -545,6 +545,7 @@ static handler_t mod_status_handle_server_status_html(server *srv, connection *c
 		      );
 
 	response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
+	con->send->bytes_in += b->used-1;
 
 	return 0;
 }
@@ -584,6 +585,7 @@ static handler_t mod_status_handle_server_status_text(server *srv, connection *c
 	/* set text/plain output */
 
 	response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/plain"));
+	con->send->bytes_in += b->used-1;
 
 	return 0;
 }
@@ -617,6 +619,7 @@ static handler_t mod_status_handle_server_statistics(server *srv, connection *co
 	response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/plain"));
 
 	con->http_status = 200;
+	con->send->bytes_in += b->used-1;
 	con->send->is_closed = 1;
 
 	return HANDLER_FINISHED;
@@ -726,6 +729,7 @@ static handler_t mod_status_handle_server_config(server *srv, connection *con, v
 	response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
 
 	con->http_status = 200;
+	con->send->bytes_in += b->used-1;
 	con->send->is_closed = 1;
 
 	return HANDLER_FINISHED;

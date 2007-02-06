@@ -330,16 +330,6 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 
 	/* copy the resopnse content */
 	cgi_copy_response(srv, con, sess);
-#if 0
-	/* copy the content to the next cq */
-	for (c = sess->rb->first; c; c = c->next) {
-		chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-
-		c->offset = c->mem->used - 1;
-	}
-
-	chunkqueue_remove_finished_chunks(sess->rb);
-#endif
 
 	joblist_append(srv, con);
 
@@ -459,7 +449,6 @@ int cgi_copy_response(server *srv, connection *con, cgi_session *sess) {
 		we_have = c->mem->used - c->offset - 1;
 		sess->rb->bytes_out += we_have;
 		con->send->bytes_in += we_have;
-		/* X-Sendfile ignores the content-body */
 		if (c->offset == 0) {
 			/* steal the buffer from the previous queue */
 
@@ -515,24 +504,6 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 				/* copy the resopnse content */
 				cgi_copy_response(srv, con, sess);
 
-#if 0
-				chunkqueue_remove_finished_chunks(sess->rb);
-				for (c = sess->rb->first; c; c = c->next) {
-					if (c->mem->used == 0) continue;
-
-					http_chunk_append_mem(srv, sess->remote_con, c->mem->ptr + c->offset, c->mem->used - c->offset);
-
-					c->offset = c->mem->used - 1;
-
-				}
-				chunkqueue_remove_finished_chunks(sess->rb);
-
-				if (sess->remote_con->send->is_closed) {
-					/* send final HTTP-Chunk packet */
-					http_chunk_append_mem(srv, sess->remote_con, NULL, 0);
-				}
-#endif
-
 				break;
 			default:
 				ERROR("%s", "oops, we failed to read");
@@ -557,10 +528,6 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 
 		fdevent_event_del(srv->ev, sess->sock);
 
-#if 0
-		/* someone has to close this socket now :) */
-		http_chunk_append_mem(srv, sess->remote_con, NULL, 0);
-#endif
 		joblist_append(srv, con);
 	} else if (revents & FDEVENT_ERR) {
 		con->send->is_closed = 1;

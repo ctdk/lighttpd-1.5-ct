@@ -961,50 +961,55 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	connection  *con  = sess->remote_con;
 
 	if (revents & FDEVENT_OUT) {
+		/* let the proxy_state_engine() handle the connection. */
+		joblist_append(srv, con);
 		switch (sess->state) {
-		case PROXY_STATE_CONNECTING: /* delayed connect */
+		case PROXY_STATE_CONNECTING:
+			/* we are still connection */
 		case PROXY_STATE_WRITE_REQUEST_HEADER:
 		case PROXY_STATE_WRITE_REQUEST_BODY:
-			/* we are still connection */
-
-			joblist_append(srv, con);
+			/* it is normal to get FDEVENT_OUT during these states. */
 			break;
 		default:
+			/* there might be a problem. */
 			ERROR("oops, unexpected state for fdevent-out %d", sess->state);
 			break;
 		}
 	} else if (revents & FDEVENT_IN) {
+		/* let the proxy_state_engine() handle the connection. */
+		joblist_append(srv, con);
 		switch (sess->state) {
 		case PROXY_STATE_READ_RESPONSE_HEADER:
-			/* call our header parser */
-			joblist_append(srv, con);
-			break;
 		case PROXY_STATE_READ_RESPONSE_BODY:
-			/* we should be in the WRITE state now,
-			 * just read in the content and forward it to the outgoing connection
-			 * */
-
-			joblist_append(srv, con);
+			/* it is normal to get FDEVENT_IN during these states. */
 			break;
 		default:
+			/* there might be a problem. */
 			ERROR("oops, unexpected state for fdevent-in %d", sess->state);
 			break;
 		}
 	}
 
 	if (revents & FDEVENT_HUP) {
-		/* someone closed our connection */
+		/* someone closed our connection. */
+		joblist_append(srv, con);
 		switch (sess->state) {
 		case PROXY_STATE_CONNECTING:
 			/* let the getsockopt() catch this */
-			joblist_append(srv, con);
-			break;
 		case PROXY_STATE_READ_RESPONSE_HEADER:
-		case PROXY_STATE_READ_RESPONSE_BODY:
 			/* the keep-alive race-condition */
+		case PROXY_STATE_READ_RESPONSE_BODY:
+			/* backend might have closed the conneciton after sending all the response content. */
+			break;
+		case PROXY_STATE_WRITE_REQUEST_HEADER:
+			/* re-try request with different backend connection. */
+		case PROXY_STATE_WRITE_REQUEST_BODY:
+			/* the backend might have rejected the request content.  Try to read the response
+			 * content to see if the backend sent a response.
+			 */
 			break;
 		default:
-			ERROR("oops, unexpected state for fdevent-hup state=%d, revents=%d", sess->state, revents);
+			TRACE("oops, unexpected state for fdevent-hup state=%d, revents=%d", sess->state, revents);
 			break;
 		}
 	}
@@ -1347,10 +1352,16 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			return HANDLER_WAIT_FOR_EVENT;
 		case NETWORK_STATUS_CONNECTION_CLOSE:
 			/* the connection got close while sending the request content up
-			 * to the backend, for now handle this as error */
+			 * to the backend, for now handle this as error
+			 */
 
 			if (p->conf.debug) TRACE("%s", "connection to backend closed when sending request headers/content.");
-			return HANDLER_COMEBACK;
+			/* some backends will send a response and close the connection before all the request
+			 * content has been written.  We need to try to read the response before restarting
+			 * the request.
+			 */
+			sess->state = PROXY_STATE_READ_RESPONSE_HEADER;
+			break;
 		default:
 			TRACE("%s", "(error)");
 			return HANDLER_ERROR;
@@ -1432,7 +1443,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 				 * 3. we read() ... and finally receive the close-event for the connection
 				 */
 
-				if (p->conf.debug) ERROR("%s", "connection closed while waiting to read a response, restarting");
+				if (p->conf.debug) TRACE("%s", "connection closed while waiting to read a response, restarting");
 
 				return HANDLER_COMEBACK;
 			}

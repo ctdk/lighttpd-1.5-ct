@@ -15,23 +15,26 @@
 #include "buffer.h"
 #include "array.h"
 #include "log.h"
+#include "status_counter.h"
 
 #include "mod_proxy_core.h"
 #include "mod_proxy_core_protocol.h"
 
-#define CONFIG_PROXY_CORE_BALANCER "proxy-core.balancer"
-#define CONFIG_PROXY_CORE_PROTOCOL "proxy-core.protocol"
-#define CONFIG_PROXY_CORE_DEBUG "proxy-core.debug"
-#define CONFIG_PROXY_CORE_MAX_KEEP_ALIVE "proxy-core.max-keep-alive-requests"
-#define CONFIG_PROXY_CORE_BACKENDS "proxy-core.backends"
-#define CONFIG_PROXY_CORE_REWRITE_REQUEST "proxy-core.rewrite-request"
-#define CONFIG_PROXY_CORE_REWRITE_RESPONSE "proxy-core.rewrite-response"
-#define CONFIG_PROXY_CORE_ALLOW_X_SENDFILE "proxy-core.allow-x-sendfile"
-#define CONFIG_PROXY_CORE_ALLOW_X_REWRITE "proxy-core.allow-x-rewrite"
-#define CONFIG_PROXY_CORE_MAX_POOL_SIZE "proxy-core.max-pool-size"
-#define CONFIG_PROXY_CORE_CHECK_LOCAL "proxy-core.check-local"
+#define PROXY_CORE "proxy-core"
+#define CONFIG_PROXY_CORE_BALANCER         PROXY_CORE ".balancer"
+#define CONFIG_PROXY_CORE_PROTOCOL         PROXY_CORE ".protocol"
+#define CONFIG_PROXY_CORE_DEBUG            PROXY_CORE ".debug"
+#define CONFIG_PROXY_CORE_MAX_KEEP_ALIVE   PROXY_CORE ".max-keep-alive-requests"
+#define CONFIG_PROXY_CORE_BACKENDS         PROXY_CORE ".backends"
+#define CONFIG_PROXY_CORE_REWRITE_REQUEST  PROXY_CORE ".rewrite-request"
+#define CONFIG_PROXY_CORE_REWRITE_RESPONSE PROXY_CORE ".rewrite-response"
+#define CONFIG_PROXY_CORE_ALLOW_X_SENDFILE PROXY_CORE ".allow-x-sendfile"
+#define CONFIG_PROXY_CORE_ALLOW_X_REWRITE  PROXY_CORE ".allow-x-rewrite"
+#define CONFIG_PROXY_CORE_MAX_POOL_SIZE    PROXY_CORE ".max-pool-size"
+#define CONFIG_PROXY_CORE_CHECK_LOCAL      PROXY_CORE ".check-local"
+#define CONFIG_PROXY_CORE_SPLIT_HOSTNAMES  PROXY_CORE ".split-hostnames"
 
-static int mod_proxy_wakeup_connections(server *srv, plugin_config *p);
+static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_config *p_conf);
 
 int array_insert_int(array *a, const char *key, int val) {
 	data_integer *di;
@@ -74,6 +77,9 @@ INIT_FUNC(mod_proxy_core_init) {
 	array_insert_int(p->possible_balancers, "static", PROXY_BALANCE_STATIC);
 
 	p->proxy_register_protocol = mod_proxy_core_register_protocol;
+
+	/* statistics counters. */
+	p->request_count = status_counter_get_counter(CONST_STR_LEN(PROXY_CORE ".requests"));
 
 	p->balance_buf = buffer_init();
 	p->protocol_buf = buffer_init();
@@ -212,10 +218,36 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 	return HANDLER_GO_ON;
 }
 
+static void mod_proxy_core_create_backend_stats(plugin_data *p, buffer *stat_basename, proxy_backend *backend) {
+
+	/* request count stat. */
+	buffer_copy_string_buffer(p->tmp_buf, stat_basename);
+	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\""));
+	buffer_append_string_buffer(p->tmp_buf, backend->name);
+	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\".requests"));
+	backend->request_count = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
+
+	/* load */
+	buffer_copy_string_buffer(p->tmp_buf, stat_basename);
+	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\""));
+	buffer_append_string_buffer(p->tmp_buf, backend->name);
+	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\".load"));
+	backend->load = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
+
+	/* pool size */
+	buffer_copy_string_buffer(p->tmp_buf, stat_basename);
+	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\""));
+	buffer_append_string_buffer(p->tmp_buf, backend->name);
+	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\".pool_size"));
+	backend->pool_size = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
+
+}
 
 SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 	plugin_data *p = p_d;
+	buffer *stat_basename;
 	size_t i, j;
+	int proxy_counter = 0;
 
 	config_values_t cv[] = {
 		{ CONFIG_PROXY_CORE_BACKENDS,       NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
@@ -229,8 +261,11 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		{ CONFIG_PROXY_CORE_MAX_POOL_SIZE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },        /* 8 */
 		{ CONFIG_PROXY_CORE_CHECK_LOCAL, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
 		{ CONFIG_PROXY_CORE_MAX_KEEP_ALIVE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },       /* 10 */
+		{ CONFIG_PROXY_CORE_SPLIT_HOSTNAMES, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 11 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
+
+	stat_basename = buffer_init();
 
 	p->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 
@@ -252,6 +287,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		s->response_rewrites   = proxy_rewrites_init();
 		s->request_rewrites   = proxy_rewrites_init();
 		s->check_local = 0;
+		s->split_hostnames = 1;
 		s->max_keep_alive_requests = 0;
 
 		cv[0].destination = p->backends_arr;
@@ -263,6 +299,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		cv[8].destination = &(s->max_pool_size);
 		cv[9].destination = &(s->check_local);
 		cv[10].destination = &(s->max_keep_alive_requests);
+		cv[11].destination = &(s->split_hostnames);
 
 		buffer_reset(p->balance_buf);
 
@@ -298,23 +335,82 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		}
 
 		if (p->backends_arr->used) {
-			backend = proxy_backend_init();
+			/* statistics base name. */
+			buffer_copy_string_len(stat_basename, CONST_STR_LEN(PROXY_CORE "."));
+			buffer_append_long(stat_basename, proxy_counter);
+
+			/* backlog size stats */
+			buffer_copy_string_buffer(p->tmp_buf, stat_basename);
+			buffer_append_string_len(p->tmp_buf, CONST_STR_LEN(".backlogged"));
+			s->backlog_size = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
+
+			/* backends stats base name. */
+			buffer_append_string_len(stat_basename, CONST_STR_LEN(".backends."));
 
 			/* check if the backends have a valid host-name */
 			for (j = 0; j < p->backends_arr->used; j++) {
 				data_string *ds = (data_string *)p->backends_arr->data[j];
+				backend = proxy_backend_init();
 
+				/* save name of backend for config. */
+				buffer_copy_string_buffer(backend->name, ds->value);
 				/* the values should be ips or hostnames */
 				if (0 != proxy_address_pool_add_string(backend->address_pool, ds->value)) {
 					return HANDLER_ERROR;
 				}
-			}
 
-			if (s->max_pool_size) {
-				backend->pool->max_size = s->max_pool_size;
-			}
+				if (s->max_pool_size) {
+					backend->pool->max_size = s->max_pool_size;
+				}
+				backend->balancer = s->balancer;
+				backend->protocol = s->protocol;
+	
+				/* append backend to list of backends */
+				proxy_backends_add(s->backends, backend);
 
-			proxy_backends_add(s->backends, backend);
+				/* if there is more then one address in the pool, split them out into seperate backends */
+				if (s->split_hostnames && backend->address_pool->used > 1) {
+					proxy_address_pool *pool = backend->address_pool;
+
+					/* change current backend's name to name of the first ip address in the pool. */
+					buffer_copy_string_buffer(backend->name, pool->ptr[0]->name);
+
+					/* setup stats */
+					mod_proxy_core_create_backend_stats(p, stat_basename, backend);
+
+					/* move all addresses from the pool into new backends, except for the first one */
+					while (pool->used > 1) {
+						/* remove last address from pool */
+						proxy_address *address = pool->ptr[--(pool->used)];
+
+						/* create new backend for address */
+						backend = proxy_backend_init();
+
+						backend->balancer = s->balancer;
+						backend->protocol = s->protocol;
+						/* set backend name to name of address */
+						buffer_copy_string_buffer(backend->name, address->name);
+
+						/* setup stats */
+						mod_proxy_core_create_backend_stats(p, stat_basename, backend);
+
+						/* add address to pool */
+						proxy_address_pool_add(backend->address_pool, address);
+
+						if (s->max_pool_size) {
+							backend->pool->max_size = s->max_pool_size;
+						}
+	
+						/* append backend to list of backends */
+						proxy_backends_add(s->backends, backend);
+					}
+				} else {
+					/* setup stats */
+					mod_proxy_core_create_backend_stats(p, stat_basename, backend);
+				}
+			}
+			/* counter number of "proxy-core.backends" groups */
+			proxy_counter++;
 		}
 
 		if (HANDLER_GO_ON != mod_proxy_core_config_parse_rewrites(s->request_rewrites, ca, CONFIG_PROXY_CORE_REWRITE_REQUEST)) {
@@ -325,6 +421,8 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			return HANDLER_ERROR;
 		}
 	}
+
+	buffer_free(stat_basename);
 
 	return HANDLER_GO_ON;
 }
@@ -351,7 +449,7 @@ proxy_session *proxy_session_init(void) {
 	sess->send_response_content = 1;
 	sess->do_new_session = 0;
 	sess->do_x_rewrite_backend = 0;
-	sess->x_rewrite_backend = NULL;
+	sess->sticky_session = NULL;
 
 	return sess;
 }
@@ -385,8 +483,8 @@ void proxy_session_reset(proxy_session *sess) {
 
 	sess->do_new_session = 0;
 	sess->do_x_rewrite_backend = 0;
-	buffer_free(sess->x_rewrite_backend);
-	sess->x_rewrite_backend = NULL;
+	buffer_free(sess->sticky_session);
+	sess->sticky_session = NULL;
 
 	sess->remote_con = NULL;
 	sess->proxy_con = NULL;
@@ -408,7 +506,7 @@ void proxy_session_free(proxy_session *sess) {
 	chunkqueue_free(sess->recv_raw);
 	chunkqueue_free(sess->send_raw);
 
-	buffer_free(sess->x_rewrite_backend);
+	buffer_free(sess->sticky_session);
 	free(sess);
 }
 
@@ -460,6 +558,9 @@ int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
 
 	if(!sess->proxy_con) return -1;
 	proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
+	COUNTER_SET(sess->proxy_backend->pool_size, sess->proxy_backend->pool->used);
+	COUNTER_DEC(sess->proxy_backend->load);
+	sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
 
 	fdevent_event_del(srv->ev, sess->proxy_con->sock);
 	fdevent_unregister(srv->ev, sess->proxy_con->sock);
@@ -679,8 +780,8 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 		} else if (0 == buffer_caseless_compare(CONST_BUF_LEN(header->key), CONST_STR_LEN("X-Rewrite-Backend"))) {
 			if (p->conf.allow_x_rewrite) {
 				do_x_rewrite = 1;
-				if (!sess->x_rewrite_backend) sess->x_rewrite_backend = buffer_init();
-				buffer_copy_string_buffer(sess->x_rewrite_backend, header->value);
+				if (!sess->sticky_session) sess->sticky_session = buffer_init();
+				buffer_copy_string_buffer(sess->sticky_session, header->value);
 				sess->do_x_rewrite_backend = 1;
 			}
 
@@ -924,6 +1025,9 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 	if (!sess) return HANDLER_GO_ON;
 
 	if (sess->proxy_con) {
+		COUNTER_INC(p->request_count);
+		COUNTER_INC(sess->proxy_backend->request_count);
+		COUNTER_DEC(sess->proxy_backend->load);
 		switch (sess->proxy_con->state) {
 		case PROXY_CONNECTION_STATE_CONNECTED:
 			sess->proxy_con->request_count++;
@@ -969,10 +1073,25 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 		if (p->conf.debug) TRACE("wakeup a connection from backlog: con=%d", next_con->sock->fd);
 		joblist_append(srv, next_con);
 
+		COUNTER_DEC(p->conf.backlog_size);
 		proxy_request_free(req);
 	}
 
 	return HANDLER_GO_ON;
+}
+
+void mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+	proxy_request *req;
+
+	/* connection pool is full, queue the request for now */
+	req = proxy_request_init();
+	req->added_ts = srv->cur_ts;
+	req->con = con;
+
+	proxy_backlog_push(p->conf.backlog, req);
+
+	COUNTER_INC(p->conf.backlog_size);
+	sess->sent_to_backlog++;
 }
 
 /**
@@ -1171,6 +1290,11 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 				}
 
 				sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
+				sess->proxy_backend->disabled_addresses++;
+				/* if all addresses in address_pool are disabled, then disable this backend. */
+				if (sess->proxy_backend->disabled_addresses == sess->proxy_backend->address_pool->used) {
+					sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED;
+				}
 				return HANDLER_COMEBACK;
 			}
 
@@ -1413,7 +1537,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 	return HANDLER_GO_ON;
 }
 
-proxy_backend *proxy_get_backend(server *srv, connection *con, plugin_data *p) {
+proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, buffer *name) {
 	size_t i;
 
 	UNUSED(srv);
@@ -1422,22 +1546,7 @@ proxy_backend *proxy_get_backend(server *srv, connection *con, plugin_data *p) {
 	for (i = 0; i < p->conf.backends->used; i++) {
 		proxy_backend *backend = p->conf.backends->ptr[i];
 
-		return backend;
-	}
-
-	return NULL;
-}
-
-proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, buffer *url) {
-	size_t i;
-
-	UNUSED(srv);
-	UNUSED(con);
-
-	for (i = 0; i < p->conf.backends->used; i++) {
-		proxy_backend *backend = p->conf.backends->ptr[i];
-
-		if (buffer_is_equal(backend->url, url)) {
+		if (buffer_is_equal(backend->name, name)) {
 			return backend;
 		}
 	}
@@ -1446,11 +1555,136 @@ proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, 
 }
 
 /**
- * choose a available address from the address-pool
+ * choose an available backend
+ *
+ */
+proxy_backend *proxy_backend_balancer(server *srv, connection *con, proxy_session *sess) {
+	size_t i;
+	plugin_data *p = sess->p;
+	proxy_backends *backends = p->conf.backends;
+	unsigned long last_max; /* for the HASH balancer */
+	proxy_backend *backend = NULL, *cur_backend = NULL;
+	int active_backends = 0, rand_ndx;
+	size_t min_used;
+
+	UNUSED(srv);
+
+	/* if we only have one backend just return it. */
+	if (backends->used == 1) {
+		return backends->ptr[0];
+	}
+
+	/* frist try to select backend based on sticky session. */
+	if (sess->sticky_session) {
+		/* find backend */
+		backend = proxy_find_backend(srv, con, p, sess->sticky_session);
+		if (NULL != backend) return backend;
+	}
+
+	/* apply balancer algorithm to select backend. */
+	switch(p->conf.balancer) {
+	case PROXY_BALANCE_CARP:
+		/* hash balancing */
+
+		for (i = 0, last_max = ULONG_MAX; i < backends->used; i++) {
+			unsigned long cur_max;
+
+			cur_backend = backends->ptr[i];
+
+			if (cur_backend->state != PROXY_BACKEND_STATE_ACTIVE) continue;
+
+			cur_max = generate_crc32c(CONST_BUF_LEN(con->uri.path)) +
+				generate_crc32c(CONST_BUF_LEN(cur_backend->name)) + /* we can cache this */
+				generate_crc32c(CONST_BUF_LEN(con->uri.authority));
+#if 0
+			TRACE("hash-election: %s - %s - %s: %ld",
+					con->uri.path->ptr,
+					cur_backend->name->ptr,
+					con->uri.authority->ptr,
+					cur_max);
+#endif
+			if (backend == NULL || (cur_max > last_max)) {
+				last_max = cur_max;
+
+				backend = cur_backend;
+			}
+		}
+
+		break;
+	case PROXY_BALANCE_STATIC:
+		/* static (only fail-over) */
+
+		for (i = 0; i < backends->used; i++) {
+			cur_backend = backends->ptr[i];
+
+			if (cur_backend->state != PROXY_BACKEND_STATE_ACTIVE) continue;
+
+			backend = cur_backend;
+			break;
+		}
+
+		break;
+	case PROXY_BALANCE_SQF:
+		/* shortest-queue-first balancing */
+
+		for (i = 0, min_used = SIZE_MAX; i < backends->used; i++) {
+			cur_backend = backends->ptr[i];
+
+			if (cur_backend->state != PROXY_BACKEND_STATE_ACTIVE) continue;
+
+			/* the backend is up, use it */
+			if (cur_backend->pool->used < min_used ) {
+				backend = cur_backend;
+				min_used = cur_backend->pool->used;
+			}
+		}
+
+		break;
+	case PROXY_BALANCE_UNSET: /* if not set, use round-robin as default */
+	case PROXY_BALANCE_RR:
+		/* round robin */
+
+		/**
+		 * instead of real RoundRobin we just do a RandomSelect
+		 *
+		 * it is state-less and has the same distribution
+		 */
+
+		active_backends = 0;
+
+		for (i = 0; i < backends->used; i++) {
+			cur_backend = backends->ptr[i];
+
+			if (cur_backend->state != PROXY_BACKEND_STATE_ACTIVE) continue;
+
+			active_backends++;
+		}
+
+		rand_ndx = (int) (1.0 * active_backends * rand()/(RAND_MAX));
+
+		active_backends = 0;
+		for (i = 0; i < backends->used; i++) {
+			cur_backend = backends->ptr[i];
+
+			if (cur_backend->state != PROXY_BACKEND_STATE_ACTIVE) continue;
+
+			backend = cur_backend;
+
+			if (rand_ndx == active_backends++) break;
+		}
+
+		break;
+	}
+
+	return backend;
+}
+
+/**
+ * choose an available address from the address-pool
  *
  * the backend has different balancers
  */
-proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_session *sess) {
+proxy_address *proxy_address_balancer(server *srv, connection *con, proxy_session *sess) {
 	size_t i;
 	proxy_backend *backend = sess->proxy_backend;
 	proxy_address_pool *address_pool = backend->address_pool;
@@ -1461,6 +1695,12 @@ proxy_address *proxy_backend_balance(server *srv, connection *con, proxy_session
 
 	UNUSED(srv);
 
+	/* if we only have one address just return it. */
+	if (address_pool->used == 1) {
+		return address_pool->ptr[0];
+	}
+
+	/* apply balancer algorithm to select address. */
 	switch(backend->balancer) {
 	case PROXY_BALANCE_CARP:
 		/* hash balancing */
@@ -1567,6 +1807,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(debug);
 	PATCH_OPTION(backends);
 	PATCH_OPTION(backlog);
+	PATCH_OPTION(backlog_size);
 	PATCH_OPTION(protocol);
 	PATCH_OPTION(request_rewrites);
 	PATCH_OPTION(response_rewrites);
@@ -1574,6 +1815,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(allow_x_rewrite);
 	PATCH_OPTION(max_pool_size);
 	PATCH_OPTION(check_local);
+	PATCH_OPTION(split_hostnames);
 	PATCH_OPTION(max_keep_alive_requests);
 
 	/* skip the first, the global context */
@@ -1591,6 +1833,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 			if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_BACKENDS))) {
 				PATCH_OPTION(backends);
 				PATCH_OPTION(backlog);
+				PATCH_OPTION(backlog_size);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_DEBUG))) {
 				PATCH_OPTION(debug);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_BALANCER))) {
@@ -1609,6 +1852,8 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(max_pool_size);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_CHECK_LOCAL))) {
 				PATCH_OPTION(check_local);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_SPLIT_HOSTNAMES))) {
+				PATCH_OPTION(split_hostnames);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_MAX_KEEP_ALIVE))) {
 				PATCH_OPTION(max_keep_alive_requests);
 			}
@@ -1641,14 +1886,22 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 
 	if (sess && sess->do_x_rewrite_backend) {
 		proxy_backend *backend;
+		buffer *sticky_session = sess->sticky_session;
 
-		backend = proxy_find_backend(srv, con, p, sess->x_rewrite_backend);
+		sess->sticky_session = NULL;
+		/* clear old session state */
+		proxy_session_reset(sess);
+
+		/* find backend */
+		backend = proxy_find_backend(srv, con, p, sticky_session);
 		if (backend == NULL) {
 			backend = proxy_backend_init();
 
-			buffer_copy_string_buffer(backend->url, sess->x_rewrite_backend);
+			backend->balancer = p->conf.balancer;
+			backend->protocol = p->conf.protocol;
+			buffer_copy_string_buffer(backend->name, sticky_session);
 			/* check if the new backend has a valid backend-address */
-			if (0 == proxy_address_pool_add_string(backend->address_pool, backend->url)) {
+			if (0 == proxy_address_pool_add_string(backend->address_pool, backend->name)) {
 				if (p->conf.max_pool_size) {
 					backend->pool->max_size = p->conf.max_pool_size;
 				}
@@ -1659,10 +1912,13 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 				backend = NULL;
 			}
 		}
-		/* clear old session */
-		proxy_session_reset(sess);
-		if (NULL == backend) return HANDLER_GO_ON;
+		/* no backend available. */
+		if (NULL == backend) {
+			buffer_free(sticky_session);
+			return HANDLER_GO_ON;
+		}
 		sess->proxy_backend = backend;
+		sess->sticky_session = sticky_session;
 	} else if (sess) {
 		proxy_session_reset(sess);
 	}
@@ -1718,6 +1974,7 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 	} else {
 		/* if we have the connection in the backlog, remove it */
 		proxy_backlog_remove_connection(p->conf.backlog, con);
+		COUNTER_DEC(p->conf.backlog_size);
 	}
 
 	/* cleanup protocol stream and proxy session */
@@ -1794,74 +2051,62 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	while (1) {
 		if (sess->proxy_con == NULL) {
 			proxy_address *address = NULL;
-			int woken_up;
-
-			if (NULL == sess->proxy_backend) {
-				if (NULL == (sess->proxy_backend = proxy_get_backend(srv, con, p))) {
-					/* no connection pool for this location */
-					ERROR("%s", "Couldn't find a backend for this location.");
-					return HANDLER_ERROR;
-				}
-			}
-
-			sess->proxy_backend->balancer = p->conf.balancer;
-			sess->proxy_backend->protocol = p->conf.protocol;
 
 			/**
 			 * ask the balancer for the next address and
 			 * check the connection pool if we have a connection open
 			 * for that address
 			 */
-			if (NULL == (address = proxy_backend_balance(srv, con, sess))) {
-				/* we don't have any backends to connect to */
-				proxy_request *req;
-
-				/* connection pool is full, queue the request for now */
-				req = proxy_request_init();
-				req->added_ts = srv->cur_ts;
-				req->con = con;
-
-				TRACE("backlog: all backends are down, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
-				proxy_backlog_push(p->conf.backlog, req);
+			if (NULL == (sess->proxy_backend = proxy_backend_balancer(srv, con, sess))) {
+				if (p->conf.debug) TRACE("backlog: all backends are full or down, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
+				/* no backends available right now. */
+				mod_proxy_core_backlog_connection(srv, con, p, sess);
 
 				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
-				 * */
+				 */
 				return HANDLER_WAIT_FOR_EVENT;
 			}
+			if (p->conf.debug && sess->proxy_backend) TRACE("selected backend: %s", BUF_STR(sess->proxy_backend->name));
 
 			/**
-			 * we prefer older connections to wakeup and take a
-			 * connection over a new connection being answered fast
+			 * ask the balancer for the next address and
+			 * check the connection pool if we have a connection open
+			 * for that address
 			 */
-			woken_up = mod_proxy_wakeup_connections(srv, &(p->conf));
-
-			if ((sess->sent_to_backlog == 0 && woken_up > 0 && p->conf.backlog->length > 0) ||
-			    PROXY_CONNECTIONPOOL_FULL == proxy_connection_pool_get_connection(
-						sess->proxy_backend->pool,
-						address,
-						&(sess->proxy_con))) {
-				proxy_request *req;
-
-				/* connection pool is full, queue the request for now */
-				req = proxy_request_init();
-				req->added_ts = srv->cur_ts;
-				req->con = con;
-
-				if (p->conf.debug)TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
-				proxy_backlog_push(p->conf.backlog, req);
-
-				sess->sent_to_backlog++;
+			if (NULL == (address = proxy_address_balancer(srv, con, sess))) {
+				/* no addresses available for this backend right now. */
+				sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED; /* disable backend */
+				TRACE("backlog: all addresses are down, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
+				mod_proxy_core_backlog_connection(srv, con, p, sess);
 
 				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
-				 * */
+				 */
 				return HANDLER_WAIT_FOR_EVENT;
 			}
+
+			if (PROXY_CONNECTIONPOOL_FULL == proxy_connection_pool_get_connection(
+						sess->proxy_backend->pool, address, &(sess->proxy_con))) {
+				/* all connections are busy. */
+				sess->proxy_backend->state = PROXY_BACKEND_STATE_FULL;
+
+				if (p->conf.debug) TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
+				mod_proxy_core_backlog_connection(srv, con, p, sess);
+
+				/* no, not really a event,
+				 * we just want to block the outer loop from stepping forward
+				 *
+				 * the trigger will bring this connection back into the game
+				 */
+				return HANDLER_WAIT_FOR_EVENT;
+			}
+			COUNTER_SET(sess->proxy_backend->pool_size, sess->proxy_backend->pool->used);
+			COUNTER_INC(sess->proxy_backend->load);
 
 			/* a fresh connection, we need address for it */
 			if (sess->proxy_con->state == PROXY_CONNECTION_STATE_CONNECTING) {
@@ -1931,17 +2176,19 @@ CONNECTION_FUNC(mod_proxy_send_request_content) {
  * the idling event-handler can't cleanup connections itself and has to wait until the
  * trigger cleans up
  */
-static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
+static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_config *p_conf) {
 	size_t i, j;
 	proxy_request *req;
-	int conns_closed = 0, conns_available = 0;
+	int total_conns_available = 0, backends_available = 0;
 	int woken_up;
 
-	for (i = 0; i < p->backends->used; i++) {
-		proxy_backend *backend = p->backends->ptr[i];
+	for (i = 0; i < p_conf->backends->used; i++) {
+		proxy_backend *backend = p_conf->backends->ptr[i];
 		proxy_connection_pool *pool = backend->pool;
 		proxy_address_pool *address_pool = backend->address_pool;
+		unsigned int conns_available = 0, addrs_disabled = 0;
 
+		conns_available = (pool->max_size - pool->used);
 		for (j = 0; j < pool->used; ) {
 			proxy_connection *proxy_con = pool->ptr[j];
 
@@ -1950,13 +2197,13 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
 			switch (proxy_con->state) {
 			case PROXY_CONNECTION_STATE_CLOSED:
 				proxy_connection_pool_remove_connection(backend->pool, proxy_con);
+				COUNTER_SET(backend->pool_size, backend->pool->used);
 
 				fdevent_event_del(srv->ev, proxy_con->sock);
 				fdevent_unregister(srv->ev, proxy_con->sock);
 
 				proxy_connection_free(proxy_con);
 
-				conns_closed++;
 				conns_available++;
 				break;
 			case PROXY_CONNECTION_STATE_IDLE:
@@ -1975,17 +2222,40 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_config *p) {
 			if (srv->cur_ts > address->disabled_until) {
 				address->disabled_until = 0;
 				address->state = PROXY_ADDRESS_STATE_ACTIVE;
+			} else {
+				addrs_disabled++;
 			}
+		}
+
+		total_conns_available += conns_available;
+		backend->disabled_addresses = addrs_disabled;
+		/* update backend's state */
+		if (conns_available == 0) {
+			/* connection pool is full and there are no idle connections. */
+			backend->state = PROXY_BACKEND_STATE_FULL;
+		} else if (addrs_disabled == address_pool->used) {
+			/* all addresses are disabled. */
+			backend->state = PROXY_BACKEND_STATE_DISABLED;
+		} else {
+			backend->state = PROXY_BACKEND_STATE_ACTIVE;
+			backends_available++;
 		}
 	}
 
+	/* no backends available can't wake any connections. */
+	if (backends_available == 0) {
+		/* all backends are full or disabled. */
+		return 0;
+	}
+
 	/* wake up the connections from the backlog */
-	for (woken_up = 0; woken_up < conns_available && (req = proxy_backlog_shift(p->backlog)); woken_up++) {
+	for (woken_up = 0; woken_up < total_conns_available && (req = proxy_backlog_shift(p_conf->backlog)); woken_up++) {
 		connection *con = req->con;
 
-		if (p->debug) TRACE("wakeup a connection from backlog: con=%d", con->sock->fd);
+		if (p_conf->debug) TRACE("wakeup a connection from backlog: con=%d", con->sock->fd);
 		joblist_append(srv, con);
 
+		COUNTER_DEC(p->conf.backlog_size);
 		proxy_request_free(req);
 	}
 
@@ -1997,7 +2267,7 @@ TRIGGER_FUNC(mod_proxy_trigger) {
 	size_t i;
 
 	for (i = 0; i < srv->config_context->used; i++) {
-		mod_proxy_wakeup_connections(srv, p->config_storage[i]);
+		mod_proxy_wakeup_connections(srv, p, p->config_storage[i]);
 	}
 
 	return HANDLER_GO_ON;

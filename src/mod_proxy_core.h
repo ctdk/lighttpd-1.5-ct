@@ -20,6 +20,7 @@ typedef struct {
 	proxy_backends *backends;
 
 	proxy_backlog *backlog;
+	data_integer  *backlog_size;
 
 	proxy_rewrites *request_rewrites;
 	proxy_rewrites *response_rewrites;
@@ -29,6 +30,7 @@ typedef struct {
 	unsigned short debug;
 	unsigned short max_pool_size;
 	unsigned short check_local;
+	unsigned short split_hostnames;
 	unsigned short max_keep_alive_requests;
 
 	proxy_balance_t balancer;
@@ -41,6 +43,9 @@ typedef struct {
 	array *possible_balancers;
 	/*array *possible_protocols; */
 	struct proxy_protocol *(*proxy_register_protocol) (const char *name); /* register new protocol */
+
+	/* statistics counters. */
+	data_integer *request_count;
 
 	/* for parsing only */
 	array *backends_arr;
@@ -92,7 +97,8 @@ typedef struct proxy_session {
 	int internal_redirect_count;  /** protection against infinite loops */
 	int do_new_session;        /** 1 if we want a new proxy session can be created. */
 	int do_x_rewrite_backend;  /** 1 if we want to do custom backend balancing */
-	buffer *x_rewrite_backend; /** holds name of new backend for custom balancing */
+
+	buffer *sticky_session;    /** holds name of backend for custom balancing or sticky sessions */
 
 	/**
 	 * chunkqueues

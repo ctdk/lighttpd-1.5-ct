@@ -2,6 +2,7 @@
 #define _MOD_PROXY_CORE_BACKEND_H_
 
 #include "array-static.h"
+#include "array.h"
 #include "buffer.h"
 #include "mod_proxy_core_address.h"
 #include "mod_proxy_core_pool.h"
@@ -33,15 +34,30 @@ typedef enum {
 	PROXY_BALANCE_STATIC
 } proxy_balance_t;
 
+typedef enum {
+	PROXY_BACKEND_STATE_UNSET,
+	PROXY_BACKEND_STATE_ACTIVE,
+	PROXY_BACKEND_STATE_FULL,
+	PROXY_BACKEND_STATE_DISABLED,
+} proxy_backend_state_t;
+
 typedef struct {
-	buffer *url;
+	buffer *name;
 
 	proxy_connection_pool *pool;  /* pool of active connections */
 	int use_keepalive;
 
 	proxy_address_pool *address_pool; /* possible destination-addresses, disabling is done here */
+	unsigned int disabled_addresses; /* track how many addresses are disabled. */
 	proxy_balance_t balancer; /* how to choose a address from the address-pool */
 	struct proxy_protocol *protocol; /* protocol handler */
+
+	proxy_backend_state_t state;
+
+	/* statistics counters. */
+	data_integer *request_count;
+	data_integer *load;
+	data_integer *pool_size;
 } proxy_backend;
 
 ARRAY_STATIC_DEF(proxy_backends, proxy_backend, );

@@ -13,4 +13,8 @@ int status_counter_inc(const char *s, size_t len);
 int status_counter_dec(const char *s, size_t len);
 int status_counter_set(const char *s, size_t len, int val);
 
+#define COUNTER_INC(di) if (di) di->value++;
+#define COUNTER_DEC(di) if (di && di->value > 0) di->value--;
+#define COUNTER_SET(di, val) if (di) di->value = val;
+
 #endif

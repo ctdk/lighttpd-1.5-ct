@@ -309,6 +309,8 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 			}
 
 			con->file_started = 1;
+			/* if Status: ... is not set, 200 is our default status-code */
+			if (con->http_status == 0) con->http_status = 200;
 			sess->state = CGI_STATE_READ_RESPONSE_CONTENT;
 
 			if (con->request.http_version == HTTP_VERSION_1_1 &&
@@ -326,6 +328,9 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 	* - use next-queue instead of con->write_queue
 	*/
 
+	/* copy the resopnse content */
+	cgi_copy_response(srv, con, sess);
+#if 0
 	/* copy the content to the next cq */
 	for (c = sess->rb->first; c; c = c->next) {
 		chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
@@ -334,6 +339,8 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 	}
 
 	chunkqueue_remove_finished_chunks(sess->rb);
+#endif
+
 	joblist_append(srv, con);
 
 	return 0;
@@ -435,6 +442,42 @@ static handler_t cgi_connection_close_callback(server *srv, connection *con, voi
 	return cgi_connection_close(srv, con, p);
 }
 
+/**
+ * Copy decoded response content to client connection.
+ */
+int cgi_copy_response(server *srv, connection *con, cgi_session *sess) {
+	chunk *c;
+	int we_have = 0;
+
+	UNUSED(srv);
+
+	chunkqueue_remove_finished_chunks(sess->rb);
+	/* copy the content to the next cq */
+	for (c = sess->rb->first; c; c = c->next) {
+		if (c->mem->used == 0) continue;
+
+		we_have = c->mem->used - c->offset - 1;
+		sess->rb->bytes_out += we_have;
+		con->send->bytes_in += we_have;
+		/* X-Sendfile ignores the content-body */
+		if (c->offset == 0) {
+			/* steal the buffer from the previous queue */
+
+			chunkqueue_steal_chunk(con->send, c);
+		} else {
+			chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
+
+			c->offset = c->mem->used - 1; /* mark the incoming side as read */
+		}
+	}
+	chunkqueue_remove_finished_chunks(sess->rb);
+
+	if(sess->rb->is_closed) {
+		con->send->is_closed = 1;
+	}
+	return 0;
+}
+
 
 static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 	server      *srv  = (server *)s;
@@ -454,13 +497,13 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 
 			chunkqueue_remove_finished_chunks(sess->rb);
 
-			switch (srv->network_backend_read(srv, sess->remote_con, sess->sock, sess->rb)) {
+			switch (srv->network_backend_read(srv, con, sess->sock, sess->rb)) {
 			case NETWORK_STATUS_CONNECTION_CLOSE:
 				fdevent_event_del(srv->ev, sess->sock);
 
 				/* the connection is gone
 				 * make the connect */
-				sess->remote_con->send->is_closed = 1;
+				sess->rb->is_closed = 1;
 #if 0
 				fdevent_event_del(srv->ev, sess->sock);
 #endif
@@ -469,11 +512,11 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 
 				/* how much do we want to read ? */
 
-				/* call stream-decoder (HTTP-chunked, FastCGI, ... ) */
+				/* copy the resopnse content */
+				cgi_copy_response(srv, con, sess);
 
+#if 0
 				chunkqueue_remove_finished_chunks(sess->rb);
-
-				/* copy the content to the next cq */
 				for (c = sess->rb->first; c; c = c->next) {
 					if (c->mem->used == 0) continue;
 
@@ -488,6 +531,7 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 					/* send final HTTP-Chunk packet */
 					http_chunk_append_mem(srv, sess->remote_con, NULL, 0);
 				}
+#endif
 
 				break;
 			default:
@@ -495,7 +539,7 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 				break;
 			}
 
-			joblist_append(srv, sess->remote_con);
+			joblist_append(srv, con);
 			break;
 		default:
 			TRACE("unexpected state for a FDEVENT_IN: %d", sess->state);
@@ -513,9 +557,11 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 
 		fdevent_event_del(srv->ev, sess->sock);
 
+#if 0
 		/* someone has to close this socket now :) */
 		http_chunk_append_mem(srv, sess->remote_con, NULL, 0);
-		joblist_append(srv, sess->remote_con);
+#endif
+		joblist_append(srv, con);
 	} else if (revents & FDEVENT_ERR) {
 		con->send->is_closed = 1;
 
@@ -841,7 +887,7 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		close(from_cgi_fds[1]);
 		close(to_cgi_fds[0]);
 
-		if (con->request.content_length) {
+		if (con->request.content_length > 0) {
 			chunkqueue *cq = con->recv;
 			chunk *c;
 

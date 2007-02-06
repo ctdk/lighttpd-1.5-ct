@@ -659,7 +659,7 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_encoder) {
 		 */
 		if(we_need == 0) {
 			we_need = in->bytes_in - in->bytes_out;
-			if(we_need > (AJP13_MAX_PACKET_SIZE - 2)) we_need = AJP13_MAX_PACKET_SIZE - 2;
+			if(we_need > (AJP13_MAX_PACKET_SIZE - AJP13_HEADER_LEN - 2)) we_need = (AJP13_MAX_PACKET_SIZE - AJP13_HEADER_LEN - 2);
 
 			b = chunkqueue_get_append_buffer(out);
 			buffer_prepare_copy(b, AJP13_HEADER_LEN);

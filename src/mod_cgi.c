@@ -26,6 +26,8 @@
 #include "sys-strings.h"
 #include "sys-process.h"
 
+#include "network_backends.h"
+
 #ifdef HAVE_SYS_FILIO_H
 # include <sys/filio.h>
 #endif
@@ -74,6 +76,7 @@ typedef struct {
 	pid_t pid;
 
 	iosocket *sock;
+	iosocket *wb_sock;
 
 	chunkqueue *rb;
 	chunkqueue *wb;
@@ -88,6 +91,7 @@ static cgi_session * cgi_session_init() {
 	assert(sess);
 
 	sess->sock = iosocket_init();
+	sess->wb_sock = iosocket_init();
 	sess->wb = chunkqueue_init();
 	sess->rb = chunkqueue_init();
 
@@ -98,6 +102,7 @@ static void cgi_session_free(cgi_session *sess) {
 	if (!sess) return;
 
 	iosocket_free(sess->sock);
+	iosocket_free(sess->wb_sock);
 
 	chunkqueue_free(sess->wb);
 	chunkqueue_free(sess->rb);
@@ -107,6 +112,8 @@ static void cgi_session_free(cgi_session *sess) {
 
 INIT_FUNC(mod_cgi_init) {
 	plugin_data *p;
+
+	UNUSED(srv);
 
 	p = calloc(1, sizeof(*p));
 
@@ -228,20 +235,56 @@ static int cgi_pid_del(server *srv, plugin_data *p, pid_t pid) {
 	return 0;
 }
 
+/**
+ * Copy decoded response content to client connection.
+ */
+static int cgi_copy_response(server *srv, connection *con, cgi_session *sess) {
+	chunk *c;
+	int we_have = 0;
+
+	UNUSED(srv);
+
+	chunkqueue_remove_finished_chunks(sess->rb);
+	/* copy the content to the next cq */
+	for (c = sess->rb->first; c; c = c->next) {
+		if (c->mem->used == 0) continue;
+
+		we_have = c->mem->used - c->offset - 1;
+		sess->rb->bytes_out += we_have;
+		con->send->bytes_in += we_have;
+		if (c->offset == 0) {
+			/* steal the buffer from the previous queue */
+
+			chunkqueue_steal_chunk(con->send, c);
+		} else {
+			chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
+
+			c->offset = c->mem->used - 1; /* mark the incoming side as read */
+		}
+	}
+	chunkqueue_remove_finished_chunks(sess->rb);
+
+	if(sess->rb->is_closed) {
+		con->send->is_closed = 1;
+	}
+	return 0;
+}
+
+
 static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 	cgi_session *sess = con->plugin_ctx[p->id];
-	chunk *c = NULL;
 
 	switch(srv->network_backend_read(srv, con, sess->sock, sess->rb)) {
+	case NETWORK_STATUS_CONNECTION_CLOSE:
+		fdevent_event_del(srv->ev, sess->sock);
+
+		/* connection closed. close the read chunkqueue. */
+		sess->rb->is_closed = 1;
 	case NETWORK_STATUS_SUCCESS:
 		/* we got content */
 		break;
 	case NETWORK_STATUS_WAIT_FOR_EVENT:
 		return 0;
-	case NETWORK_STATUS_CONNECTION_CLOSE:
-		/* this is a bit too early */
-		ERROR("%s", "cgi-connection got closed before we read the response-header (CGI died ?)");
-		return -1;
 	default:
 		/* oops */
 		ERROR("%s", "oops, read-pipe-read failed and I don't know why");
@@ -264,6 +307,7 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 		* extract the http-response header from the rb-cq
 		*/
 		switch (http_response_parse_cq(sess->rb, p->resp)) {
+		case PARSE_UNSET:
 		case PARSE_ERROR:
 			/* parsing failed */
 
@@ -316,7 +360,7 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 			if (con->request.http_version == HTTP_VERSION_1_1 &&
 			    !have_content_length) {
 				con->response.transfer_encoding = HTTP_TRANSFER_ENCODING_CHUNKED;
-	   		}
+		 	}
 
 			break;
 		}
@@ -356,6 +400,11 @@ static handler_t cgi_connection_close(server *srv, connection *con, plugin_data 
 		/* close connection to the cgi-script */
 		fdevent_event_del(srv->ev, sess->sock);
 		fdevent_unregister(srv->ev, sess->sock);
+	}
+
+	if (sess->wb_sock->fd != -1) {
+		close(sess->wb_sock->fd);
+		sess->wb_sock->fd = -1;
 	}
 
 	pid = sess->pid;
@@ -432,47 +481,10 @@ static handler_t cgi_connection_close_callback(server *srv, connection *con, voi
 	return cgi_connection_close(srv, con, p);
 }
 
-/**
- * Copy decoded response content to client connection.
- */
-int cgi_copy_response(server *srv, connection *con, cgi_session *sess) {
-	chunk *c;
-	int we_have = 0;
-
-	UNUSED(srv);
-
-	chunkqueue_remove_finished_chunks(sess->rb);
-	/* copy the content to the next cq */
-	for (c = sess->rb->first; c; c = c->next) {
-		if (c->mem->used == 0) continue;
-
-		we_have = c->mem->used - c->offset - 1;
-		sess->rb->bytes_out += we_have;
-		con->send->bytes_in += we_have;
-		if (c->offset == 0) {
-			/* steal the buffer from the previous queue */
-
-			chunkqueue_steal_chunk(con->send, c);
-		} else {
-			chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-
-			c->offset = c->mem->used - 1; /* mark the incoming side as read */
-		}
-	}
-	chunkqueue_remove_finished_chunks(sess->rb);
-
-	if(sess->rb->is_closed) {
-		con->send->is_closed = 1;
-	}
-	return 0;
-}
-
-
 static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 	server      *srv  = (server *)s;
 	cgi_session *sess = ctx;
 	connection  *con  = sess->remote_con;
-	chunk *c;
 
 	if (revents & FDEVENT_IN) {
 		switch (sess->state) {
@@ -490,12 +502,8 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 			case NETWORK_STATUS_CONNECTION_CLOSE:
 				fdevent_event_del(srv->ev, sess->sock);
 
-				/* the connection is gone
-				 * make the connect */
+				/* connection closed. close the read chunkqueue. */
 				sess->rb->is_closed = 1;
-#if 0
-				fdevent_event_del(srv->ev, sess->sock);
-#endif
 			case NETWORK_STATUS_SUCCESS:
 				/* read even more, do we have all the content */
 
@@ -854,88 +862,6 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		close(from_cgi_fds[1]);
 		close(to_cgi_fds[0]);
 
-		if (con->request.content_length > 0) {
-			chunkqueue *cq = con->recv;
-			chunk *c;
-
-			assert(chunkqueue_length(cq) == (off_t)con->request.content_length);
-
-			/* there is content to send */
-			for (c = cq->first; c; c = cq->first) {
-				int r = 0;
-
-				/* copy all chunks */
-				switch(c->type) {
-				case FILE_CHUNK:
-
-					if (c->file.mmap.start == MAP_FAILED) {
-						if (-1 == c->file.fd &&  /* open the file if not already open */
-						    -1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY))) {
-							log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
-
-							close(from_cgi_fds[0]);
-							close(to_cgi_fds[1]);
-							return -1;
-						}
-
-						c->file.mmap.length = c->file.length;
-
-						if (MAP_FAILED == (c->file.mmap.start = mmap(0,  c->file.mmap.length, PROT_READ, MAP_SHARED, c->file.fd, 0))) {
-							log_error_write(srv, __FILE__, __LINE__, "ssbd", "mmap failed: ",
-									strerror(errno), c->file.name,  c->file.fd);
-
-							close(from_cgi_fds[0]);
-							close(to_cgi_fds[1]);
-							return -1;
-						}
-
-						close(c->file.fd);
-						c->file.fd = -1;
-
-						/* chunk_reset() or chunk_free() will cleanup for us */
-					}
-
-					if ((r = write(to_cgi_fds[1], c->file.mmap.start + c->offset, c->file.length - c->offset)) < 0) {
-						switch(errno) {
-						case ENOSPC:
-							con->http_status = 507;
-
-							break;
-						default:
-							con->http_status = 403;
-							break;
-						}
-					}
-					break;
-				case MEM_CHUNK:
-					if ((r = write(to_cgi_fds[1], c->mem->ptr + c->offset, c->mem->used - c->offset - 1)) < 0) {
-						switch(errno) {
-						case ENOSPC:
-							con->http_status = 507;
-
-							break;
-						default:
-							con->http_status = 403;
-							break;
-						}
-					}
-					break;
-				case UNUSED_CHUNK:
-					break;
-				}
-
-				if (r > 0) {
-					c->offset += r;
-					cq->bytes_out += r;
-				} else {
-					break;
-				}
-				chunkqueue_remove_finished_chunks(cq);
-			}
-		}
-
-		close(to_cgi_fds[1]);
-
 		/* register PID and wait for them asyncronously */
 		con->mode = p->id;
 		buffer_reset(con->physical.path);
@@ -949,6 +875,8 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 
 		sess->sock->fd = from_cgi_fds[0];
 		sess->sock->type = IOSOCKET_TYPE_PIPE;
+		sess->wb_sock->fd = to_cgi_fds[1];
+		sess->wb_sock->type = IOSOCKET_TYPE_PIPE;
 
 		if (-1 == fdevent_fcntl_set(srv->ev, sess->sock)) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "fcntl failed: ", strerror(errno));
@@ -1002,7 +930,7 @@ static int mod_cgi_patch_connection(server *srv, connection *con, plugin_data *p
 	return 0;
 }
 
-URIHANDLER_FUNC(cgi_is_handled) {
+URIHANDLER_FUNC(mod_cgi_start_backend) {
 	size_t k, s_len;
 	plugin_data *p = p_d;
 	buffer *fn = con->physical.path;
@@ -1077,7 +1005,7 @@ TRIGGER_FUNC(cgi_trigger) {
 	return HANDLER_GO_ON;
 }
 
-SUBREQUEST_FUNC(mod_cgi_handle_subrequest) {
+SUBREQUEST_FUNC(mod_cgi_read_response_content) {
 	int status;
 	plugin_data *p = p_d;
 	cgi_session *sess = con->plugin_ctx[p->id];
@@ -1170,14 +1098,52 @@ SUBREQUEST_FUNC(mod_cgi_handle_subrequest) {
 #endif
 }
 
+URIHANDLER_FUNC(mod_cgi_send_request_content) {
+	plugin_data *p = p_d;
+	cgi_session *sess = con->plugin_ctx[p->id];
+
+	if (p->id != con->mode) return HANDLER_GO_ON;
+
+	if (con->request.content_length > 0 && con->recv->bytes_in > con->recv->bytes_out) {
+		/* write request content. */
+		switch (network_write_chunkqueue_write(srv, con, sess->wb_sock, con->recv)) {
+		case NETWORK_STATUS_SUCCESS:
+			/** fall through, still have data to write. */
+		case NETWORK_STATUS_WAIT_FOR_EVENT:
+			/** fall through */
+		case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
+			break;
+		case NETWORK_STATUS_CONNECTION_CLOSE:
+			/* the script might have written a response already. */
+			break;
+		default:
+			TRACE("%s", "(error)");
+			return HANDLER_ERROR;
+		}
+		chunkqueue_remove_finished_chunks(con->recv);
+	}
+	/* we have to close the pipe to finish the request. */
+	if ((con->recv->is_closed && con->recv->bytes_in == con->recv->bytes_out) ||
+			con->request.content_length <= 0) {
+		close(sess->wb_sock->fd);
+		sess->wb_sock->fd = -1;
+	} else {
+		/* there is more data to write. */
+		return HANDLER_GO_ON;
+	}
+
+	return mod_cgi_read_response_content(srv, con, p_d);
+}
+
 
 int mod_cgi_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("cgi");
 
 	p->connection_reset = cgi_connection_close_callback;
-	p->handle_start_backend = cgi_is_handled;
-	p->handle_send_request_content = mod_cgi_handle_subrequest;
+	p->handle_start_backend = mod_cgi_start_backend;
+	p->handle_send_request_content = mod_cgi_send_request_content;
+	p->handle_read_response_content = mod_cgi_read_response_content;
 
 	p->handle_trigger = cgi_trigger;
 	p->init           = mod_cgi_init;

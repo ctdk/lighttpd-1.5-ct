@@ -85,10 +85,10 @@ FREE_FUNC(mod_rewrite_free) {
 	return HANDLER_GO_ON;
 }
 
-static int parse_config_entry(server *srv, plugin_config *s, array *ca, const char *option, int once) {
+static int parse_config_entry(server *srv, plugin_config *s, array *ca, const char *option, size_t option_len, int once) {
 	data_unset *du;
 
-	if (NULL != (du = array_get_element(ca, option, strlen(option)))) {
+	if (NULL != (du = array_get_element(ca, option, option_len))) {
 		data_array *da = (data_array *)du;
 		size_t j;
 
@@ -173,10 +173,10 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 			return HANDLER_ERROR;
 		}
 
-		parse_config_entry(srv, s, ca, "url.rewrite-once",   1);
-		parse_config_entry(srv, s, ca, "url.rewrite-final",  1);
-		parse_config_entry(srv, s, ca, "url.rewrite",        1);
-		parse_config_entry(srv, s, ca, "url.rewrite-repeat", 0);
+		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-once"),   1);
+		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-final"),  1);
+		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite"),        1);
+		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-repeat"), 0);
 	}
 
 	return HANDLER_GO_ON;

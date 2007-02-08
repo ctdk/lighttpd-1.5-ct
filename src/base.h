@@ -239,6 +239,7 @@ typedef struct {
 	unsigned short max_keep_alive_idle;
 	unsigned short max_read_idle;
 	unsigned short max_write_idle;
+	unsigned short max_connection_idle;
 	unsigned short use_xattr;
 	unsigned short follow_symlink;
 	unsigned short range_requests;

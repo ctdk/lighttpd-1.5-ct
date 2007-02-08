@@ -93,6 +93,7 @@ static int config_insert(server *srv) {
 		{ "server.use-noatime",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 47 */
 		{ "server.max-stat-threads",     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 48 */
 		{ "server.max-read-threads",    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 49 */
+		{ "server.max-connection-idle",  NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 50 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -160,6 +161,7 @@ static int config_insert(server *srv) {
 		s->max_keep_alive_idle = 5;
 		s->max_read_idle = 60;
 		s->max_write_idle = 360;
+		s->max_connection_idle = 360;
 		s->use_xattr     = 0;
 		s->is_ssl        = 0;
 		s->use_ipv6      = 0;
@@ -211,6 +213,8 @@ static int config_insert(server *srv) {
 		cv[38].destination = s->ssl_ca_file;
 		cv[40].destination = &(s->range_requests);
 
+		cv[50].destination = &(s->max_connection_idle);
+
 		srv->config_storage[i] = s;
 
 		if (0 != (ret = config_insert_values_global(srv, ((data_config *)srv->config_context->data[i])->value, cv))) {
@@ -252,6 +256,7 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(max_keep_alive_idle);
 	PATCH(max_read_idle);
 	PATCH(max_write_idle);
+	PATCH(max_connection_idle);
 	PATCH(use_xattr);
 	PATCH(error_handler);
 	PATCH(errorfile_prefix);
@@ -318,6 +323,8 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(max_write_idle);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.max-read-idle"))) {
 				PATCH(max_read_idle);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.max-connection-idle"))) {
+				PATCH(max_connection_idle);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("mimetype.use-xattr"))) {
 				PATCH(use_xattr);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.pemfile"))) {

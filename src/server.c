@@ -669,7 +669,16 @@ int lighty_mainloop(server *srv) {
 					switch (con->state) {
 					case CON_STATE_READ_REQUEST_HEADER:
 					case CON_STATE_READ_REQUEST_CONTENT:
-						if (con->recv->is_closed) break; /* everything is read, no need to fear a timeout */
+						if (con->recv->is_closed) {
+							if (srv->cur_ts - con->read_idle_ts > con->conf.max_connection_idle) {
+								/* time - out */
+#if 0
+								TRACE("(connection process timeout) [%s]", BUF_STR(con->dst_addr_buf));
+#endif
+								connection_set_state(srv, con, CON_STATE_ERROR);
+								changed = 1;
+							}
+						}
 
 						if (con->request_count == 1) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_read_idle) {

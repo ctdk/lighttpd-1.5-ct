@@ -556,6 +556,7 @@ static handler_t mod_status_handle_server_status_text(server *srv, connection *c
 	buffer *b;
 	double avg;
 	time_t ts;
+	size_t j;
 
 	b = chunkqueue_get_append_buffer(con->send);
 
@@ -580,6 +581,21 @@ static handler_t mod_status_handle_server_status_text(server *srv, connection *c
 	/* output busy servers */
 	BUFFER_APPEND_STRING_CONST(b, "BusyServers: ");
 	buffer_append_long(b, srv->conns->used);
+	BUFFER_APPEND_STRING_CONST(b, "\n");
+
+	/* output traffic */
+	BUFFER_APPEND_STRING_CONST(b, "Traffic: ");
+	avg = p->abs_traffic_out / (srv->cur_ts - srv->startup_ts);
+	buffer_append_long(b, avg);
+	BUFFER_APPEND_STRING_CONST(b, "\n");
+
+	/* output traffic 5s */
+	BUFFER_APPEND_STRING_CONST(b, "Traffic5s: ");
+	for (j = 0, avg = 0; j < 5; j++) {
+		avg += p->mod_5s_traffic_out[j];
+	}
+	avg /= 5;
+	buffer_append_long(b, avg);
 	BUFFER_APPEND_STRING_CONST(b, "\n");
 
 	/* set text/plain output */

@@ -150,6 +150,7 @@ static server *server_init(void) {
 	assert(srv);
 
 	srv->max_fds = 1024;
+	srv->open_fds_stat = status_counter_get_counter(CONST_STR_LEN("server.open_fds"));
 #define CLEAN(x) \
 	srv->x = buffer_init();
 
@@ -750,6 +751,9 @@ int lighty_mainloop(server *srv) {
 				if (cs == 1) fprintf(stderr, "\n");
 			}
 		}
+
+		/* update open fds stat value. */
+		COUNTER_SET(srv->open_fds_stat, srv->cur_fds);
 
 		if (srv->sockets_disabled) {
 			/* our server sockets are disabled, why ? */

@@ -551,6 +551,7 @@ typedef struct server {
 
 	int max_fds;    /* max possible fds */
 	int cur_fds;    /* currently used fds */
+	data_integer *open_fds_stat; /* currently open fds stat value. */
 	int want_fds;   /* waiting fds */
 	int sockets_disabled;
 

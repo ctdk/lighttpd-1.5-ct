@@ -91,7 +91,7 @@ int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chun
 		switch(data->chunk_parse_state) {
 		case HTTP_CHUNK_LEN:
 			/* parse chunk len. */
-			for(offset = c->offset; offset < c->mem->used ; offset++) {
+			for(offset = c->offset; offset < (c->mem->used - 1) ; offset++) {
 				ch = c->mem->ptr[offset];
 				if(!light_isxdigit(ch)) break;
 			}
@@ -114,7 +114,7 @@ int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chun
 			data->chunk_parse_state = HTTP_CHUNK_EXTENSION;
 		case HTTP_CHUNK_EXTENSION:
 			/* find CRLF.  discard chunk-extension */
-			for(ch = 0; c->offset < c->mem->used && ch != '\n' ;) {
+			for(ch = 0; c->offset < (c->mem->used - 1) && ch != '\n' ;) {
 				ch = c->mem->ptr[c->offset];
 				c->offset++;
 				in->bytes_out++;
@@ -155,7 +155,7 @@ int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chun
 			data->chunk_parse_state = HTTP_CHUNK_END;
 		case HTTP_CHUNK_END:
 			/* discard CRLF.*/
-			for(ch = 0; c->offset < c->mem->used && ch != '\n' ;) {
+			for(ch = 0; c->offset < (c->mem->used - 1) && ch != '\n' ;) {
 				ch = c->mem->ptr[c->offset];
 				c->offset++;
 				in->bytes_out++;

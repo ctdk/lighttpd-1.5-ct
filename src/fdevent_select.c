@@ -14,6 +14,11 @@
 
 #include "sys-socket.h"
 
+#ifdef HAVE_SYS_TIME_H
+/* struct timeval tv needs it on IRIX + MIPS pro*/
+#include <sys/time.h>
+#endif
+
 #ifdef USE_SELECT
 
 static int fdevent_select_reset(fdevents *ev) {

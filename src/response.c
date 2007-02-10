@@ -226,6 +226,10 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			con->keep_alive = 0;
 		}
 
+		if (srv->sockets_disabled) {
+			con->keep_alive = 0;
+		}
+
 
 		/**
 		 *

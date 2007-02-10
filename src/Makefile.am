@@ -96,7 +96,7 @@ lib_LTLIBRARIES += liblightcomp.la
 liblightcomp_la_SOURCES=$(common_src)
 liblightcomp_la_CFLAGS=$(AM_CFLAGS)
 liblightcomp_la_LDFLAGS = -avoid-version -no-undefined
-liblightcomp_la_LIBADD = $(PCRE_LIB) $(SSL_LIB) $(FAM_LIBS)
+liblightcomp_la_LIBADD = $(PCRE_LIB) $(SSL_LIB) $(GTHREAD_LIBS)
 common_libadd = liblightcomp.la
 else
 src += $(common_src)
@@ -331,9 +331,8 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 
 lighttpd_SOURCES = $(src)
-lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB) $(FAM_LIBS) $(AIO_LIB) $(POSIX_AIO_LIB) $(GTHREAD_LIBS)
+lighttpd_LDADD = $(PCRE_LIB) $(DL_LIB) $(SENDFILE_LIB) $(ATTR_LIB) $(common_libadd) $(SSL_LIB) $(AIO_LIB) $(POSIX_AIO_LIB) $(GTHREAD_LIBS)
 lighttpd_LDFLAGS = -export-dynamic
-lighttpd_CCPFLAGS = $(FAM_CFLAGS)
 
 proc_open_SOURCES = proc_open.c buffer.c
 proc_open_CPPFLAGS= -DDEBUG_PROC_OPEN

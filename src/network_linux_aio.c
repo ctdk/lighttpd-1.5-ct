@@ -141,8 +141,6 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					return NETWORK_STATUS_FATAL_ERROR;
 				}
 
-				srv->cur_fds++;
-
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -190,7 +188,6 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						munmap(c->file.mmap.start, c->file.mmap.length);
 
 						close(c->file.copy.fd);
-						srv->cur_fds--;
 						c->file.copy.fd = -1;
 					}
 
@@ -218,8 +215,8 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 							async_error = 1;
 
 							if (errno != EMFILE) {
-								TRACE("mkstemp returned: %d (%s) for %s, open fds: %d, falling back to sync-io",
-									errno, strerror(errno), tmpfile_name, srv->cur_fds);
+								TRACE("mkstemp returned: %d (%s) for %s, falling back to sync-io",
+									errno, strerror(errno), tmpfile_name);
 							}
 						}
 
@@ -227,14 +224,13 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 						c->file.mmap.length = c->file.copy.length; /* align to page-size */
 
 						if (!async_error) {
-							srv->cur_fds++;
 							unlink(tmpfile_name); /* remove the file again, we still keep it open */
 							if (0 != ftruncate(c->file.copy.fd, c->file.mmap.length)) {
 								/* disk full ... */
 								async_error = 1;
 
-								TRACE("ftruncate returned: %d (%s), open fds: %d, falling back to sync-io",
-									errno, strerror(errno), srv->cur_fds);
+								TRACE("ftruncate returned: %d (%s), falling back to sync-io",
+									errno, strerror(errno));
 							}
 						}
 
@@ -296,7 +292,6 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					}
 					if (c->file.copy.fd != -1) {
 						close(c->file.copy.fd);
-						srv->cur_fds--;
 						c->file.copy.fd = -1;
 					}
 
@@ -357,13 +352,11 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					if (c->file.copy.fd != -1) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;
-						srv->cur_fds--;
 					}
 
 					if (c->file.fd != -1) {
 						close(c->file.fd);
 						c->file.fd = -1;
-						srv->cur_fds--;
 					}
 				}
 

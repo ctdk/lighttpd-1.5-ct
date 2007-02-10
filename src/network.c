@@ -161,9 +161,6 @@ int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 		}
 	}
 
-	/* */
-	srv->cur_fds = srv_socket->sock->fd;
-
 	val = 1;
 	if (setsockopt(srv_socket->sock->fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val)) < 0) {
 		log_error_write(srv, __FILE__, __LINE__, "ss", "socketsockopt failed:", strerror(errno));

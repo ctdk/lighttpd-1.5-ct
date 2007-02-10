@@ -150,7 +150,6 @@ static server *server_init(void) {
 	assert(srv);
 
 	srv->max_fds = 1024;
-	srv->open_fds_stat = status_counter_get_counter(CONST_STR_LEN("server.open_fds"));
 #define CLEAN(x) \
 	srv->x = buffer_init();
 
@@ -555,8 +554,12 @@ static void *joblist_queue_thread(void *_data) {
  * after each socket(), accept(), connect() or open() call
  *
  */
-int server_out_of_fds(server *srv) {
-	srv->cur_fds = srv->max_fds;
+int server_out_of_fds(server *srv, connection *con) {
+	/* we get NULL of accept() ran out of FDs */
+
+	if (con) {
+		fdwaitqueue_append(srv, con);
+	}
 
 	return 0;
 }
@@ -564,6 +567,7 @@ int server_out_of_fds(server *srv) {
 int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
 	int poll_errno;
+	size_t conns_user_at_sockets_disabled = 0;
 
 	/* the getevents and the poll() have to run in parallel
 	 * as soon as one has data, it has to interrupt the otherone */
@@ -761,13 +765,10 @@ int lighty_mainloop(server *srv) {
 			}
 		}
 
-		/* update open fds stat value. */
-		COUNTER_SET(srv->open_fds_stat, srv->cur_fds);
-
 		if (srv->sockets_disabled) {
 			/* our server sockets are disabled, why ? */
 
-			if ((srv->cur_fds + srv->want_fds < srv->max_fds * 0.8) && /* we have enough unused fds */
+			if ((srv->fdwaitqueue->used == 0) &&
 			    (srv->conns->used < srv->max_conns * 0.9) &&
 			    (0 == graceful_shutdown)) {
 				size_t i;
@@ -777,12 +778,12 @@ int lighty_mainloop(server *srv) {
 					fdevent_event_add(srv->ev, srv_socket->sock, FDEVENT_IN);
 				}
 
-				log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets enabled again");
+				TRACE("[note] sockets enabled again%s", "");
 
 				srv->sockets_disabled = 0;
 			}
 		} else {
-			if ((srv->cur_fds + srv->want_fds > srv->max_fds * 0.9) || /* out of fds */
+			if ((srv->fdwaitqueue->used) || /* looks like some cons are waiting for FDs*/
 			    (srv->conns->used > srv->max_conns) || /* out of connections */
 			    (graceful_shutdown)) { /* graceful_shutdown */
 				size_t i;
@@ -791,6 +792,7 @@ int lighty_mainloop(server *srv) {
 
 				for (i = 0; i < srv->srv_sockets.used; i++) {
 					server_socket *srv_socket = srv->srv_sockets.ptr[i];
+
 					fdevent_event_del(srv->ev, srv_socket->sock);
 
 					if (graceful_shutdown) {
@@ -809,14 +811,22 @@ int lighty_mainloop(server *srv) {
 				}
 
 				if (graceful_shutdown) {
-					log_error_write(srv, __FILE__, __LINE__, "s", "[note] graceful shutdown started");
+					TRACE("[note] graceful shutdown started%s", "");
+				} else if (srv->fdwaitqueue->used) {
+					TRACE("[note] out of FDs, server-socket get disabled for a while, we have %d connections open and they are waiting for %d FDs",
+					    srv->conns->used, srv->fdwaitqueue->used);
 				} else if (srv->conns->used > srv->max_conns) {
-					log_error_write(srv, __FILE__, __LINE__, "s", "[note] sockets disabled, connection limit reached");
-				} else {
-					TRACE("[note] servers sockets got disabled for a while as we are out of fds. We use %d of %d right now. (you may want to raise server.max-fds)", srv->cur_fds, srv->max_fds);
+					TRACE("[note] we reached our connection limit of %d connections. Disabling server-sockets for a while", srv->max_conns);
 				}
 
 				srv->sockets_disabled = 1;
+
+				/* we count the number of free fds indirectly. 
+				 *
+				 * instead of checking the fds we only check the connection handles we free'd since
+				 * the server-sockets got disabled
+				 * */
+				conns_user_at_sockets_disabled = srv->conns->used;
 			}
 		}
 
@@ -827,15 +837,33 @@ int lighty_mainloop(server *srv) {
 		}
 
 		/* we still have some fds to share */
-		if (srv->want_fds) {
-			/* check the fdwaitqueue for waiting fds */
-			int free_fds = srv->max_fds - srv->cur_fds - 16;
+		if (!srv_shutdown && srv->fdwaitqueue->used) {
+			/* ok, we are back to the problem of 'how many fds do we have available ?' */
 			connection *con;
+			int fd;
+			int avail_fds = conns_user_at_sockets_disabled - srv->conns->used;
 
-			for (; free_fds > 0 && NULL != (con = fdwaitqueue_unshift(srv, srv->fdwaitqueue)); free_fds--) {
+			if (-1 == (fd = open("/dev/null", O_RDONLY))) {
+				switch (errno) {
+				case EMFILE:
+					avail_fds = 0;
+
+					break;
+				default:
+					break;
+				}
+			} else {
+				close(fd);
+
+				/* we have at least one FD as we just checked */
+				if (!avail_fds) avail_fds++;
+			}
+
+
+			TRACE("conns used: %d, fd-waitqueue has %d entries, fds to share: %d", srv->conns->used, srv->fdwaitqueue->used, avail_fds);
+
+			while (avail_fds-- && NULL != (con = fdwaitqueue_unshift(srv, srv->fdwaitqueue))) {
 				connection_state_machine(srv, con);
-
-				srv->want_fds--;
 			}
 		}
 #ifdef USE_GTHREAD
@@ -883,7 +911,7 @@ int lighty_mainloop(server *srv) {
 
 				switch (r = (*(revent->handler))(srv, revent->context, revent->revents)) {
 				case HANDLER_WAIT_FOR_FD:
-					server_out_of_fds(srv);
+					server_out_of_fds(srv, NULL);
 				case HANDLER_FINISHED:
 				case HANDLER_GO_ON:
 				case HANDLER_WAIT_FOR_EVENT:
@@ -907,7 +935,7 @@ int lighty_mainloop(server *srv) {
 
 				switch (r = (*(revent->handler))(srv, revent->context, revent->revents)) {
 				case HANDLER_WAIT_FOR_FD:
-					server_out_of_fds(srv);
+					server_out_of_fds(srv, NULL);
 				case HANDLER_FINISHED:
 				case HANDLER_GO_ON:
 				case HANDLER_WAIT_FOR_EVENT:
@@ -1625,10 +1653,6 @@ int main (int argc, char **argv, char **envp) {
 		}
 	}
 #endif
-
-	/* get the current number of FDs */
-	srv->cur_fds = open("/dev/null", O_RDONLY);
-	close(srv->cur_fds);
 
 	for (i = 0; i < srv->srv_sockets.used; i++) {
 		server_socket *srv_socket = srv->srv_sockets.ptr[i];

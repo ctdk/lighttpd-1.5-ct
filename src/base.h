@@ -551,9 +551,6 @@ typedef struct server {
 	int ssl_is_init;
 
 	int max_fds;    /* max possible fds */
-	int cur_fds;    /* currently used fds */
-	data_integer *open_fds_stat; /* currently open fds stat value. */
-	int want_fds;   /* waiting fds */
 	int sockets_disabled;
 
 	size_t max_conns;
@@ -638,6 +635,6 @@ typedef struct server {
 	int is_shutdown;
 } server;
 
-int server_out_of_fds(server *srv);
+int server_out_of_fds(server *srv, connection *con);
 
 #endif

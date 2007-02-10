@@ -85,8 +85,8 @@ gpointer aio_write_thread(gpointer _srv) {
 			if (c->file.mmap.start == MAP_FAILED) {
 				if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 					if (errno != EMFILE) {
-						TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",
-							errno, strerror(errno), srv->cur_fds);
+						TRACE("open(/dev/zero) returned: %d (%s)",
+							errno, strerror(errno));
 						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					} else {
 						c->async.ret_val = NETWORK_STATUS_WAIT_FOR_FD;
@@ -193,9 +193,6 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}
-
-				srv->cur_fds++;
-
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -224,7 +221,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 						if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 							if (errno != EMFILE) {
 								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",
-									errno, strerror(errno), srv->cur_fds);
+									errno, strerror(errno));
 								return NETWORK_STATUS_FATAL_ERROR;
 							} else {
 								return NETWORK_STATUS_WAIT_FOR_FD;
@@ -320,13 +317,11 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 				if (c->file.copy.fd != -1) {
 					close(c->file.copy.fd);
 					c->file.copy.fd = -1;
-					srv->cur_fds--;
 				}
 
 				if (c->file.fd != -1) {
 					close(c->file.fd);
 					c->file.fd = -1;
-					srv->cur_fds--;
 				}
 			}
 

@@ -174,9 +174,6 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}
-
-				srv->cur_fds++;
-
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
@@ -220,7 +217,6 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						munmap(c->file.mmap.start, c->file.mmap.length);
 
 						close(c->file.copy.fd);
-						srv->cur_fds--;
 						c->file.copy.fd = -1;
 					}
 
@@ -250,8 +246,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 							async_error = 1;
 
 							if (errno != EMFILE) {
-								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d, falling back to sync-io",
-									errno, strerror(errno), srv->cur_fds);
+								TRACE("open(/dev/zero) returned: %d (%s), falling back to sync-io",
+									errno, strerror(errno));
 							} else {
 								return NETWORK_STATUS_WAIT_FOR_FD;
 							}
@@ -437,13 +433,11 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					if (c->file.copy.fd != -1) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;
-						srv->cur_fds--;
 					}
 
 					if (c->file.fd != -1) {
 						close(c->file.fd);
 						c->file.fd = -1;
-						srv->cur_fds--;
 					}
 				}
 

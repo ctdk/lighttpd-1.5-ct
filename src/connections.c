@@ -129,8 +129,6 @@ int connection_close(server *srv, connection *con) {
 				"(warning) close:", con->sock->fd, strerror(errno));
 	}
 
-	srv->cur_fds--;
-
 	connection_del(srv, con);
 	connection_set_state(srv, con, CON_STATE_CONNECT);
 
@@ -863,7 +861,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 			break;
 			
 		case EMFILE: /* we are out of FDs */
-			server_out_of_fds(srv);
+			server_out_of_fds(srv, NULL);
 			break;
 		default:
 			ERROR("accept failed on fd=%d with error: (%d) %s", srv_socket->sock->fd, errno, strerror(errno));
@@ -872,8 +870,6 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 		return NULL;
 	} else {
 		connection *con;
-
-		srv->cur_fds++;
 
 		/* ok, we have the connection, register it */
 #if 0
@@ -1068,13 +1064,9 @@ int connection_state_machine(server *srv, connection *con) {
 			case HANDLER_FINISHED:
 				break;
 			case HANDLER_WAIT_FOR_FD:
-				srv->want_fds++;
-
-				fdwaitqueue_append(srv, con);
-
 				connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
 
-				server_out_of_fds(srv);
+				server_out_of_fds(srv, con);
 
 				break;
 			case HANDLER_COMEBACK:
@@ -1348,13 +1340,9 @@ int connection_state_machine(server *srv, connection *con) {
 			case NETWORK_STATUS_WAIT_FOR_FD:
 				/* the backend received a EMFILE 
 				 * - e.g. for a mmap() of /dev/zero */
-				srv->want_fds++;
-
-				fdwaitqueue_append(srv, con);
-
 				connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
 
-				server_out_of_fds(srv);
+				server_out_of_fds(srv, con);
 				
 				return HANDLER_WAIT_FOR_FD;
 			case NETWORK_STATUS_INTERRUPTED:
@@ -1439,7 +1427,6 @@ int connection_state_machine(server *srv, connection *con) {
 
 			break;
 		case CON_STATE_ERROR: /* transient */
-
 			/* even if the connection was drop we still have to write it to the access log */
 			if (con->http_status) {
 				plugins_call_handle_response_done(srv, con);

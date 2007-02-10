@@ -77,7 +77,14 @@ NETWORK_BACKEND_WRITE(linuxsendfile) {
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
-					log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
+					switch (errno) {
+					case EMFILE:
+						return NETWORK_STATUS_WAIT_FOR_FD;
+					default:
+						ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+
+						return NETWORK_STATUS_FATAL_ERROR;
+					}
 
 					return -1;
 				}

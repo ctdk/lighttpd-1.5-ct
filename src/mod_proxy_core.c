@@ -556,13 +556,26 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
 
 	if(!sess->proxy_con) return -1;
+
 	proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
 	COUNTER_SET(sess->proxy_backend->pool_size, sess->proxy_backend->pool->used);
 	COUNTER_DEC(sess->proxy_backend->load);
-	sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
 
-	fdevent_event_del(srv->ev, sess->proxy_con->sock);
-	fdevent_unregister(srv->ev, sess->proxy_con->sock);
+#if 0
+	/**
+	 * why is the backend alive again ? 
+	 *
+	 * in case of we had a permanent connect() error (e.g. connection to 192.168.2.0:8080)
+	 * we have to keep that state as is
+	 */
+	sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
+#endif
+
+	if (sess->proxy_con->sock->fd != -1) {
+		/* if we fail in connect() might not have a FD yet */
+		fdevent_event_del(srv->ev, sess->proxy_con->sock);
+		fdevent_unregister(srv->ev, sess->proxy_con->sock);
+	}
 
 	proxy_connection_free(sess->proxy_con);
 	sess->proxy_con = NULL;
@@ -900,7 +913,9 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 			close(fd);
 			con->sock->fd = -1;
 
-			ERROR("connect failed: %s", strerror(errno));
+			ERROR("connect(%s) failed: %s (%d)", 
+				BUF_STR(con->address->name),
+				strerror(errno), errno);
 			return HANDLER_ERROR;
 		}
 	}
@@ -1252,6 +1267,23 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			/* we have to come back later when we have a fd */
 			return HANDLER_WAIT_FOR_FD;
 		case HANDLER_ERROR:
+			/* there is no-one on the other side */
+			sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+
+			TRACE("connecting to address %s (%p) failed, disabling for 60 sec", 
+					BUF_STR(sess->proxy_con->address->name),
+					sess->proxy_con->address);
+			COUNTER_INC(sess->proxy_backend->requests_failed);
+
+			sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
+			sess->proxy_backend->disabled_addresses++;
+			/* if all addresses in address_pool are disabled, then disable this backend. */
+
+			if (sess->proxy_backend->disabled_addresses == sess->proxy_backend->address_pool->used) {
+				sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED;
+			}
+			/* try another backend instead */
+			return HANDLER_COMEBACK;
 		default:
 			/* not good, something failed */
 			return HANDLER_ERROR;
@@ -1586,7 +1618,9 @@ proxy_backend *proxy_backend_balancer(server *srv, connection *con, proxy_sessio
 
 	/* if we only have one backend just return it. */
 	if (backends->used == 1) {
-		return backends->ptr[0];
+		backend = backends->ptr[0];
+
+		return backend->state == PROXY_BACKEND_STATE_ACTIVE ? backend : NULL;
 	}
 
 	/* frist try to select backend based on sticky session. */
@@ -1712,7 +1746,9 @@ proxy_address *proxy_address_balancer(server *srv, connection *con, proxy_sessio
 
 	/* if we only have one address just return it. */
 	if (address_pool->used == 1) {
-		return address_pool->ptr[0];
+		address = address_pool->ptr[0];
+
+		return address->state == PROXY_ADDRESS_STATE_ACTIVE ? address : NULL;
 	}
 
 	/* apply balancer algorithm to select address. */
@@ -2084,7 +2120,9 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				 */
 				return HANDLER_WAIT_FOR_EVENT;
 			}
-			if (p->conf.debug && sess->proxy_backend) TRACE("selected backend: %s", BUF_STR(sess->proxy_backend->name));
+			if (p->conf.debug && sess->proxy_backend) {
+				TRACE("selected backend: %s, state: %d", BUF_STR(sess->proxy_backend->name), sess->proxy_backend->state);
+			}
 
 			/**
 			 * ask the balancer for the next address and
@@ -2163,6 +2201,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			return HANDLER_GO_ON;
 		default:
 			TRACE("state: %d (error)", sess->state);
+			proxy_remove_backend_connection(srv, sess);
 			return HANDLER_ERROR;
 		}
 	}

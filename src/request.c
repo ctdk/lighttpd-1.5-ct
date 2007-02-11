@@ -525,8 +525,9 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 		/* content-length is forbidden for those */
 		if (con->request.content_length != -1) {
 			/* content-length is missing */
-			log_error_write(srv, __FILE__, __LINE__, "s",
-					"GET/HEAD with content-length -> 400");
+			if (srv->srvconf.log_request_header_on_error) {
+				ERROR("GET/HEAD with content-length: %d", 400);
+			}
 
 			con->keep_alive = 0;
 			con->http_status = 400;
@@ -537,8 +538,10 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 		/* content-length is required for them */
 		if (con->request.content_length == -1) {
 			/* content-length is missing */
-			log_error_write(srv, __FILE__, __LINE__, "s",
-					"POST-request, but content-length missing -> 411");
+			if (srv->srvconf.log_request_header_on_error) {
+				log_error_write(srv, __FILE__, __LINE__, "s",
+						"POST-request, but content-length missing -> 411");
+			}
 
 			con->keep_alive = 0;
 			con->http_status = 411;

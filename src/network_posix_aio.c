@@ -131,9 +131,8 @@ static void posix_aio_completion_handler(union sigval foo) {
 
 NETWORK_BACKEND_WRITE(posixaio) {
 	chunk *c, *tc;
-	size_t chunks_written = 0;
 
-	for(c = cq->first; c; c = c->next, chunks_written++) {
+	for(c = cq->first; c; c = c->next) {
 		int chunk_finished = 0;
 		network_status_t ret;
 
@@ -194,13 +193,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					size_t iocb_ndx;
 
-
 					c->file.copy.offset = 0;
-					c->file.copy.length = toSend;
-
-					if (c->file.copy.length == 0) {
-						async_error = 1;
-					}
+					c->file.copy.length = 0;
 
 					/* if we reused the previous tmp-file we get overlaps
 					 *
@@ -253,19 +247,21 @@ NETWORK_BACKEND_WRITE(posixaio) {
 							}
 						} else {
 							c->file.mmap.offset = 0;
-							c->file.mmap.length = c->file.copy.length; /* align to page-size */
+							c->file.mmap.length = toSend;
 
 							c->file.mmap.start = mmap(0, c->file.mmap.length,
 									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
 								async_error = 1;
+							} else {
+								c->file.copy.length = toSend;
 							}
 
 							close(mmap_fd);
 							mmap_fd = -1;
+						
 						}
 					}
-
 
 					/* looks like we couldn't get a temp-file [disk-full]
 					 *
@@ -275,7 +271,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					 * the 4kbyte are guessed ... someone should benchmark it.
 					 *
 					 *  */
-					if (async_error == 0 && c->file.mmap.start != MAP_FAILED && toSend > 4 * 1024) {
+					if (async_error == 0 && c->file.mmap.start != MAP_FAILED && c->file.length > 4 * 1024) {
 						struct aiocb *iocb = NULL;
 						write_job *wj;
 
@@ -317,6 +313,8 @@ NETWORK_BACKEND_WRITE(posixaio) {
 
 					if (c->file.mmap.start != MAP_FAILED) {
 						status_counter_inc(CONST_STR_LEN("server.io.posix-aio.sync-read"));
+
+						assert(c->file.copy.length > 0);
 
 						lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
 

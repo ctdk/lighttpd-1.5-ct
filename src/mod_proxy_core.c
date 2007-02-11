@@ -847,6 +847,9 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 		sess->do_internal_redirect = 1;
 		sess->do_new_session = 1;
 
+		/* we are restarting the whole request, reset all the response headers */
+		array_reset(con->response.headers);
+		
 		buffer_reset(con->physical.path);
 
 		config_cond_cache_reset(srv, con);

@@ -321,8 +321,6 @@ static int connection_handle_response_header(server *srv, connection *con) {
 		break;
 
 	case 206: /* write_queue is already prepared */
-		con->send->is_closed = 1;
-
 		break;
 	case 205: /* class: header only */
 	case 304:

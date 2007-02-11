@@ -219,28 +219,27 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 }
 
 static void mod_proxy_core_create_backend_stats(plugin_data *p, buffer *stat_basename, proxy_backend *backend) {
+#define COUNTER_NAME(b, x) \
+	buffer_copy_string_buffer(b, stat_basename); \
+	buffer_append_string_len(b, CONST_STR_LEN("\"")); \
+	buffer_append_string_buffer(b, backend->name); \
+	buffer_append_string_len(b, CONST_STR_LEN("\"." x)); 
 
 	/* request count stat. */
-	buffer_copy_string_buffer(p->tmp_buf, stat_basename);
-	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\""));
-	buffer_append_string_buffer(p->tmp_buf, backend->name);
-	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\".requests"));
+	COUNTER_NAME(p->tmp_buf, "requests");
 	backend->request_count = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
 
 	/* load */
-	buffer_copy_string_buffer(p->tmp_buf, stat_basename);
-	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\""));
-	buffer_append_string_buffer(p->tmp_buf, backend->name);
-	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\".load"));
+	COUNTER_NAME(p->tmp_buf, "load");
 	backend->load = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
 
 	/* pool size */
-	buffer_copy_string_buffer(p->tmp_buf, stat_basename);
-	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\""));
-	buffer_append_string_buffer(p->tmp_buf, backend->name);
-	buffer_append_string_len(p->tmp_buf, CONST_STR_LEN("\".pool_size"));
+	COUNTER_NAME(p->tmp_buf, "pool_size");
 	backend->pool_size = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
-
+	
+	COUNTER_NAME(p->tmp_buf, "requests_failed");
+	backend->requests_failed = status_counter_get_counter(CONST_BUF_LEN(p->tmp_buf));
+#undef COUNTER_NAME
 }
 
 SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
@@ -1277,6 +1276,8 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 					sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
 
 					TRACE("address %s refused us, disabling for 2 sec", sess->proxy_con->address->name->ptr);
+					COUNTER_INC(sess->proxy_backend->requests_failed);
+
 					break;
 				case EHOSTUNREACH:
 					/* there is no-one on the other side */

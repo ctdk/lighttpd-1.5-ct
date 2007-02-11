@@ -58,6 +58,7 @@ typedef struct {
 	data_integer *request_count;
 	data_integer *load;
 	data_integer *pool_size;
+	data_integer *requests_failed;
 } proxy_backend;
 
 ARRAY_STATIC_DEF(proxy_backends, proxy_backend, );

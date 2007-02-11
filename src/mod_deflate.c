@@ -178,7 +178,6 @@ FREE_FUNC(mod_deflate_free) {
 SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 	plugin_data *p = p_d;
 	size_t i = 0;
-	int j = 0;
 	
 	config_values_t cv[] = { 
 		{ CONFIG_DEFLATE_OUTPUT_BUFFER_SIZE,    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
@@ -234,6 +233,7 @@ SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 		}
 
 		if (p->encodings_arr->used) {
+			size_t j = 0;
 			for (j = 0; j < p->encodings_arr->used; j++) {
 				data_string *ds = (data_string *)p->encodings_arr->data[j];
 #ifdef USE_ZLIB
@@ -915,24 +915,16 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 static int deflate_compress_cleanup(server *srv, connection *con, handler_ctx *hctx) {
 	plugin_data *p = hctx->plugin_data;
 	int rc;
-	int in,out;
 
 	rc = mod_deflate_stream_end(srv, con, hctx);
 	if(rc < 0) {
-		log_error_write(srv, __FILE__, __LINE__, "s", "error closing stream");
+		TRACE("error closing compressed stream for '%s', compressing with %d: %d", 
+			BUF_STR(con->uri.path_raw), hctx->compression_type, rc);
 	}
 
-	in = hctx->bytes_in;
-	out = hctx->out->bytes_in;
-	if (in < out) {
-		log_error_write(srv, __FILE__, __LINE__, "sbsdsd",
-				"uri ", con->uri.path_raw, " in=", in, " smaller than out=", out);
-	}
-
-	if(p->conf.debug) {
-		log_error_write(srv, __FILE__, __LINE__, "sdsd",
-				" in:", in,
-				" out:", out);
+	if(p->conf.debug && hctx->bytes_in < hctx->out->bytes_in) {
+		TRACE("(debug) compressing uri '%s' increased the sent content-size from %lld to %lld",
+			BUF_STR(con->uri.path_raw), hctx->bytes_in, hctx->out->bytes_in);
 	}
 
 	/* cleanup compression state */

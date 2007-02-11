@@ -1340,7 +1340,6 @@ int connection_state_machine(server *srv, connection *con) {
 			case NETWORK_STATUS_WAIT_FOR_FD:
 				/* the backend received a EMFILE 
 				 * - e.g. for a mmap() of /dev/zero */
-				connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
 
 				server_out_of_fds(srv, con);
 				

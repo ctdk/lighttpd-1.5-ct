@@ -601,73 +601,10 @@ PROXY_STREAM_ENCODER_FUNC(proxy_fastcgi_stream_encoder) {
 			out->bytes_in += sizeof(header);
 		}
 
-		switch (c->type) {
-		case FILE_CHUNK:
-			we_have = c->file.length - c->offset;
-			if (we_have == 0) break;
-
-			if (we_have > we_need) we_have = we_need;
-
-			chunkqueue_append_file(out, c->file.name, c->offset, we_have);
-
-			c->offset += we_have;
-			in->bytes_out += we_have;
-			out->bytes_in += we_have;
-			we_need -= we_have;
-
-			/* steal the tempfile
-			 *
-			 * This is tricky:
-			 * - we reference the tempfile from the in-queue several times
-			 *   if the chunk is larger than FCGI_MAX_LENGTH
-			 * - we can't simply cleanup the in-queue as soon as possible
-			 *   as it would remove the tempfiles
-			 * - the idea is to 'steal' the tempfiles and attach the is_temp flag to the last
-			 *   referencing chunk of the fastcgi-write-queue
-			 *
-			 */
-
-			if (c->offset == c->file.length) {
-				chunk *out_c;
-
-				out_c = out->last;
-
-				/* the last of the out-queue should be a FILE_CHUNK (we just created it)
-				 * and the incoming side should have given use a temp-file-chunk */
-				assert(out_c->type == FILE_CHUNK);
-				assert(c->file.is_temp == 1);
-
-				out_c->file.is_temp = 1;
-				c->file.is_temp = 0;
-
-				c = c->next;
-			}
-
-			break;
-		case MEM_CHUNK:
-			/* append to the buffer */
-			we_have = c->mem->used - 1 - c->offset;
-			if (we_have == 0) break;
-
-			if (we_have > we_need) we_have = we_need;
-
-			b = chunkqueue_get_append_buffer(out);
-			buffer_append_memory(b, c->mem->ptr + c->offset, we_have);
-			b->used++; /* add virtual \0 */
-
-			c->offset += we_have;
-			in->bytes_out += we_have;
-			out->bytes_in += we_have;
-			we_need -= we_have;
-
-			if (c->offset == c->mem->used - 1) {
-				c = c->next;
-			}
-
-			break;
-		default:
-			break;
-		}
+		we_have = chunkqueue_steal_chunks_len(out, c, we_need);
+		in->bytes_out += we_have;
+		out->bytes_in += we_have;
+		we_need -= we_have;
 	}
 
 	if (in->bytes_in == in->bytes_out && in->is_closed && !out->is_closed) {

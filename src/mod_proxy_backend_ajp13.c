@@ -517,7 +517,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
 	ajp13_state_data *data = (ajp13_state_data *)proxy_con->protocol_data;
 	chunkqueue *in = proxy_con->recv;
 	AJP13_Header *header;
-	off_t we_parsed = 0, we_need = 0;
+	size_t we_parsed = 0, we_need = 0;
 	handler_t rc = HANDLER_GO_ON;
 	int magic = 0;
 	int reuse = 0;
@@ -670,7 +670,7 @@ PROXY_STREAM_ENCODER_FUNC(proxy_ajp13_stream_encoder) {
 	chunkqueue *out = proxy_con->send;
 	chunk *c;
 	buffer *b;
-	off_t we_need = 0, we_have = 0;
+	size_t we_need = 0, we_have = 0;
 
 	UNUSED(srv);
 
@@ -708,76 +708,9 @@ PROXY_STREAM_ENCODER_FUNC(proxy_ajp13_stream_encoder) {
 	out->bytes_in += b->used;
 	b->used++;
 
-	/* encode data into output queue. */
-	for (c = in->first; we_need > 0; ) {
-		switch (c->type) {
-		case FILE_CHUNK:
-			we_have = c->file.length - c->offset;
-			if (we_have == 0) break;
-
-			if (we_have > we_need) we_have = we_need;
-
-			chunkqueue_append_file(out, c->file.name, c->offset, we_have);
-
-			c->offset += we_have;
-			in->bytes_out += we_have;
-			out->bytes_in += we_have;
-			we_need -= we_have;
-
-			/* steal the tempfile
-			 *
-			 * This is tricky:
-			 * - we reference the tempfile from the in-queue several times
-			 *   if the chunk is larger than AJP13_MAX_BODY_PACKET_SIZE
-			 * - we can't simply cleanup the in-queue as soon as possible
-			 *   as it would remove the tempfiles
-			 * - the idea is to 'steal' the tempfiles and attach the is_temp flag to the last
-			 *   referencing chunk of the ajp13-write-queue
-			 *
-			 */
-
-			if (c->offset == c->file.length) {
-				chunk *out_c;
-
-				out_c = out->last;
-
-				/* the last of the out-queue should be a FILE_CHUNK (we just created it)
-				 * and the incoming side should have given use a temp-file-chunk */
-				assert(out_c->type == FILE_CHUNK);
-				assert(c->file.is_temp == 1);
-
-				out_c->file.is_temp = 1;
-				c->file.is_temp = 0;
-
-				c = c->next;
-			}
-
-			break;
-		case MEM_CHUNK:
-			/* append to the buffer */
-			we_have = c->mem->used - 1 - c->offset;
-			if (we_have == 0) break;
-
-			if (we_have > we_need) we_have = we_need;
-
-			b = chunkqueue_get_append_buffer(out);
-			buffer_append_memory(b, c->mem->ptr + c->offset, we_have);
-			b->used++; /* add virtual \0 */
-
-			c->offset += we_have;
-			in->bytes_out += we_have;
-			out->bytes_in += we_have;
-			we_need -= we_have;
-
-			if (c->offset == c->mem->used - 1) {
-				c = c->next;
-			}
-
-			break;
-		default:
-			break;
-		}
-	}
+	we_have = chunkqueue_steal_chunks_len(out, in->first, we_need);
+	in->bytes_out += we_have;
+	out->bytes_in += we_have;
 
 	if (in->bytes_in == in->bytes_out && in->is_closed) {
 		/* We are finished encoding the request content,

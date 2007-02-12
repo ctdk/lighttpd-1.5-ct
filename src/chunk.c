@@ -308,34 +308,80 @@ int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in) {
  * copy/steal max_len bytes from chunk chain.  return total bytes copied/stolen.
  *
  */
-int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len) {
+int chunkqueue_steal_chunks_len(chunkqueue *out, chunk *c, size_t max_len) {
 	size_t total = 0;
-	off_t we_have = 0, we_want = 0;
+	size_t we_have = 0, we_want = 0;
 	buffer *b;
 
-	if (!cq || !c) return 0;
+	if (!out || !c) return 0;
 
 	/* copy/steal chunks */
 	for (; c && max_len > 0; c = c->next) {
-		/* skip empty chunks */
-		if (c->mem->used == 0) continue;
+		switch (c->type) {
+		case FILE_CHUNK:
+			we_have = c->file.length - c->offset;
+			if (we_have == 0) break;
 
-		we_have = c->mem->used - c->offset - 1;
-		if (we_have == 0) continue;
+			if (we_have > max_len) we_have = max_len;
 
-		we_want = we_have < max_len ? we_have : max_len;
+			chunkqueue_append_file(out, c->file.name, c->offset, we_have);
 
-		if (c->offset == 0 && we_have == we_want) {
-			/* steal whole chunk */
-			chunkqueue_steal_chunk(cq, c);
-		} else {
-			/* copy unused data from chunk */
-			b = chunkqueue_get_append_buffer(cq);
-			buffer_copy_string_len(b, c->mem->ptr + c->offset, we_want);
-			c->offset += we_want;
+			c->offset += we_have;
+			max_len -= we_have;
+			total += we_have;
+
+			/* steal the tempfile
+			 *
+			 * This is tricky:
+			 * - we reference the tempfile from the in-queue several times
+			 *   if the chunk is larger than max_len
+			 * - we can't simply cleanup the in-queue as soon as possible
+			 *   as it would remove the tempfiles
+			 * - the idea is to 'steal' the tempfiles and attach the is_temp flag to the last
+			 *   referencing chunk of the fastcgi-write-queue
+			 *
+			 */
+
+			if (c->offset == c->file.length) {
+				chunk *out_c;
+
+				out_c = out->last;
+
+				/* the last of the out-queue should be a FILE_CHUNK (we just created it)
+				 * and the incoming side should have given use a temp-file-chunk */
+				assert(out_c->type == FILE_CHUNK);
+				assert(c->file.is_temp == 1);
+
+				out_c->file.is_temp = 1;
+				c->file.is_temp = 0;
+			}
+
+			break;
+		case MEM_CHUNK:
+			/* skip empty chunks */
+			if (c->mem->used == 0) break;
+	
+			we_have = c->mem->used - c->offset - 1;
+			if (we_have == 0) break;
+	
+			we_want = we_have < max_len ? we_have : max_len;
+	
+			if (c->offset == 0 && we_have == we_want) {
+				/* steal whole chunk */
+				chunkqueue_steal_chunk(out, c);
+			} else {
+				/* copy unused data from chunk */
+				b = chunkqueue_get_append_buffer(out);
+				buffer_copy_string_len(b, c->mem->ptr + c->offset, we_want);
+				c->offset += we_want;
+			}
+			total += we_want;
+			max_len -= we_want;
+
+			break;
+		default:
+			break;
 		}
-		total += we_want;
-		max_len -= we_want;
 	}
 	return total;
 }

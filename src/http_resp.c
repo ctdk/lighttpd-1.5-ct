@@ -31,6 +31,7 @@ http_resp *http_response_init(void) {
 
 	resp->reason = buffer_init();
 	resp->headers = array_init();
+	resp->status = -1;
 
 	return resp;
 }
@@ -40,6 +41,7 @@ void http_response_reset(http_resp *resp) {
 
 	buffer_reset(resp->reason);
 	array_reset(resp->headers);
+	resp->status = -1;
 
 }
 

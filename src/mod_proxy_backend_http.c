@@ -54,24 +54,62 @@ void protocol_state_data_reset(protocol_state_data *data) {
 	data->chunk_parse_state = HTTP_CHUNK_LEN;
 }
 
-/*
-SESSION_FUNC(proxy_http_init) {
-	return 1;
-}
-*/
+PROXY_CONNECTION_FUNC(proxy_http_init) {
 
-SESSION_FUNC(proxy_http_cleanup) {
 	UNUSED(srv);
 
-	if(sess->protocol_data) {
-		protocol_state_data_free((protocol_state_data *)sess->protocol_data);
-		sess->protocol_data = NULL;
+	if(!proxy_con->protocol_data) {
+		proxy_con->protocol_data = protocol_state_data_init();
 	}
 	return 1;
 }
 
-int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chunkqueue *in,
-	                           chunkqueue *out) {
+PROXY_CONNECTION_FUNC(proxy_http_cleanup) {
+
+	UNUSED(srv);
+
+	if(proxy_con->protocol_data) {
+		protocol_state_data_free((protocol_state_data *)proxy_con->protocol_data);
+		proxy_con->protocol_data = NULL;
+	}
+	return 1;
+}
+
+/**
+ * parse the HTTP response header
+ */
+static handler_t proxy_http_parse_response_headers(proxy_session *sess, chunkqueue *in) {
+	data_string *ds;
+
+	http_response_reset(sess->resp);
+
+	/* http response parser. */
+	switch(http_response_parse_cq(in, sess->resp)) {
+	case PARSE_ERROR:
+		/* bad gateway */
+		http_response_reset(sess->resp);
+		sess->have_response_headers = 1;
+		sess->resp->status = 502;
+		return HANDLER_ERROR;
+	case PARSE_NEED_MORE:
+		return HANDLER_GO_ON;
+	case PARSE_SUCCESS:
+	default:
+		break;
+	}
+	/* check for Transfer-Encoding header. */
+	if (NULL != (ds = (data_string *)array_get_element(sess->resp->headers, CONST_STR_LEN("Transfer-Encoding")))) {
+		if (strstr(ds->value->ptr, "chunked")) {
+			sess->is_chunked = 1;
+		}
+	}
+	/* finished parsing response headers. */
+	sess->have_response_headers = 1;
+	return HANDLER_FINISHED;
+}
+
+static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+	protocol_state_data *data = (protocol_state_data *)sess->proxy_con->protocol_data;
 	char *err = NULL;
 	off_t we_have = 0, we_want = 0;
 	off_t chunk_len = 0;
@@ -106,7 +144,7 @@ int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chun
 					break;
 				}
 				/* protocol error.  bad http-chunk len */
-				return -1;
+				return HANDLER_ERROR;
 			}
 			data->chunk_len = strtol(BUF_STR(data->buf), &err, 16);
 			data->chunk_offset = 0;
@@ -177,28 +215,36 @@ int proxy_http_parse_chunked_stream(server *srv, protocol_state_data *data, chun
 		}
 	}
 	chunkqueue_remove_finished_chunks(in);
+	if (finished) {
+		sess->is_request_finished = 1;
+		return HANDLER_FINISHED;
+	}
 	/* ran out of data. */
-	return finished;
+	return HANDLER_GO_ON;
 }
 
-STREAM_IN_OUT_FUNC(proxy_http_stream_decoder) {
+PROXY_STREAM_DECODER_FUNC(proxy_http_stream_decoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *in = proxy_con->recv;
 	chunk *c;
 
 	if (in->first == NULL) {
-		if (in->is_closed) return 1;
+		if (in->is_closed) {
+			sess->is_request_finished = 1;
+			return HANDLER_FINISHED;
+		}
 
-		return 0;
+		return HANDLER_GO_ON;
+	}
+
+	/* parse response headers. */
+	if (!sess->have_response_headers) {
+		handler_t rc = proxy_http_parse_response_headers(sess, in);
+		if (rc != HANDLER_FINISHED) return rc;
 	}
 
 	if (sess->is_chunked) {
-		int rc;
-		protocol_state_data *data = (protocol_state_data *)sess->protocol_data;
-		if(!data) {
-			data = protocol_state_data_init();
-			sess->protocol_data = data;
-		}
-		rc = proxy_http_parse_chunked_stream(srv, data, in, out);
-		return rc;
+		return proxy_http_parse_chunked_stream(srv, sess, in, out);
 	} else {
 		/* no chunked encoding, ok, perhaps a content-length ? */
 
@@ -223,19 +269,18 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_decoder) {
 				c->offset = c->mem->used - 1; /* marks is read */
 			}
 
-
 			if (sess->bytes_read == sess->content_length) {
 				break;
 			}
-
 		}
 
 		if (in->is_closed || sess->bytes_read == sess->content_length) {
-			return 1; /* finished */
+			sess->is_request_finished = 1;
+			return HANDLER_FINISHED; /* finished */
 		}
 	}
 
-	return 0;
+	return HANDLER_GO_ON;
 }
 
 /**
@@ -243,16 +288,17 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_decoder) {
  *
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
-STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
+PROXY_STREAM_ENCODER_FUNC(proxy_http_stream_encoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *out = proxy_con->send;
 	chunk *c;
 
 	UNUSED(srv);
-	UNUSED(sess);
 
-	/* there is nothing that we have to send out anymore */
-	if (in->bytes_in == in->bytes_out &&
-	    in->is_closed) return 0;
+	/* output queue closed, can't encode any more data. */
+	if(out->is_closed) return HANDLER_FINISHED;
 
+	/* encode data into output queue. */
 	for (c = in->first; in->bytes_out < in->bytes_in; c = c->next) {
 		buffer *b;
 		off_t weWant = in->bytes_in - in->bytes_out;
@@ -298,14 +344,21 @@ STREAM_IN_OUT_FUNC(proxy_http_stream_encoder) {
 		}
 	}
 
-	return 0;
+	if (in->bytes_in == in->bytes_out && in->is_closed) {
+		out->is_closed = 1;
+		return HANDLER_FINISHED;
+	}
 
+	return HANDLER_GO_ON;
 }
+
 /**
  * generate a HTTP/1.1 proxy request from the set of request-headers
  *
  */
-STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
+PROXY_STREAM_ENCODER_FUNC(proxy_http_encode_request_headers) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *out = proxy_con->send;
 	connection *con = sess->remote_con;
 	buffer *b;
 	size_t i;
@@ -343,23 +396,7 @@ STREAM_IN_OUT_FUNC(proxy_http_get_request_chunk) {
 
 	out->bytes_in += b->used - 1;
 
-	return 0;
-}
-
-/**
- * parse the response header
- *
- * NOTE: this can be used by all backends as they all send a HTTP-Response a clean block
- * - fastcgi needs some decoding for the protocol
- */
-STREAM_IN_OUT_FUNC(proxy_http_parse_response_header) {
-	UNUSED(srv);
-	UNUSED(out);
-
-	http_response_reset(sess->resp);
-
-	/* backend response already in HTTP response format, no special parsing needed. */
-	return http_response_parse_cq(in, sess->resp);
+	return HANDLER_FINISHED;
 }
 
 INIT_FUNC(mod_proxy_backend_http_init) {
@@ -375,12 +412,11 @@ INIT_FUNC(mod_proxy_backend_http_init) {
 	/* define protocol handler callbacks */
 	p->protocol = (core_data->proxy_register_protocol)("http");
 
-	/* p->protocol->proxy_stream_init = proxy_http_init; */
+	p->protocol->proxy_stream_init = proxy_http_init;
 	p->protocol->proxy_stream_cleanup = proxy_http_cleanup;
 	p->protocol->proxy_stream_decoder = proxy_http_stream_decoder;
 	p->protocol->proxy_stream_encoder = proxy_http_stream_encoder;
-	p->protocol->proxy_get_request_chunk = proxy_http_get_request_chunk;
-	p->protocol->proxy_parse_response_header = proxy_http_parse_response_header;
+	p->protocol->proxy_encode_request_headers = proxy_http_encode_request_headers;
 
 	return p;
 }

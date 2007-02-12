@@ -6,6 +6,7 @@
 #include "iosocket.h"
 #include "array-static.h"
 #include "mod_proxy_core_address.h"
+#include "chunk.h"
 
 typedef enum {
 	PROXY_CONNECTION_STATE_UNSET,
@@ -28,6 +29,12 @@ typedef struct {
 	time_t last_write;
 
 	proxy_address *address; /* the struct sock_addr for the sock */
+
+	struct proxy_protocol *protocol; /* protocol handler */
+	void *protocol_data;    /** protocol handler's state data for parsing response from backend. */
+
+	chunkqueue *send; /* encoded stream data that needs to be send to backend server. */
+	chunkqueue *recv; /* encoded stream data received form the backend that needs to be decoded. */
 
 	proxy_connection_state_t state;
 } proxy_connection;

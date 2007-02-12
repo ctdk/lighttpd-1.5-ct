@@ -5,21 +5,23 @@
 #include "array-static.h"
 #include "buffer.h"
 
-#define SESSION_FUNC(x) \
-		static int x(server *srv, proxy_session *sess)
+#define PROXY_CONNECTION_FUNC(x) \
+		static int x(server *srv, proxy_connection *proxy_con)
 
-#define STREAM_IN_OUT_FUNC(x) \
-		static int x(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out)
+#define PROXY_STREAM_DECODER_FUNC(x) \
+		static handler_t x(server *srv, proxy_session *sess, chunkqueue *out)
+
+#define PROXY_STREAM_ENCODER_FUNC(x) \
+		static handler_t x(server *srv, proxy_session *sess, chunkqueue *in)
 
 typedef struct proxy_protocol {
 	buffer *name;
 
-	int (*proxy_stream_init)            (server *srv, proxy_session *sess);
-	int (*proxy_stream_cleanup)         (server *srv, proxy_session *sess);
-	int (*proxy_stream_decoder)         (server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out);
-	int (*proxy_stream_encoder)         (server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out);
-	int (*proxy_parse_response_header)  (server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out);
-	int (*proxy_get_request_chunk)      (server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out);
+	int (*proxy_stream_init)             (server *srv, proxy_connection *proxy_con);
+	int (*proxy_stream_cleanup)          (server *srv, proxy_connection *proxy_con);
+	handler_t (*proxy_stream_decoder)          (server *srv, proxy_session *sess, chunkqueue *out);
+	handler_t (*proxy_stream_encoder)          (server *srv, proxy_session *sess, chunkqueue *in);
+	handler_t (*proxy_encode_request_headers)  (server *srv, proxy_session *sess, chunkqueue *in);
 
 } proxy_protocol;
 

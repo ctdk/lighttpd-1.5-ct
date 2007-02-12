@@ -19,13 +19,13 @@ typedef struct {
 } protocol_plugin_data;
 
 /*
-SESSION_FUNC(proxy_scgi_init) {
+PROXY_CONNECTION_FUNC(proxy_scgi_init) {
 	return 1;
 }
 */
 
 /*
-SESSION_FUNC(proxy_scgi_cleanup) {
+PROXY_CONNECTION_FUNC(proxy_scgi_cleanup) {
 	return 1;
 }
 */
@@ -268,7 +268,9 @@ static int proxy_scgi_get_env_request(server *srv, proxy_session *sess, buffer *
 	return 0;
 }
 
-STREAM_IN_OUT_FUNC(proxy_scgi_get_request_chunk) {
+PROXY_STREAM_ENCODER_FUNC(proxy_scgi_encode_request_headers) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *out = proxy_con->send;
 	size_t headers_len = 0;
 	buffer *len_buf;
 	buffer *env_headers;
@@ -296,18 +298,53 @@ STREAM_IN_OUT_FUNC(proxy_scgi_get_request_chunk) {
 	buffer_append_string_len(len_buf, CONST_STR_LEN(":"));
 	out->bytes_in += len_buf->used - 1;
 
-	return 0;
+	return HANDLER_FINISHED;
 }
 
-STREAM_IN_OUT_FUNC(proxy_scgi_stream_decoder) {
+/**
+ * parse the HTTP response header
+ */
+static handler_t proxy_scgi_parse_response_headers(proxy_session *sess, chunkqueue *in) {
+	http_response_reset(sess->resp);
+
+	/* http response parser. */
+	switch(http_response_parse_cq(in, sess->resp)) {
+	case PARSE_ERROR:
+		/* bad gateway */
+		http_response_reset(sess->resp);
+		sess->have_response_headers = 1;
+		sess->resp->status = 502;
+		return HANDLER_ERROR;
+	case PARSE_NEED_MORE:
+		return HANDLER_GO_ON;
+	case PARSE_SUCCESS:
+	default:
+		/* finished parsing response headers. */
+		sess->have_response_headers = 1;
+		return HANDLER_FINISHED;
+	}
+}
+
+PROXY_STREAM_DECODER_FUNC(proxy_scgi_stream_decoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *in = proxy_con->recv;
 	chunk *c;
 
 	UNUSED(srv);
 
 	if (in->first == NULL) {
-		if (in->is_closed) return 1;
+		if (in->is_closed) {
+			sess->is_request_finished = 1;
+			return HANDLER_FINISHED;
+		}
 
-		return 0;
+		return HANDLER_GO_ON;
+	}
+
+	/* parse response headers. */
+	if (!sess->have_response_headers) {
+		handler_t rc = proxy_scgi_parse_response_headers(sess, in);
+		if (rc != HANDLER_FINISHED) return rc;
 	}
 
 	/* no chunked encoding, ok, perhaps a content-length ? */
@@ -336,14 +373,14 @@ STREAM_IN_OUT_FUNC(proxy_scgi_stream_decoder) {
 		if (sess->bytes_read == sess->content_length) {
 			break;
 		}
-
 	}
 
 	if (in->is_closed || sess->bytes_read == sess->content_length) {
-		return 1; /* finished */
+		sess->is_request_finished = 1;
+		return HANDLER_FINISHED; /* finished */
 	}
 
-	return 0;
+	return HANDLER_GO_ON;
 }
 
 /**
@@ -351,16 +388,17 @@ STREAM_IN_OUT_FUNC(proxy_scgi_stream_decoder) {
  *
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
-STREAM_IN_OUT_FUNC(proxy_scgi_stream_encoder) {
+PROXY_STREAM_ENCODER_FUNC(proxy_scgi_stream_encoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *out = proxy_con->send;
 	chunk *c;
 
 	UNUSED(srv);
-	UNUSED(sess);
 
-	/* there is nothing that we have to send out anymore */
-	if (in->bytes_in == in->bytes_out &&
-	    in->is_closed) return 0;
+	/* output queue closed, can't encode any more data. */
+	if(out->is_closed) return HANDLER_FINISHED;
 
+	/* encode data into output queue. */
 	for (c = in->first; in->bytes_out < in->bytes_in; c = c->next) {
 		buffer *b;
 		off_t weWant = in->bytes_in - in->bytes_out;
@@ -406,23 +444,12 @@ STREAM_IN_OUT_FUNC(proxy_scgi_stream_encoder) {
 		}
 	}
 
-	return 0;
+	if (in->bytes_in == in->bytes_out && in->is_closed) {
+		out->is_closed = 1;
+		return HANDLER_FINISHED;
+	}
 
-}
-
-/**
- * parse the response header
- *
- * - scgi needs some decoding for the protocol
- */
-STREAM_IN_OUT_FUNC(proxy_scgi_parse_response_header) {
-	UNUSED(srv);
-	UNUSED(out);
-
-	http_response_reset(sess->resp);
-
-	/* backend response already in HTTP response format, no special parsing needed. */
-	return http_response_parse_cq(in, sess->resp);
+	return HANDLER_GO_ON;
 }
 
 INIT_FUNC(mod_proxy_backend_scgi_init) {
@@ -444,8 +471,7 @@ INIT_FUNC(mod_proxy_backend_scgi_init) {
 	*/
 	p->protocol->proxy_stream_decoder = proxy_scgi_stream_decoder;
 	p->protocol->proxy_stream_encoder = proxy_scgi_stream_encoder;
-	p->protocol->proxy_get_request_chunk = proxy_scgi_get_request_chunk;
-	p->protocol->proxy_parse_response_header = proxy_scgi_parse_response_header;
+	p->protocol->proxy_encode_request_headers = proxy_scgi_encode_request_headers;
 
 	return p;
 }

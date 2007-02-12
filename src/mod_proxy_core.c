@@ -438,11 +438,8 @@ proxy_session *proxy_session_init(void) {
 	sess->env_headers = array_init();
 
 	sess->resp = http_response_init();
-	sess->protocol_data = NULL;
 
 	sess->recv = chunkqueue_init();
-	sess->recv_raw = chunkqueue_init();
-	sess->send_raw = chunkqueue_init();
 
 	sess->is_chunked = 0;
 	sess->send_response_content = 1;
@@ -461,12 +458,9 @@ void proxy_session_reset(proxy_session *sess) {
 	array_reset(sess->env_headers);
 
 	http_response_reset(sess->resp);
-	sess->protocol_data = NULL;
 	sess->p = NULL;
 
 	chunkqueue_reset(sess->recv);
-	chunkqueue_reset(sess->recv_raw);
-	chunkqueue_reset(sess->send_raw);
 
 	sess->state = PROXY_STATE_UNSET;
 
@@ -479,6 +473,9 @@ void proxy_session_reset(proxy_session *sess) {
 	sess->internal_redirect_count = 0;
 	sess->do_internal_redirect = 0;
 	sess->is_closing = 0;
+	sess->is_closed = 0;
+	sess->is_request_finished = 0;
+	sess->have_response_headers = 0;
 
 	sess->do_new_session = 0;
 	sess->do_x_rewrite_backend = 0;
@@ -498,12 +495,9 @@ void proxy_session_free(proxy_session *sess) {
 	array_free(sess->env_headers);
 
 	http_response_free(sess->resp);
-	sess->protocol_data = NULL;
 	sess->p = NULL;
 
 	chunkqueue_free(sess->recv);
-	chunkqueue_free(sess->recv_raw);
-	chunkqueue_free(sess->send_raw);
 
 	buffer_free(sess->sticky_session);
 	free(sess);
@@ -551,46 +545,13 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 }
 
 /**
- * Cleanup backend proxy connection.
- */
-int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
-
-	if(!sess->proxy_con) return -1;
-
-	proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
-	COUNTER_SET(sess->proxy_backend->pool_size, sess->proxy_backend->pool->used);
-	COUNTER_DEC(sess->proxy_backend->load);
-
-#if 0
-	/**
-	 * why is the backend alive again ? 
-	 *
-	 * in case of we had a permanent connect() error (e.g. connection to 192.168.2.0:8080)
-	 * we have to keep that state as is
-	 */
-	sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
-#endif
-
-	if (sess->proxy_con->sock->fd != -1) {
-		/* if we fail in connect() might not have a FD yet */
-		fdevent_event_del(srv->ev, sess->proxy_con->sock);
-		fdevent_unregister(srv->ev, sess->proxy_con->sock);
-	}
-
-	proxy_connection_free(sess->proxy_con);
-	sess->proxy_con = NULL;
-
-	return 0;
-}
-
-/**
  * Initialize protocol stream.
  *
  */
 int proxy_stream_init(server *srv, proxy_session *sess) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_init) {
-		return (protocol->proxy_stream_init)(srv, sess);
+		return (protocol->proxy_stream_init)(srv, sess->proxy_con);
 	}
 	return 1;
 }
@@ -602,7 +563,7 @@ int proxy_stream_init(server *srv, proxy_session *sess) {
 int proxy_stream_cleanup(server *srv, proxy_session *sess) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_cleanup) {
-		return (protocol->proxy_stream_cleanup)(srv, sess);
+		return (protocol->proxy_stream_cleanup)(srv, sess->proxy_con);
 	}
 	return 1;
 }
@@ -613,32 +574,30 @@ int proxy_stream_cleanup(server *srv, proxy_session *sess) {
  * http might have chunk-encoding
  * fastcgi has the fastcgi wrapper code
  *
- * @param in chunkqueue for the encoded, protocol specific data
  * @param out chunkqueue for the plain content
  */
 
-int proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+handler_t proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *out) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_decoder) {
-		return (protocol->proxy_stream_decoder)(srv, sess, in, out);
+		return (protocol->proxy_stream_decoder)(srv, sess, out);
 	}
 	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
-	return -1;
+	return HANDLER_ERROR;
 }
 
 /**
  * encode the content for the protocol
  *
  * @param in chunkqueue with the content to (no encoding)
- * @param out chunkqueue for the encoded, protocol specific data
  */
-int proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+handler_t proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_encoder) {
-		return (protocol->proxy_stream_encoder)(srv, sess, in, out);
+		return (protocol->proxy_stream_encoder)(srv, sess, in);
 	}
 	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
-	return -1;
+	return HANDLER_ERROR;
 }
 
 /**
@@ -647,50 +606,30 @@ int proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in, chunk
  * @param in chunkqueue with the content to (no encoding)
  * @param out chunkqueue for the encoded, protocol specific data
  */
-int proxy_get_request_chunk(server *srv, proxy_session *sess, chunkqueue *in, chunkqueue *out) {
+handler_t proxy_encode_request_headers(server *srv, proxy_session *sess, chunkqueue *in) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
-	if(protocol && protocol->proxy_get_request_chunk) {
-		return (protocol->proxy_get_request_chunk)(srv, sess, in, out);
+	if(protocol && protocol->proxy_encode_request_headers) {
+		/* reset proxy connection queues before we encode a new request.
+		 */
+		chunkqueue_reset(sess->proxy_con->send);
+		chunkqueue_reset(sess->proxy_con->recv);
+		return (protocol->proxy_encode_request_headers)(srv, sess, in);
 	}
 	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
-	return -1;
+	return HANDLER_ERROR;
 }
 
-parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_data *p,
-	                                         proxy_session *sess, chunkqueue *in, chunkqueue *out) {
-	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
+handler_t proxy_handle_response_headers(server *srv, connection *con, plugin_data *p,
+	                                         proxy_session *sess, chunkqueue *out) {
 	int have_content_length = 0;
 	int do_x_rewrite = 0;
 	size_t i;
 
-	if(!protocol || !(protocol->proxy_parse_response_header)) {
-		ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
-		return -1;
-	}
-
-	/* parse response from backend */
-	switch((protocol->proxy_parse_response_header)(srv, sess, in, out)) {
-	case PARSE_ERROR:
-		/* parsing failed */
-
-		return PARSE_ERROR;
-	case PARSE_NEED_MORE:
-		return PARSE_NEED_MORE;
-	case PARSE_SUCCESS:
-		break;
-	default:
-		return PARSE_SUCCESS;
-	}
-
-	sess->content_length = -1;
-
 	/* finished parsing http response headers from backend, now prepare http response headers
 	 * for client response.
 	 */
+	sess->content_length = -1;
 	con->http_status = sess->resp->status;
-
-	chunkqueue_remove_finished_chunks(in);
-	chunkqueue_remove_finished_chunks(out);
 
 	/* copy the http-headers */
 	for (i = 0; i < sess->resp->headers->used; i++) {
@@ -715,7 +654,7 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 			sess->content_length = strtol(header->value->ptr, NULL, 10);
 
 			if (sess->content_length < 0) {
-				return PARSE_ERROR;
+				return HANDLER_ERROR;
 			}
 			con->response.content_length = sess->content_length;
 			/* don't save this header, other modules might change the content length. */
@@ -881,7 +820,70 @@ parse_status_t proxy_parse_response_header(server *srv, connection *con, plugin_
 	/* we might have part of the response content too */
 	proxy_copy_response(srv, con, sess);
 
-	return PARSE_SUCCESS; /* we have a full header */
+	return HANDLER_FINISHED; /* we have a full header */
+}
+
+/*
+ * if there is data in the send queue enable FDEVENT_OUT & FDEVENT_IN.
+ * else just enable FDEVENT_IN.
+ */
+static int proxy_connection_enable_events(server *srv, proxy_connection *proxy_con) {
+	int events = FDEVENT_IN;
+	if (proxy_con->send->bytes_out < proxy_con->send->bytes_in) events |= FDEVENT_OUT;
+	return fdevent_event_add(srv->ev, proxy_con->sock, events);
+}
+
+/**
+ * encode/decode stream data from backend connection.
+ *
+ */
+handler_t proxy_stream_encode_decode(server *srv, proxy_session *sess) {
+	//proxy_connection *proxy_con = sess->proxy_con;
+	connection  *con  = sess->remote_con;
+
+	if (!sess->recv->is_closed) {
+		/* call stream-decoder (HTTP-chunked, FastCGI, ... ) */
+		switch (proxy_stream_decoder(srv, sess, sess->recv)) {
+		case HANDLER_FINISHED:
+			/* finished decoding reponse. */
+			/* we are done, close the response content queue */
+			sess->recv->is_closed = 1;
+			break;
+		case HANDLER_GO_ON:
+			break;
+		case HANDLER_ERROR:
+			ERROR("%s", "stream decoder failed.");
+			/* error */
+			return HANDLER_ERROR;
+		default:
+			TRACE("stream-decoder: %s", "foo");
+			break;
+		}
+	}
+
+	/* encode request content. */
+	switch(proxy_stream_encoder(srv, sess, con->recv)) {
+	case HANDLER_FINISHED:
+		/* finished encoding request content. */
+		break;
+	case HANDLER_GO_ON:
+		break;
+	case HANDLER_ERROR:
+		ERROR("%s", "stream encoder failed.");
+		/* error */
+		return HANDLER_ERROR;
+	default:
+		TRACE("stream-encoder: %s", "foo");
+		break;
+	}
+	chunkqueue_remove_finished_chunks(con->recv);
+
+	if (!sess->is_closed) {
+		/* enable FDEVENT_OUT if there is data to send. */
+		proxy_connection_enable_events(srv, sess->proxy_con);
+	}
+
+	return HANDLER_GO_ON;
 }
 
 handler_t proxy_connection_connect(proxy_connection *con) {
@@ -975,63 +977,103 @@ static handler_t proxy_handle_fdevent_idle(void *s, void *ctx, int revents) {
 static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	server      *srv  = (server *)s;
 	proxy_session *sess = ctx;
+	proxy_connection *proxy_con = sess->proxy_con;
 	connection  *con  = sess->remote_con;
 
+	if (revents & FDEVENT_IN) {
+		chunkqueue_remove_finished_chunks(proxy_con->recv);
+		switch (srv->network_backend_read(srv, con, proxy_con->sock, proxy_con->recv)) {
+		case NETWORK_STATUS_CONNECTION_CLOSE:
+			/* a close here mean we can't read/write anymore data. */
+			sess->is_closed = 1;
+			proxy_con->send->is_closed = 1;
+			proxy_con->recv->is_closed = 1;
+			break;
+		case NETWORK_STATUS_SUCCESS:
+		case NETWORK_STATUS_WAIT_FOR_EVENT:
+			break;
+		default:
+			ERROR("%s", "oops, we failed to read");
+			break;
+		}
+	}
+
 	if (revents & FDEVENT_OUT) {
-		/* let the proxy_state_engine() handle the connection. */
-		joblist_append(srv, con);
-		switch (sess->state) {
-		case PROXY_STATE_CONNECTING:
-			/* we are still connection */
-		case PROXY_STATE_WRITE_REQUEST_HEADER:
-		case PROXY_STATE_WRITE_REQUEST_BODY:
-			/* it is normal to get FDEVENT_OUT during these states. */
+		switch (srv->network_backend_write(srv, con, proxy_con->sock, proxy_con->send)) {
+		case NETWORK_STATUS_SUCCESS:
+		case NETWORK_STATUS_WAIT_FOR_EVENT:
+		case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
+			break;
+		case NETWORK_STATUS_CONNECTION_CLOSE:
+			/* done mark the connection closed here only the send queue,
+			 * since there might be more data to read.
+			 */
+			proxy_con->send->is_closed = 1;
 			break;
 		default:
-			/* there might be a problem. */
-			ERROR("oops, unexpected state for fdevent-out %d", sess->state);
+			ERROR("%s", "oops, we failed to write");
 			break;
 		}
-	} else if (revents & FDEVENT_IN) {
-		/* let the proxy_state_engine() handle the connection. */
-		joblist_append(srv, con);
-		switch (sess->state) {
-		case PROXY_STATE_READ_RESPONSE_HEADER:
-		case PROXY_STATE_READ_RESPONSE_BODY:
-			/* it is normal to get FDEVENT_IN during these states. */
-			break;
-		default:
-			/* there might be a problem. */
-			ERROR("oops, unexpected state for fdevent-in %d", sess->state);
-			break;
-		}
+		chunkqueue_remove_finished_chunks(proxy_con->send);
 	}
 
 	if (revents & FDEVENT_HUP) {
-		/* someone closed our connection. */
-		joblist_append(srv, con);
-		switch (sess->state) {
-		case PROXY_STATE_CONNECTING:
-			/* let the getsockopt() catch this */
-		case PROXY_STATE_READ_RESPONSE_HEADER:
-			/* the keep-alive race-condition */
-		case PROXY_STATE_READ_RESPONSE_BODY:
-			/* backend might have closed the conneciton after sending all the response content. */
-			break;
-		case PROXY_STATE_WRITE_REQUEST_HEADER:
-			/* re-try request with different backend connection. */
-		case PROXY_STATE_WRITE_REQUEST_BODY:
-			/* the backend might have rejected the request content.  Try to read the response
-			 * content to see if the backend sent a response.
-			 */
-			break;
-		default:
-			TRACE("oops, unexpected state for fdevent-hup state=%d, revents=%d", sess->state, revents);
-			break;
+		if (!(revents & FDEVENT_IN)) {
+			/* if we only received the FDEVENT_HUP event, then there is no more data to read. */
+			sess->is_closed = 1;
+			proxy_con->recv->is_closed = 1;
 		}
+		/* can't write on a closed socket, so close the send queue. */
+		proxy_con->send->is_closed = 1;
 	}
 
+	if (sess->is_closed) {
+		fdevent_event_del(srv->ev, sess->proxy_con->sock);
+	} else {
+		/* update the fd events. */
+		proxy_connection_enable_events(srv, proxy_con);
+	}
+
+	/* let the proxy_state_engine() handle the data read/written. */
+	joblist_append(srv, con);
+
 	return HANDLER_GO_ON;
+}
+
+/**
+ * Cleanup backend proxy connection.
+ */
+int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
+
+	if(!sess->proxy_con) return -1;
+
+	/* cleanup protocol stream */
+	proxy_stream_cleanup(srv, sess);
+
+	/* remove closed connection from pool. */
+	proxy_connection_pool_remove_connection(sess->proxy_backend->pool, sess->proxy_con);
+
+	/* update stats. */
+	COUNTER_SET(sess->proxy_backend->pool_size, sess->proxy_backend->pool->used);
+	COUNTER_DEC(sess->proxy_backend->load);
+
+	/* the backend might have been disabled by a full connection pool, re-enable
+	 * if there is atleast one active address.
+	 */
+	if (sess->proxy_backend->disabled_addresses <= sess->proxy_backend->address_pool->used) {
+		sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
+	}
+
+	if (sess->proxy_con->sock->fd != -1) {
+		/* if we fail in connect() might not have a FD yet */
+		fdevent_event_del(srv->ev, sess->proxy_con->sock);
+		fdevent_unregister(srv->ev, sess->proxy_con->sock);
+	}
+
+	proxy_connection_free(sess->proxy_con);
+	sess->proxy_con = NULL;
+
+	return 0;
 }
 
 /**
@@ -1043,6 +1085,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
  */
 int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session *sess) {
 	proxy_request *req;
+	int reuse = 1;
 
 	if (!sess) return HANDLER_GO_ON;
 
@@ -1052,19 +1095,28 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 		COUNTER_DEC(sess->proxy_backend->load);
 		switch (sess->proxy_con->state) {
 		case PROXY_CONNECTION_STATE_CONNECTED:
-			sess->proxy_con->request_count++;
-			if (p->conf.debug) TRACE("request_count=%d", sess->proxy_con->request_count);
-			if (sess->proxy_con->request_count >= p->conf.max_keep_alive_requests) {
-				sess->is_closing = 1;
-			}
 			/*
 			 * Set the connection to idling if:
 			 *
 			 * 1. keep-alive was not disabled (sess->is_closing)
-			 * 2. backend protocol finished parsing all data for this request.  (sess->recv->is_closed)
+			 * 2. backend connection is already closed (sess->is_closed)
+			 * 3. backend protocol finished parsing all data for this request.  (sess->recv->is_closed)
+			 * 4. keep-alive request count hasn't reached max-keep-alive-requests
 			 */
-			if (!sess->is_closing && sess->recv->is_closed) {
+			if (sess->is_closing || sess->is_closed) {
+				reuse = 0;
+			}
+
+			sess->proxy_con->request_count++;
+			if (p->conf.debug) TRACE("request_count=%d", sess->proxy_con->request_count);
+			if (sess->proxy_con->request_count >= p->conf.max_keep_alive_requests) {
+				reuse = 0;
+			}
+			if (reuse && sess->recv->is_closed) {
 				sess->proxy_con->state = PROXY_CONNECTION_STATE_IDLE;
+
+				/* make sure backend is active since we have a free connection. */
+				sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
 
 				/* don't ignore events as the FD is idle
 				 * we might get a HUP as the remote connection might close */
@@ -1218,7 +1270,7 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 	buffer_append_string_buffer(sess->request_uri, con->request.uri);
 #endif
 
-	proxy_get_request_chunk(srv, sess, con->recv, sess->send_raw);
+	proxy_encode_request_headers(srv, sess, con->recv);
 
 	return 0;
 }
@@ -1260,6 +1312,10 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			/* we are connected */
 			sess->state = PROXY_STATE_CONNECTED;
 			sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
+
+			/* initialize stream. */
+			proxy_stream_init(srv, sess);
+
 			fdevent_register(srv->ev, sess->proxy_con->sock, proxy_handle_fdevent, sess);
 
 			break;
@@ -1341,12 +1397,13 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			sess->state = PROXY_STATE_CONNECTED;
 			sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
+
+			/* initialize stream. */
+			proxy_stream_init(srv, sess);
 		}
 
 		/* fall through */
 	case PROXY_STATE_CONNECTED:
-		/* initialize stream. */
-		proxy_stream_init(srv, sess);
 
 		sess->state = PROXY_STATE_WRITE_REQUEST_HEADER;
 
@@ -1362,93 +1419,122 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 	case PROXY_STATE_WRITE_REQUEST_BODY:
 		/* do we have a content-body to send up to the backend ? */
 
-		fdevent_event_del(srv->ev, sess->proxy_con->sock);
-
-		proxy_stream_encoder(srv, sess, con->recv, sess->send_raw);
-
-		chunkqueue_remove_finished_chunks(con->recv);
-
-		switch (srv->network_backend_write(srv, con, sess->proxy_con->sock, sess->send_raw)) {
-		case NETWORK_STATUS_SUCCESS:
-			if (con->recv->is_closed && /* no further input */
-			    con->recv->bytes_in == con->recv->bytes_out &&  /* everything is encoded */
-			    sess->send_raw->bytes_in == sess->send_raw->bytes_out) { /* everything is sent */
-				sess->state = PROXY_STATE_READ_RESPONSE_HEADER;
+		switch (proxy_stream_encode_decode(srv, sess)) {
+		case HANDLER_FINISHED:
+		case HANDLER_GO_ON:
+			/* some backends will send a response before all the request content has been written. */
+			if (sess->is_closed || sess->have_response_headers) {
+				chunk *c;
+				if (sess->is_closed && !sess->have_response_headers) {
+					if (sess->p->conf.debug) TRACE("%s", "connection to backend closed when sending request headers/content.");
+				}
+				if (con->recv->bytes_out < con->recv->bytes_in) {
+					/* we have to consume all the request content data. */
+					for (c = con->recv->first; c; c = c->next) {
+						switch(c->type) {
+						case MEM_CHUNK:
+							c->offset = c->mem->used - 1;
+							break;
+						case FILE_CHUNK:
+							c->offset = c->file.length;
+							break;
+						default:
+							break;
+						}
+					}
+					con->recv->bytes_out = con->recv->bytes_in;
+					con->recv->is_closed = 1;
+				}
 				break;
 			}
-
-			/** fall through, still have data to write. */
-		case NETWORK_STATUS_WAIT_FOR_EVENT:
-			fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_OUT);
-
-			/** fall through */
-		case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
-			chunkqueue_remove_finished_chunks(sess->send_raw);
-
 			return HANDLER_WAIT_FOR_EVENT;
-		case NETWORK_STATUS_CONNECTION_CLOSE:
-			/* the connection got close while sending the request content up
-			 * to the backend, for now handle this as error
-			 */
-
-			if (p->conf.debug) TRACE("%s", "connection to backend closed when sending request headers/content.");
-			/* some backends will send a response and close the connection before all the request
-			 * content has been written.  We need to try to read the response before restarting
-			 * the request.
-			 */
-			sess->state = PROXY_STATE_READ_RESPONSE_HEADER;
-			break;
-		default:
-			TRACE("%s", "(error)");
+		case HANDLER_ERROR:
+			/* error */
 			return HANDLER_ERROR;
+		default:
+			TRACE("stream-decoder: %s", "foo");
+			break;
 		}
-		chunkqueue_remove_finished_chunks(sess->send_raw);
 
+		sess->state = PROXY_STATE_READ_RESPONSE_HEADER;
 		/* fall through */
 	case PROXY_STATE_READ_RESPONSE_HEADER:
-		fdevent_event_del(srv->ev, sess->proxy_con->sock);
 
-		chunkqueue_remove_finished_chunks(sess->recv_raw);
-
-		switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
-		case NETWORK_STATUS_SUCCESS:
-			/* we read everything from the socket, do we have a full header ? */
-
-			switch (proxy_parse_response_header(srv, con, p, sess, sess->recv_raw, sess->recv)) {
-			case PARSE_ERROR:
-				con->http_status = 502; /* bad gateway */
-
-				return HANDLER_FINISHED;
-			case PARSE_NEED_MORE:
-				/* we need more */
-				fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_IN);
-
+		/* decode/encode stream. */
+		switch (proxy_stream_encode_decode(srv, sess)) {
+		case HANDLER_FINISHED:
+		case HANDLER_GO_ON:
+			if (!sess->proxy_con->recv->is_closed && !sess->have_response_headers) {
 				return HANDLER_WAIT_FOR_EVENT;
-			case PARSE_SUCCESS:
+			}
+			break;
+		case HANDLER_ERROR:
+			/* error */
+			return HANDLER_ERROR;
+		default:
+			TRACE("stream-decoder: %s", "foo");
+			return HANDLER_ERROR;
+		}
+
+		if (sess->have_response_headers) {
+			/* handle the parsed response headers. */
+			switch (proxy_handle_response_headers(srv, con, p, sess, sess->recv)) {
+			case HANDLER_FINISHED:
+			case HANDLER_GO_ON:
 				break;
+			case HANDLER_ERROR:
+				/* bad gateway */
+				con->http_status = 502;
+				return HANDLER_FINISHED;
 			default:
+				ERROR("%s", "++ oops, something went wrong while parsing response headers");
+				con->http_status = 500; /* Internal Server Error */
 				return HANDLER_ERROR;
 			}
+		}
 
-			if (sess->do_internal_redirect) {
-				/* no more response data to process.  do redirect now. */
-				if (sess->recv->is_closed) {
-					sess->state = PROXY_STATE_FINISHED;
-					/* now it becomes tricky
+		if (!sess->is_closed && !sess->have_response_headers) {
+			if (sess->proxy_con->recv->bytes_in == 0) {
+				/* the connection went away before we got something back */
+				if (p->conf.debug) TRACE("%s", "connection closed while reading the response headers");
+
+				if (con->request.content_length <= 0) {
+					/**
+					 * we might run into a 'race-condition'
 					 *
-					 * mod_staticfile should handle this file for us
-					 * con->mode = DIRECT is taking us out of the loop */
-					con->mode = DIRECT;
-					con->http_status = 0;
-
+					 * 1. proxy-con is keep-alive, idling and just being closed (FDEVENT_IN) [fd=27]
+					 * 2. new connection comes in, we use the idling connection [fd=14]
+					 * 3. we write(), successful [to fd=27]
+					 * 3. we read() ... and finally receive the close-event for the connection
+					 */
+	
 					return HANDLER_COMEBACK;
 				} else {
-					/* finish processing response data, so we can re-use backend connection. */
-					sess->state = PROXY_STATE_READ_RESPONSE_BODY;
-					break;
+					ERROR("%s", "request content length > 0 can't restart request.");
 				}
+			} else {
+				ERROR("%s", "connection closed after reading part of the response headers.");
 			}
 
+			con->http_status = 500; /* Internal Server Error */
+			return HANDLER_ERROR;
+		} else if (sess->do_internal_redirect) {
+			/* no more response data to process.  do redirect now. */
+			if (sess->recv->is_closed) {
+				sess->state = PROXY_STATE_FINISHED;
+				/* now it becomes tricky
+				 *
+				 * mod_staticfile should handle this file for us
+				 * con->mode = DIRECT is taking us out of the loop */
+				con->mode = DIRECT;
+				con->http_status = 0;
+
+				return HANDLER_COMEBACK;
+			} else {
+				/* finish processing response data, so we can re-use backend connection. */
+				sess->state = PROXY_STATE_READ_RESPONSE_BODY;
+			}
+		} else {
 			con->file_started = 1;
 			/* if Status: ... is not set, 200 is our default status-code */
 			if (con->http_status == 0) con->http_status = 200;
@@ -1463,98 +1549,30 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			 */
 
 			return HANDLER_GO_ON; /* tell http_response_prepare that we are done with the header */
-		case NETWORK_STATUS_WAIT_FOR_EVENT:
-			fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_IN);
-			return HANDLER_WAIT_FOR_EVENT;
-		case NETWORK_STATUS_CONNECTION_CLOSE:
-			if (chunkqueue_length(sess->recv_raw) == 0) {
-				/* the connection went away before we got something back */
-
-				/**
-				 * we might run into a 'race-condition'
-				 *
-				 * 1. proxy-con is keep-alive, idling and just being closed (FDEVENT_IN) [fd=27]
-				 * 2. new connection comes in, we use the idling connection [fd=14]
-				 * 3. we write(), successful [to fd=27]
-				 * 3. we read() ... and finally receive the close-event for the connection
-				 */
-
-				if (p->conf.debug) TRACE("%s", "connection closed while waiting to read a response, restarting");
-
-				return HANDLER_COMEBACK;
-			}
-
-			ERROR("%s", "conn-close after header-read");
-
-			return HANDLER_ERROR;
-		default:
-			ERROR("++ %s", "oops, something went wrong while reading");
-			return HANDLER_ERROR;
 		}
+
+		if (sess->state != PROXY_STATE_READ_RESPONSE_BODY) break;
 	case PROXY_STATE_READ_RESPONSE_BODY:
-		/* if we do everything right, we won't get call for this state-anymore */
-		fdevent_event_del(srv->ev, sess->proxy_con->sock);
 
-		chunkqueue_remove_finished_chunks(sess->recv_raw);
-
-		if (!sess->recv_raw->is_closed &&
-		    (sess->recv_raw->first == NULL ||
-				 sess->recv_raw->bytes_in == sess->recv_raw->bytes_out)) {
-			/* we have to read more data */
-
-			switch (srv->network_backend_read(srv, con, sess->proxy_con->sock, sess->recv_raw)) {
-			case NETWORK_STATUS_CONNECTION_CLOSE:
-				/* connection to backend is gone, cleanup backend connection. */
-				sess->is_closing = 1;
-
-				/* We might have read all of the response content.
-				 *
-				 * Note: should add a check for Content-Length header
-				 * to make sure we got all of the response content.
-				 */
-				sess->recv_raw->is_closed = 1;
-
-			case NETWORK_STATUS_SUCCESS:
-				/* read even more, do we have all the content */
-				break;
-			case NETWORK_STATUS_WAIT_FOR_EVENT:
-				fdevent_event_add(srv->ev, sess->proxy_con->sock, FDEVENT_IN);
+		switch (proxy_stream_encode_decode(srv, sess)) {
+		case HANDLER_FINISHED:
+		case HANDLER_GO_ON:
+			if (!sess->proxy_con->recv->is_closed && !sess->is_request_finished) {
 				return HANDLER_WAIT_FOR_EVENT;
-			default:
-				ERROR("%s", "oops, we failed to read");
-				break;
 			}
-		}
-
-		/* how much do we want to read ? */
-
-		/* call stream-decoder (HTTP-chunked, FastCGI, ... ) */
-
-		switch (proxy_stream_decoder(srv, sess, sess->recv_raw, sess->recv)) {
-		case 0:
-			/* need more */
 			break;
-		case -1:
-			TRACE("stream-decode: %s", "-1");
+		case HANDLER_ERROR:
 			/* error */
 			return HANDLER_ERROR;
-		case 1:
-			/* we are done, close the decoded queue */
-			sess->recv->is_closed = 1;
-
-			break;
 		default:
-			TRACE("stream-decode: %s", "foo");
+			TRACE("stream-decoder: %s", "foo");
 			break;
-		}
-		chunkqueue_remove_finished_chunks(sess->recv_raw);
-		if (sess->recv_raw->is_closed /* || sess->is_closing */) {
-			sess->recv->is_closed = 1;
 		}
 
 		proxy_copy_response(srv, con, sess);
 
-		if(sess->recv->is_closed) {
+		if(sess->is_request_finished) {
+			sess->recv->is_closed = 1;
 			/* recycle proxy connection. */
 			proxy_recycle_backend_connection(srv, p, sess);
 
@@ -2028,8 +2046,7 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 		COUNTER_DEC(p->conf.backlog_size);
 	}
 
-	/* cleanup protocol stream and proxy session */
-	proxy_stream_cleanup(srv, sess);
+	/* cleanup proxy session */
 	proxy_session_free(sess);
 
 	con->plugin_ctx[p->id] = NULL;
@@ -2078,12 +2095,12 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			con->http_status = 504; /* gateway timeout */
 			con->send->is_closed = 1;
 
+			TRACE("connect to backend timed out: %s", BUF_STR(sess->proxy_con->address->name));
+
 			if (sess->proxy_con) {
 				/* if we are waiting for a proxy-connection right now, close it */
 				proxy_remove_backend_connection(srv, sess);
 			}
-
-			TRACE("%s", "connect to backend timed out");
 
 			return HANDLER_FINISHED;
 		}
@@ -2161,6 +2178,9 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			COUNTER_SET(sess->proxy_backend->pool_size, sess->proxy_backend->pool->used);
 			COUNTER_INC(sess->proxy_backend->load);
 
+			/* need to reset flags. */
+			sess->is_closing = 0;
+			sess->is_closed = 0;
 			/* a fresh connection, we need address for it */
 			if (sess->proxy_con->state == PROXY_CONNECTION_STATE_CONNECTING) {
 				sess->state = PROXY_STATE_UNSET;

@@ -68,21 +68,21 @@ void fcgi_state_data_reset(fcgi_state_data *data) {
 	data->packet.request_id = 0;
 }
 
-SESSION_FUNC(proxy_fastcgi_init) {
+PROXY_CONNECTION_FUNC(proxy_fastcgi_init) {
 	UNUSED(srv);
 
-	if(!sess->protocol_data) {
-		sess->protocol_data = fcgi_state_data_init();
+	if(!proxy_con->protocol_data) {
+		proxy_con->protocol_data = fcgi_state_data_init();
 	}
 	return 1;
 }
 
-SESSION_FUNC(proxy_fastcgi_cleanup) {
+PROXY_CONNECTION_FUNC(proxy_fastcgi_cleanup) {
 	UNUSED(srv);
 
-	if(sess->protocol_data) {
-		fcgi_state_data_free((fcgi_state_data *)sess->protocol_data);
-		sess->protocol_data = NULL;
+	if(proxy_con->protocol_data) {
+		fcgi_state_data_free((fcgi_state_data *)proxy_con->protocol_data);
+		proxy_con->protocol_data = NULL;
 	}
 	return 1;
 }
@@ -331,7 +331,9 @@ static int fcgi_header(FCGI_Header * header, unsigned char type, size_t request_
 }
 
 
-STREAM_IN_OUT_FUNC(proxy_fastcgi_get_request_chunk) {
+PROXY_STREAM_ENCODER_FUNC(proxy_fastcgi_encode_request_headers) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *out = proxy_con->send;
 	connection *con = sess->remote_con;
 	buffer *b, *packet;
 	size_t i;
@@ -389,20 +391,46 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_get_request_chunk) {
 	b->used++;
 	out->bytes_in += sizeof(header) + 1;
 
-	return 0;
+	return HANDLER_FINISHED;
 }
 
-STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
-	fcgi_state_data *data = (fcgi_state_data *)sess->protocol_data;
+/**
+ * parse the HTTP response header
+ */
+static handler_t proxy_fastcgi_http_response_headers(proxy_session *sess, chunkqueue *in) {
+	http_response_reset(sess->resp);
+
+	/* http response parser. */
+	switch(http_response_parse_cq(in, sess->resp)) {
+	case PARSE_ERROR:
+		/* bad gateway */
+		http_response_reset(sess->resp);
+		sess->have_response_headers = 1;
+		sess->resp->status = 502;
+		return HANDLER_ERROR;
+	case PARSE_NEED_MORE:
+		return HANDLER_GO_ON;
+	case PARSE_SUCCESS:
+	default:
+		/* finished parsing response headers. */
+		sess->have_response_headers = 1;
+		return HANDLER_FINISHED;
+	}
+}
+
+PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	fcgi_state_data *data = (fcgi_state_data *)proxy_con->protocol_data;
+	chunkqueue *in = proxy_con->recv;
 	FCGI_Header *header;
 	off_t we_have = 0, we_need = 0;
-	int rc = 0;
+	handler_t rc = HANDLER_GO_ON;
 	chunk *c;
 
 	UNUSED(srv);
 
 	/* no data ? */
-	if (!in->first) return 0;
+	if (!in->first) return HANDLER_GO_ON;
 
 	/* parse the packet header. */
 	we_need = (FCGI_HEADER_LEN - data->packet.offset);
@@ -426,7 +454,7 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 		if(we_need > 0) {
 			chunkqueue_remove_finished_chunks(in);
 			/* we need more data to parse the header. */
-			return 0;
+			return HANDLER_GO_ON;
 		}
 		/* parse raw header. */
 		header = (FCGI_Header *)(data->buf->ptr);
@@ -454,7 +482,12 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 		} else {
 			out->is_closed = 1;
 		}
-		rc = 0;
+		/* parse response headers. */
+		if (!sess->have_response_headers) {
+			rc = proxy_fastcgi_http_response_headers(sess, out);
+			if (rc != HANDLER_FINISHED) return rc;
+		}
+		rc = HANDLER_GO_ON;
 		break;
 	case FCGI_STDERR:
 		if(we_need > 0) {
@@ -476,7 +509,7 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 			TRACE("(fastcgi-stderr) %s", BUF_STR(b));
 			buffer_free(b);
 		}
-		rc = 0;
+		rc = HANDLER_GO_ON;
 		break;
 	case FCGI_END_REQUEST:
 		/* ignore packet content. */
@@ -490,14 +523,16 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 #ifndef PROXY_FASTCGI_USE_KEEP_ALIVE
 			sess->is_closing = 1;
 #endif
+			sess->have_response_headers = 1;
+			sess->is_request_finished = 1;
 			in->is_closed = 1;
 			out->is_closed = 1;
-			rc = 1;
+			rc = HANDLER_FINISHED;
 		}
 		break;
 	default:
 		TRACE("unknown packet.type: %d", data->packet.type);
-		rc = -1;
+		rc = HANDLER_ERROR;
 		break;
 	}
 
@@ -518,15 +553,17 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder_internal) {
 	return rc;
 }
 
-STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder) {
+PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *in = proxy_con->recv;
 	int res;
 
-	if(out->is_closed) return 1;
+	if(out->is_closed) return HANDLER_FINISHED;
 	/* decode the whole packet stream */
 	do {
 		/* decode the packet */
-		res = proxy_fastcgi_stream_decoder_internal(srv, sess, in, out);
-	} while (in->first && res == 0);
+		res = proxy_fastcgi_stream_decoder_internal(srv, sess, out);
+	} while (in->first && res == HANDLER_GO_ON);
 
 	return res;
 }
@@ -536,16 +573,20 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_decoder) {
  *
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
-STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_encoder) {
+PROXY_STREAM_ENCODER_FUNC(proxy_fastcgi_stream_encoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *out = proxy_con->send;
 	chunk *c;
 	buffer *b;
 	FCGI_Header header;
 	off_t we_need = 0, we_have = 0;
 
 	UNUSED(srv);
-	UNUSED(sess);
 
-	/* there is nothing that we have to send out anymore */
+	/* output queue closed, can't encode any more data. */
+	if(out->is_closed) return HANDLER_FINISHED;
+
+	/* encode data into output queue. */
 	for (c = in->first; in->bytes_out < in->bytes_in; ) {
 		/*
 		 * write fcgi header
@@ -638,26 +679,10 @@ STREAM_IN_OUT_FUNC(proxy_fastcgi_stream_encoder) {
 
 		out->bytes_in += sizeof(header);
 		out->is_closed = 1;
+		return HANDLER_FINISHED;
 	}
 
-	return 0;
-
-}
-
-/**
- * parse the response header
- *
- * - fastcgi needs some decoding for the protocol
- */
-STREAM_IN_OUT_FUNC(proxy_fastcgi_parse_response_header) {
-
-	int res;
-
-	res = proxy_fastcgi_stream_decoder(srv, sess, in, out);
-	if(res < 0) return res;
-
-	http_response_reset(sess->resp);
-	return http_response_parse_cq(out, sess->resp);
+	return HANDLER_GO_ON;
 }
 
 INIT_FUNC(mod_proxy_backend_fastcgi_init) {
@@ -677,8 +702,7 @@ INIT_FUNC(mod_proxy_backend_fastcgi_init) {
 	p->protocol->proxy_stream_cleanup = proxy_fastcgi_cleanup;
 	p->protocol->proxy_stream_decoder = proxy_fastcgi_stream_decoder;
 	p->protocol->proxy_stream_encoder = proxy_fastcgi_stream_encoder;
-	p->protocol->proxy_get_request_chunk = proxy_fastcgi_get_request_chunk;
-	p->protocol->proxy_parse_response_header = proxy_fastcgi_parse_response_header;
+	p->protocol->proxy_encode_request_headers = proxy_fastcgi_encode_request_headers;
 
 	return p;
 }

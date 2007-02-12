@@ -143,10 +143,11 @@ static int ajp13_header(char *ptr, int length) {
  * used in decoding the stream
  */
 typedef struct {
-	buffer          *buf; /* holds raw header bytes or used to buffer STDERR */
-	off_t         offset; /* parse offset into buffer. */
-	ajp13_packet  packet; /* parsed info about current packet. */
+	buffer        *buf;      /* holds raw header bytes or used to buffer STDERR */
+	off_t         offset;    /* parse offset into buffer. */
+	ajp13_packet  packet;    /* parsed info about current packet. */
 	size_t        chunk_len; /* chunk length */
+	size_t	requested_bytes; /* backend requested we send this many bytes of the request content. */
 } ajp13_state_data;
 
 ajp13_state_data *ajp13_state_data_init(void) {
@@ -326,21 +327,21 @@ static int ajp13_decode_response_headers(http_resp *resp, ajp13_state_data *data
 	return 0;
 }
 
-SESSION_FUNC(proxy_ajp13_init) {
+PROXY_CONNECTION_FUNC(proxy_ajp13_init) {
 	UNUSED(srv);
 
-	if(!sess->protocol_data) {
-		sess->protocol_data = ajp13_state_data_init();
+	if(!proxy_con->protocol_data) {
+		proxy_con->protocol_data = ajp13_state_data_init();
 	}
 	return 1;
 }
 
-SESSION_FUNC(proxy_ajp13_cleanup) {
+PROXY_CONNECTION_FUNC(proxy_ajp13_cleanup) {
 	UNUSED(srv);
 
-	if(sess->protocol_data) {
-		ajp13_state_data_free((ajp13_state_data *)sess->protocol_data);
-		sess->protocol_data = NULL;
+	if(proxy_con->protocol_data) {
+		ajp13_state_data_free((ajp13_state_data *)proxy_con->protocol_data);
+		proxy_con->protocol_data = NULL;
 	}
 	return 1;
 }
@@ -451,7 +452,10 @@ int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *ses
 	return len;
 }
 
-STREAM_IN_OUT_FUNC(proxy_ajp13_get_request_chunk) {
+PROXY_STREAM_ENCODER_FUNC(proxy_ajp13_encode_request_headers) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	ajp13_state_data *data = (ajp13_state_data *)proxy_con->protocol_data;
+	chunkqueue *out = proxy_con->send;
 	connection *con = sess->remote_con;
 	buffer *packet;
 	size_t len;
@@ -473,7 +477,15 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_get_request_chunk) {
 	/* rewrite packet header with correct length. */
 	ajp13_header(packet->ptr, len);
 
-	return 0;
+	if(con->request.content_length > AJP13_MAX_BODY_PACKET_SIZE) {
+		data->requested_bytes = AJP13_MAX_BODY_PACKET_SIZE;
+	} else if(con->request.content_length > 0) {
+		data->requested_bytes = con->request.content_length;
+	} else {
+		data->requested_bytes = 0;
+	}
+
+	return HANDLER_FINISHED;
 }
 
 /*
@@ -500,19 +512,20 @@ static int proxy_ajp13_fill_buffer(ajp13_state_data *data, chunkqueue *in, size_
 	return we_need;
 }
 
-STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
-	ajp13_state_data *data = (ajp13_state_data *)sess->protocol_data;
+PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	ajp13_state_data *data = (ajp13_state_data *)proxy_con->protocol_data;
+	chunkqueue *in = proxy_con->recv;
 	AJP13_Header *header;
 	off_t we_parsed = 0, we_need = 0;
-	int rc = 0;
+	handler_t rc = HANDLER_GO_ON;
 	int magic = 0;
 	int reuse = 0;
-	int request_length = 0;
 
 	UNUSED(srv);
 
 	/* no data ? */
-	if (!in->first) return 0;
+	if (!in->first) return HANDLER_GO_ON;
 
 	/* parse the packet header. */
 	we_need = (AJP13_FULL_HEADER_LEN - data->packet.offset);
@@ -522,7 +535,7 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
 		/* make sure we have the full ajp13 header. */
 		if(we_need > 0) {
 			/* we need more data to parse the header. */
-			return 0;
+			return HANDLER_GO_ON;
 		}
 		/* parse raw header. */
 		header = (AJP13_Header *)(data->buf->ptr);
@@ -533,7 +546,7 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
 		magic = ((header->magicB0 << 8) | header->magicB1);
 		if (magic != AJP13_CONTAINER_MAGIC) {
 			ERROR("%s", "bad ajp13 magic code, invalid protocl stream");
-			return -1;
+			return HANDLER_ERROR;
 		}
 
 		/* Finished parsing raw header bytes. */
@@ -549,20 +562,21 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
 			/* make sure we have the full ajp13 packet content. */
 			if(we_need > 0) {
 				/* we need more data to parse the content. */
-				return 0;
+				return HANDLER_GO_ON;
 			}
 		}
 	}
 
 	switch (data->packet.type) {
 	case AJP13_TYPE_GET_BODY_CHUNK:
-		request_length = ajp13_decode_int(data);
+		data->requested_bytes = ajp13_decode_int(data);
 		break;
 	case AJP13_TYPE_SEND_HEADERS:
 		if (ajp13_decode_response_headers(sess->resp, data) == -1) {
 			ERROR("%s", "Error parsing response_headers");
-			rc = -1;
+			rc = HANDLER_ERROR;
 		}
+		sess->have_response_headers = 1;
 		break;
 	case AJP13_TYPE_SEND_BODY_CHUNK:
 		/* parse chunk length */
@@ -573,7 +587,7 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
 			we_need = proxy_ajp13_fill_buffer(data, in, we_need);
 			if(we_need > 0) {
 				/* we need more data to parse the chunk length. */
-				return 0;
+				return HANDLER_GO_ON;
 			}
 			/* parse chunk length */
 			data->chunk_len = ajp13_decode_int(data);
@@ -597,22 +611,26 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
 			we_need -= we_parsed;
 			in->bytes_out += we_parsed;
 		}
-		rc = 0;
+		rc = HANDLER_GO_ON;
 		break;
 	case AJP13_TYPE_END_RESPONSE:
 		if(data->buf->used >= 1) {
 			reuse = data->buf->ptr[0];
 		}
-		if(reuse) {
+		if(reuse != 1) {
 			sess->is_closing = 1;
 		}
+		sess->is_request_finished = 1;
+		/* close the queues. no more data to decode. */
 		in->is_closed = 1;
 		out->is_closed = 1;
-		rc = 1;
+		/* make sure the send queue is closed, since we can't send any more request content. */
+		proxy_con->send->is_closed = 1;
+		rc = HANDLER_FINISHED;
 		break;
 	default:
 		TRACE("unknown packet.type: %d", data->packet.type);
-		rc = -1;
+		rc = HANDLER_ERROR;
 		break;
 	}
 
@@ -626,15 +644,17 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder_internal) {
 	return rc;
 }
 
-STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder) {
+PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	chunkqueue *in = proxy_con->recv;
 	int res;
 
 	if(out->is_closed) return 1;
 	/* decode the whole packet stream */
 	do {
 		/* decode the packet */
-		res = proxy_ajp13_stream_decoder_internal(srv, sess, in, out);
-	} while (in->first && res == 0);
+		res = proxy_ajp13_stream_decoder_internal(srv, sess, out);
+	} while (in->first && res == HANDLER_GO_ON);
 
 	return res;
 }
@@ -644,32 +664,52 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_decoder) {
  *
  * as we don't apply chunked-encoding here, pass it on AS IS
  */
-STREAM_IN_OUT_FUNC(proxy_ajp13_stream_encoder) {
+PROXY_STREAM_ENCODER_FUNC(proxy_ajp13_stream_encoder) {
+	proxy_connection *proxy_con = sess->proxy_con;
+	ajp13_state_data *data = (ajp13_state_data *)proxy_con->protocol_data;
+	chunkqueue *out = proxy_con->send;
 	chunk *c;
 	buffer *b;
 	off_t we_need = 0, we_have = 0;
 
 	UNUSED(srv);
-	UNUSED(sess);
 
-	/* there is nothing that we have to send out anymore */
-	for (c = in->first; in->bytes_out < in->bytes_in; ) {
-		/*
-		 * write ajp13 header
+	/* output queue closed, can't encode any more data. */
+	if(out->is_closed) return HANDLER_FINISHED;
+
+	if (data->requested_bytes == 0) {
+		/* backend needs to send a request for more content before we can encode more. */
+		return HANDLER_GO_ON;
+	}
+
+	/* calculate how many bytes we can encode. */
+	if (in->bytes_in > in->bytes_out) {
+		we_need = in->bytes_in - in->bytes_out;
+		if (we_need > AJP13_MAX_BODY_PACKET_SIZE) we_need = AJP13_MAX_BODY_PACKET_SIZE;
+		if (we_need > data->requested_bytes) we_need = data->requested_bytes;
+
+		data->requested_bytes = 0;
+	}
+	/*
+	 * write ajp13 header
+	 */
+	b = chunkqueue_get_append_buffer(out);
+	buffer_prepare_copy(b, AJP13_HEADER_LEN);
+	b->used += AJP13_HEADER_LEN;
+	if (we_need > 0) {
+		ajp13_header(b->ptr, we_need + 2);
+		ajp13_encode_int(b, we_need);
+	} else {
+		/* empty body packet to mark EOF, if the backend requested data beyond
+		 * the end of the request content.
 		 */
-		if(we_need == 0) {
-			we_need = in->bytes_in - in->bytes_out;
-			if(we_need > (AJP13_MAX_PACKET_SIZE - AJP13_HEADER_LEN - 2)) we_need = (AJP13_MAX_PACKET_SIZE - AJP13_HEADER_LEN - 2);
+		ajp13_header(b->ptr, we_need);
+	}
+	out->bytes_in += b->used;
+	b->used++;
 
-			b = chunkqueue_get_append_buffer(out);
-			buffer_prepare_copy(b, AJP13_HEADER_LEN);
-			b->used += AJP13_HEADER_LEN;
-			ajp13_header(b->ptr, we_need + 2);
-			ajp13_encode_int(b, we_need);
-			out->bytes_in += b->used;
-			b->used++;
-		}
-
+	/* encode data into output queue. */
+	for (c = in->first; we_need > 0; ) {
 		switch (c->type) {
 		case FILE_CHUNK:
 			we_have = c->file.length - c->offset;
@@ -688,7 +728,7 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_encoder) {
 			 *
 			 * This is tricky:
 			 * - we reference the tempfile from the in-queue several times
-			 *   if the chunk is larger than AJP13_MAX_PACKET_SIZE
+			 *   if the chunk is larger than AJP13_MAX_BODY_PACKET_SIZE
 			 * - we can't simply cleanup the in-queue as soon as possible
 			 *   as it would remove the tempfiles
 			 * - the idea is to 'steal' the tempfiles and attach the is_temp flag to the last
@@ -739,38 +779,16 @@ STREAM_IN_OUT_FUNC(proxy_ajp13_stream_encoder) {
 		}
 	}
 
-	if (in->bytes_in == in->bytes_out && in->is_closed && !out->is_closed) {
-		out->is_closed = 1;
+	if (in->bytes_in == in->bytes_out && in->is_closed) {
+		/* We are finished encoding the request content,
+		 * but we can't close the send queue here since the backend might
+		 * try to request more request content then is available and
+		 * we will have to response with a 0 length body packet.
+		 */
+		return HANDLER_FINISHED;
 	}
 
-	return 0;
-
-}
-
-/**
- * parse the response header
- *
- * - ajp13 needs some decoding for the protocol
- */
-STREAM_IN_OUT_FUNC(proxy_ajp13_parse_response_header) {
-
-	int res;
-
-	if(out->is_closed) return 1;
-	http_response_reset(sess->resp);
-	sess->resp->status = -1;
-	/* decode the whole packet stream */
-	do {
-		/* decode the packet */
-		res = proxy_ajp13_stream_decoder_internal(srv, sess, in, out);
-		if(sess->resp->status >= 0) {
-			res = 1;
-		}
-	} while (in->first && res == 0);
-	if(res < 0) return PARSE_ERROR;
-	if(res == 0) return PARSE_NEED_MORE;
-
-	return PARSE_SUCCESS;
+	return HANDLER_GO_ON;
 }
 
 INIT_FUNC(mod_proxy_backend_ajp13_init) {
@@ -790,8 +808,7 @@ INIT_FUNC(mod_proxy_backend_ajp13_init) {
 	p->protocol->proxy_stream_cleanup = proxy_ajp13_cleanup;
 	p->protocol->proxy_stream_decoder = proxy_ajp13_stream_decoder;
 	p->protocol->proxy_stream_encoder = proxy_ajp13_stream_encoder;
-	p->protocol->proxy_get_request_chunk = proxy_ajp13_get_request_chunk;
-	p->protocol->proxy_parse_response_header = proxy_ajp13_parse_response_header;
+	p->protocol->proxy_encode_request_headers = proxy_ajp13_encode_request_headers;
 
 	return p;
 }

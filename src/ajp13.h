@@ -5,6 +5,7 @@
  * AJP13 protocol definitions.
  */
 #define AJP13_MAX_PACKET_SIZE (8 * 1024)
+#define AJP13_MAX_BODY_PACKET_SIZE (AJP13_MAX_PACKET_SIZE - AJP13_HEADER_LEN - 2)
 
 /**
  * two byte maigc codes

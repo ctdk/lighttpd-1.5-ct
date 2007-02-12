@@ -85,13 +85,14 @@ typedef struct proxy_session {
 	array *env_headers;        /** transformed request-headers for the backend */
 
 	http_resp *resp;           /** response http headers from backend. */
-	/* TODO: move protocol_data into proxy_connection.  Don't need to init/free this data for each session */
-	void *protocol_data;       /** protocol handler's state data for parsing response from backend. */
 
 	plugin_data *p;            /** used by proxy_xxx_get_request_chunk protocol callbacks */
 
 	int is_chunked;            /** is the incoming content chunked (for HTTP) */
 	int is_closing;            /** our connection will close when we are done */
+	int is_closed;             /** our connection closed.  we might have to restart the request. */
+	int have_response_headers; /** finished parsing response headers. */
+	int is_request_finished;   /** encoding/decoding this request is finished. */
 	int send_response_content; /** 0 if we have to ignore the content-body */
 	int do_internal_redirect;  /** 1 if we do a internal redirect to the ->mode = DIRECT */
 	int internal_redirect_count;  /** protection against infinite loops */
@@ -102,14 +103,9 @@ typedef struct proxy_session {
 
 	/**
 	 * chunkqueues
-	 * - recv_raw     is the raw byte stream that need to be decoded
 	 * - recv         is the decoded response headers and content
-	 *
-	 * - send_raw     is the raw byte stream that has been encoded
 	 */
 	chunkqueue *recv;
-	chunkqueue *recv_raw;
-	chunkqueue *send_raw;
 
 	off_t bytes_read;
 	off_t content_length;

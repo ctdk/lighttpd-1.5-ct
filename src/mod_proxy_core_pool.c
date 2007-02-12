@@ -13,6 +13,9 @@ proxy_connection * proxy_connection_init(void) {
 
 	con->sock = iosocket_init();
 
+	con->send = chunkqueue_init();
+	con->recv = chunkqueue_init();
+
 	return con;
 }
 
@@ -22,6 +25,9 @@ void proxy_connection_free(proxy_connection *con) {
 	con->address->used--;
 
 	iosocket_free(con->sock);
+
+	chunkqueue_free(con->send);
+	chunkqueue_free(con->recv);
 
 	free(con);
 }
@@ -132,5 +138,4 @@ proxy_connection_pool_t proxy_connection_pool_get_connection(proxy_connection_po
 
 	return PROXY_CONNECTIONPOOL_GOT_CONNECTION;
 }
-
 

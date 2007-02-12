@@ -74,6 +74,24 @@ static int fdevent_solaris_devpoll_poll(fdevents *ev, int timeout_ms) {
 	return ret;
 }
 
+static int fdevent_solaris_devpoll_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
+	size_t ndx;
+
+	for (ndx = 0; ndx < event_count; ndx++) {
+		if (ev->devpollfds[ndx].revents) {
+			if (ev->devpollfds[ndx].revents & POLLNVAL) {
+				/* should never happen */
+				SEGFAULT();
+			}
+
+			fdevent_revents_add(revents, ev->devpollfds[ndx].fd, ev->devpollfds[ndx].revents);
+		}
+	}
+
+	return 0;
+}
+
+#if 0
 static int fdevent_solaris_devpoll_event_get_revent(fdevents *ev, size_t ndx) {
 	return ev->devpollfds[ndx].revents;
 }
@@ -91,6 +109,7 @@ static int fdevent_solaris_devpoll_event_next_fdndx(fdevents *ev, int last_ndx) 
 
 	return i;
 }
+#endif
 
 int fdevent_solaris_devpoll_reset(fdevents *ev) {
 	/* a forked process does only inherit the filedescriptor,
@@ -124,9 +143,12 @@ int fdevent_solaris_devpoll_init(fdevents *ev) {
 	SET(event_del);
 	SET(event_add);
 
+#if 0
 	SET(event_next_fdndx);
 	SET(event_get_fd);
 	SET(event_get_revent);
+#endif
+	SET(get_revents);
 
 	ev->devpollfds = malloc(sizeof(*ev->devpollfds) * ev->maxfds);
 

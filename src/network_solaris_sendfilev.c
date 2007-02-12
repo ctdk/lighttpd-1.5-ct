@@ -48,7 +48,7 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 
 		switch(c->type) {
 		case MEM_CHUNK:
-			ret = network_write_chunkqueue_writev_mem(srv, con, fd, cq, &c);
+			ret = network_write_chunkqueue_writev_mem(srv, con, sock, cq, &c);
 
 			if (ret != NETWORK_STATUS_SUCCESS) {
 				return ret;

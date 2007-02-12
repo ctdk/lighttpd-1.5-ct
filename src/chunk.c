@@ -50,15 +50,6 @@ static chunk *chunk_init(void) {
 	return c;
 }
 
-static void chunk_free(chunk *c) {
-	if (!c) return;
-
-	buffer_free(c->mem);
-	buffer_free(c->file.name);
-
-	free(c);
-}
-
 static void chunk_reset(chunk *c) {
 	if (!c) return;
 
@@ -67,6 +58,7 @@ static void chunk_reset(chunk *c) {
 	if (c->file.is_temp && !buffer_is_empty(c->file.name)) {
 		unlink(c->file.name->ptr);
 	}
+	c->file.is_temp = 0;
 
 	buffer_reset(c->file.name);
 
@@ -85,13 +77,33 @@ static void chunk_reset(chunk *c) {
 		c->file.mmap.start = MAP_FAILED;
 	}
 
+	c->file.length = 0;
+	c->file.start = 0;
+
+	c->file.mmap.length = 0;
+	c->file.mmap.offset = 0;
+
 	c->file.copy.length = 0;
 	c->file.copy.offset = 0;
 
 	c->async.written = -1;
 	c->async.ret_val = 0;
+
+	c->offset = 0;
+	c->next = NULL;
 }
 
+static void chunk_free(chunk *c) {
+	if (!c) return;
+
+	/* make sure fd's are closed and tempfile's are deleted. */
+	chunk_reset(c);
+
+	buffer_free(c->mem);
+	buffer_free(c->file.name);
+
+	free(c);
+}
 
 void chunkqueue_free(chunkqueue *cq) {
 	chunk *c, *pc;
@@ -540,8 +552,6 @@ int chunkqueue_remove_finished_chunks(chunkqueue *cq) {
 
 		if (!is_finished) break;
 
-		chunk_reset(c);
-
 		cq->first = c->next;
 		if (c == cq->last) cq->last = NULL;
 
@@ -549,6 +559,7 @@ int chunkqueue_remove_finished_chunks(chunkqueue *cq) {
 		if (cq->unused_chunks > 4) {
 			chunk_free(c);
 		} else {
+			chunk_reset(c);
 			c->next = cq->unused;
 			cq->unused = c;
 			cq->unused_chunks++;

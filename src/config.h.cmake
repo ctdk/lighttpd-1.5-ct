@@ -117,6 +117,7 @@
 #cmakedefine  HAVE_POLL
 #cmakedefine  HAVE_PORT_CREATE
 #cmakedefine  HAVE_PRCTL
+#cmakedefine  HAVE_PREAD
 #cmakedefine  HAVE_POSIX_FADVISE
 #cmakedefine  HAVE_SELECT
 #cmakedefine  HAVE_SENDFILE

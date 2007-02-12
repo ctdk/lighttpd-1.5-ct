@@ -113,7 +113,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 	char *err = NULL;
 	off_t we_have = 0, we_want = 0;
 	off_t chunk_len = 0;
-	size_t offset = 0;
+	off_t offset = 0;
 	buffer *b;
 	chunk *c;
 	char ch = '\0';
@@ -129,7 +129,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 		switch(data->chunk_parse_state) {
 		case HTTP_CHUNK_LEN:
 			/* parse chunk len. */
-			for(offset = c->offset; offset < (c->mem->used - 1) ; offset++) {
+			for(offset = c->offset; (size_t)(offset) < (c->mem->used - 1) ; offset++) {
 				ch = c->mem->ptr[offset];
 				if(!light_isxdigit(ch)) break;
 			}
@@ -152,7 +152,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 			data->chunk_parse_state = HTTP_CHUNK_EXTENSION;
 		case HTTP_CHUNK_EXTENSION:
 			/* find CRLF.  discard chunk-extension */
-			for(ch = 0; c->offset < (c->mem->used - 1) && ch != '\n' ;) {
+			for(ch = 0; (size_t)(c->offset) < (c->mem->used - 1) && ch != '\n' ;) {
 				ch = c->mem->ptr[c->offset];
 				c->offset++;
 				in->bytes_out++;
@@ -193,7 +193,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 			data->chunk_parse_state = HTTP_CHUNK_END;
 		case HTTP_CHUNK_END:
 			/* discard CRLF.*/
-			for(ch = 0; c->offset < (c->mem->used - 1) && ch != '\n' ;) {
+			for(ch = 0; (size_t)(c->offset) < (c->mem->used - 1) && ch != '\n' ;) {
 				ch = c->mem->ptr[c->offset];
 				c->offset++;
 				in->bytes_out++;
@@ -210,7 +210,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 			protocol_state_data_reset(data);
 			break;
 		}
-		if(c->offset == c->mem->used - 1) {
+		if((size_t)(c->offset) == c->mem->used - 1) {
 			c = c->next;
 		}
 	}
@@ -291,7 +291,6 @@ PROXY_STREAM_DECODER_FUNC(proxy_http_stream_decoder) {
 PROXY_STREAM_ENCODER_FUNC(proxy_http_stream_encoder) {
 	proxy_connection *proxy_con = sess->proxy_con;
 	chunkqueue *out = proxy_con->send;
-	chunk *c;
 	int we_have = 0;
 
 	UNUSED(srv);

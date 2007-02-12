@@ -391,7 +391,6 @@ PROXY_STREAM_DECODER_FUNC(proxy_scgi_stream_decoder) {
 PROXY_STREAM_ENCODER_FUNC(proxy_scgi_stream_encoder) {
 	proxy_connection *proxy_con = sess->proxy_con;
 	chunkqueue *out = proxy_con->send;
-	chunk *c;
 	int we_have = 0;
 
 	UNUSED(srv);

@@ -668,9 +668,8 @@ PROXY_STREAM_ENCODER_FUNC(proxy_ajp13_stream_encoder) {
 	proxy_connection *proxy_con = sess->proxy_con;
 	ajp13_state_data *data = (ajp13_state_data *)proxy_con->protocol_data;
 	chunkqueue *out = proxy_con->send;
-	chunk *c;
-	buffer *b;
 	size_t we_need = 0, we_have = 0;
+	buffer *b;
 
 	UNUSED(srv);
 

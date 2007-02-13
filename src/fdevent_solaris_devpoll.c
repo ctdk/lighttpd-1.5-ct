@@ -10,6 +10,7 @@
 #include "fdevent.h"
 #include "settings.h"
 #include "buffer.h"
+#include "log.h"
 
 #ifdef USE_SOLARIS_DEVPOLL
 

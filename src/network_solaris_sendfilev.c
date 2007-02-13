@@ -92,7 +92,7 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 			fvec.sfv_len = toSend;
 
 			/* Solaris sendfilev() */
-			if (-1 == (r = sendfilev(fd, &fvec, 1, &written))) {
+			if (-1 == (r = sendfilev(sock->fd, &fvec, 1, &written))) {
 				if (errno != EAGAIN) {
 					log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile: ", strerror(errno), errno);
 

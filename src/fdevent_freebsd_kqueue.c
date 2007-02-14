@@ -17,72 +17,91 @@
 #include <sys/time.h>
 
 #include "sys-files.h"
+#include "log.h"
+
+static int fdevent_freebsd_kqueue_event_add(fdevents *ev, iosocket *sock, int events);
 
 static void fdevent_freebsd_kqueue_free(fdevents *ev) {
 	close(ev->kq_fd);
 	free(ev->kq_results);
-	bitset_free(ev->kq_bevents);
+	bitset_free(ev->kq_read_bevents);
+	bitset_free(ev->kq_write_bevents);
 }
 
 static int fdevent_freebsd_kqueue_event_del(fdevents *ev, iosocket *sock) {
-	int filter, ret;
-	struct kevent kev;
-	struct timespec ts;
+	int ret;
 
 	if (sock->fde_ndx < 0) return -1;
 
-	filter = bitset_test_bit(ev->kq_bevents, sock->fd) ? EVFILT_READ : EVFILT_WRITE;
-
-	EV_SET(&kev, sock->fd, filter, EV_DELETE, 0, 0, NULL);
-
-	ts.tv_sec  = 0;
-	ts.tv_nsec = 0;
-
-	ret = kevent(ev->kq_fd,
-		     &kev, 1,
-		     NULL, 0,
-		     &ts);
-
+	/* delete events */
+	ret = fdevent_freebsd_kqueue_event_add(ev, sock, 0);
 	sock->fde_ndx = -1;
-	if (ret == -1) {
-		fprintf(stderr, "%s.%d: kqueue failed polling: %s\n",
-			__FILE__, __LINE__, strerror(errno));
-
-		return 0;
-	}
-
 	return 0;
 }
 
 static int fdevent_freebsd_kqueue_event_add(fdevents *ev, iosocket *sock, int events) {
-	int filter, ret;
-	struct kevent kev;
+	int ret;
+	struct kevent kev[2];
 	struct timespec ts;
+	int nchanges = 0;
+	int changed_events = 0;
 
-	filter = (events & FDEVENT_IN) ? EVFILT_READ : EVFILT_WRITE;
+	if (bitset_test_bit(ev->kq_read_bevents, sock->fd)) {
+		changed_events |= FDEVENT_IN;
+	}
+	if (bitset_test_bit(ev->kq_write_bevents, sock->fd)) {
+		changed_events |= FDEVENT_OUT;
+	}
+	/* use XOR on changed_events and events to see which events changed. */
+	changed_events ^= events;
 
-	EV_SET(&kev, sock->fd, filter, EV_ADD|EV_CLEAR, 0, 0, NULL);
+	if (changed_events & FDEVENT_IN) {
+		/* add/delete FDEVENT_IN */
+		if (events & FDEVENT_IN) {
+			/* add */
+			EV_SET(&(kev[nchanges]), sock->fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
+			nchanges++;
+			bitset_set_bit(ev->kq_read_bevents, sock->fd);
+		} else {
+			/* delete */
+			EV_SET(&(kev[nchanges]), sock->fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
+			nchanges++;
+			bitset_clear_bit(ev->kq_read_bevents, sock->fd);
+		}
+	}
+
+	if (changed_events & FDEVENT_OUT) {
+		/* add/delete FDEVENT_OUT */
+		if (events & FDEVENT_OUT) {
+			/* add */
+			EV_SET(&(kev[nchanges]), sock->fd, EVFILT_WRITE, EV_ADD, 0, 0, NULL);
+			nchanges++;
+			bitset_set_bit(ev->kq_write_bevents, sock->fd);
+		} else {
+			/* delete */
+			EV_SET(&(kev[nchanges]), sock->fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
+			nchanges++;
+			bitset_clear_bit(ev->kq_write_bevents, sock->fd);
+		}
+	}
+
+	if (nchanges == 0) return 0;
 
 	ts.tv_sec  = 0;
 	ts.tv_nsec = 0;
 
 	ret = kevent(ev->kq_fd,
-		     &kev, 1,
+		     kev, nchanges,
 		     NULL, 0,
 		     &ts);
 
 	if (ret == -1) {
-		fprintf(stderr, "%s.%d: kqueue failed polling: %s\n",
-			__FILE__, __LINE__, strerror(errno));
+		ERROR("kqueue failed polling: %s\n", strerror(errno));
 
 		return -1;
 	}
 
-	if (filter == EVFILT_READ) {
-		bitset_set_bit(ev->kq_bevents, sock->fd);
-	} else {
-		bitset_clear_bit(ev->kq_bevents, sock->fd);
-	}
+	sock->fde_ndx = sock->fd;
 
 	return 0;
 }
@@ -173,7 +192,8 @@ int fdevent_freebsd_kqueue_init(fdevents *ev) {
 	ev->kq_fd = -1;
 
 	ev->kq_results = calloc(ev->maxfds, sizeof(*ev->kq_results));
-	ev->kq_bevents = bitset_init(ev->maxfds);
+	ev->kq_read_bevents = bitset_init(ev->maxfds);
+	ev->kq_write_bevents = bitset_init(ev->maxfds);
 
 	/* check that kqueue works */
 

@@ -183,7 +183,8 @@ typedef struct fdevents {
 #ifdef USE_FREEBSD_KQUEUE
 	int kq_fd;
 	struct kevent *kq_results;
-	bitset *kq_bevents;
+	bitset *kq_read_bevents;
+	bitset *kq_write_bevents;
 #endif
 #ifdef USE_SOLARIS_PORT
 	int port_fd;

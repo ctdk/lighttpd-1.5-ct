@@ -528,8 +528,8 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
 	if (!in->first) return HANDLER_GO_ON;
 
 	/* parse the packet header. */
-	we_need = (AJP13_FULL_HEADER_LEN - data->packet.offset);
-	if(we_need > 0) {
+	if(data->packet.offset < AJP13_FULL_HEADER_LEN) {
+		we_need = (AJP13_FULL_HEADER_LEN - data->packet.offset);
 		/* copy ajp13 header to buffer */
 		we_need = proxy_ajp13_fill_buffer(data, in, we_need);
 		/* make sure we have the full ajp13 header. */

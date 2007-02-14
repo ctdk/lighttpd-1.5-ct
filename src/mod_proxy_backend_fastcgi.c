@@ -433,8 +433,8 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 	if (!in->first) return HANDLER_GO_ON;
 
 	/* parse the packet header. */
-	we_need = (FCGI_HEADER_LEN - data->packet.offset);
-	if(we_need > 0) {
+	if(data->packet.offset < FCGI_HEADER_LEN) {
+		we_need = (FCGI_HEADER_LEN - data->packet.offset);
 		/* copy fastcgi header to buffer */
 		buffer_prepare_append(data->buf, we_need);
 		for (c = in->first; c && we_need > 0; c = c->next) {

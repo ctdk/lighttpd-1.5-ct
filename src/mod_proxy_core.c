@@ -1941,9 +1941,6 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 		return HANDLER_GO_ON;
 	}
 
-	path = file_match ? con->physical.path : con->uri.path;
-	if (buffer_is_empty(path)) return HANDLER_GO_ON;
-
 	/* check if we have a matching conditional for this request */
 	mod_proxy_core_patch_connection(srv, con, p);
 
@@ -1952,6 +1949,8 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 
 	/* if check_local is enabled, then wait for file match. */
 	if (file_match != p->conf.check_local) return HANDLER_GO_ON;
+	path = file_match ? con->physical.path : con->uri.path;
+	if (buffer_is_empty(path)) return HANDLER_GO_ON;
 
 	if (sess && sess->do_x_rewrite_backend) {
 		proxy_backend *backend;

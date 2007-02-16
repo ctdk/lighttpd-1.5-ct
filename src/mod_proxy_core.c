@@ -2099,7 +2099,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				/* if we are waiting for a proxy-connection right now, close it */
 				proxy_remove_backend_connection(srv, sess);
 			} else {
-				TRACE("timed out when trying to connect to backend and don't have a connection."));
+				TRACE("%s", "timed out when trying to connect to backend and don't have a connection.");
 			}
 
 			return HANDLER_FINISHED;

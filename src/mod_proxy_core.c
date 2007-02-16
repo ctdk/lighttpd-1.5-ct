@@ -2094,11 +2094,12 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			con->http_status = 504; /* gateway timeout */
 			con->send->is_closed = 1;
 
-			TRACE("connect to backend timed out: %s", BUF_STR(sess->proxy_con->address->name));
-
 			if (sess->proxy_con) {
+				TRACE("connect to backend timed out: %s", BUF_STR(sess->proxy_con->address->name));
 				/* if we are waiting for a proxy-connection right now, close it */
 				proxy_remove_backend_connection(srv, sess);
+			} else {
+				TRACE("timed out when trying to connect to backend and don't have a connection."));
 			}
 
 			return HANDLER_FINISHED;

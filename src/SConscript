@@ -18,7 +18,7 @@ common_src = Split("buffer.c log.c \
       connections-glue.c iosocket.c \
       configfile-glue.c \
       http-header-glue.c status_counter.c \
-      splaytree.c network_writev.c \
+      network_writev.c \
       network_write.c network_linux_sendfile.c \
       network_freebsd_sendfile.c  network_win32_send.c \
       network_solaris_sendfilev.c network_openssl.c \

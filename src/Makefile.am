@@ -71,7 +71,6 @@ common_src=buffer.c log.c \
       network_linux_aio.c \
       network_posix_aio.c \
       network_gthread_aio.c \
-      splaytree.c \
       http_resp.c http_resp_parser.c \
       http_req.c http_req_parser.c \
       http_req_range.c http_req_range_parser.c 
@@ -307,7 +306,7 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
       configparser.h mod_ssi_exprparser.h \
       sys-mmap.h sys-socket.h mod_cml.h mod_cml_funcs.h \
-      splaytree.h proc_open.h mod_sql_vhost_core.h \
+      proc_open.h mod_sql_vhost_core.h \
       sys-files.h sys-process.h sys-strings.h  \
       iosocket.h array-static.h \
       mod_proxy_core_address.h \

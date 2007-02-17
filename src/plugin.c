@@ -9,6 +9,8 @@
 #include "config.h"
 #endif
 
+#include "sys-files.h"
+
 #ifdef HAVE_VALGRIND_VALGRIND_H
 #include <valgrind/valgrind.h>
 #endif

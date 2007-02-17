@@ -1664,8 +1664,6 @@ int main (int argc, char **argv, char **envp) {
 
 	lighty_mainloop(srv);
 
-	status_counter_free();
-
 	if (0 == graceful_restart &&
 	    srv->srvconf.pid_file->used &&
 	    srv->srvconf.changeroot->used == 0) {
@@ -1747,6 +1745,7 @@ int main (int argc, char **argv, char **envp) {
 	plugins_free(srv);
 	server_free(srv);
 	log_free();
+	status_counter_free();
 
 	return 0;
 }

@@ -71,4 +71,5 @@ range(A) ::= MINUS num(B) . {
 
 num(A) ::= NUMBER(B) . {
   A = strtoull(BUF_STR(B), NULL, 10);
+	buffer_pool_append(ctx->unused_buffers, B);
 }

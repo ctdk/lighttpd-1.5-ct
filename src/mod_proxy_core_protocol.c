@@ -17,6 +17,8 @@ proxy_protocol *proxy_protocol_init(void) {
 void proxy_protocol_free(proxy_protocol *protocol) {
 	if (!protocol) return;
 
+	buffer_free(protocol->name);
+
 	free(protocol);
 }
 

@@ -35,6 +35,8 @@ typedef struct {
 
 	buffer *range_buf;
 
+	http_req_range *ranges;
+
 	plugin_config **config_storage;
 
 	plugin_config conf;
@@ -49,6 +51,8 @@ INIT_FUNC(mod_staticfile_init) {
 	p = calloc(1, sizeof(*p));
 
 	p->range_buf = buffer_init();
+
+	p->ranges = http_request_range_init();
 
 	return p;
 }
@@ -73,6 +77,8 @@ FREE_FUNC(mod_staticfile_free) {
 		free(p->config_storage);
 	}
 	buffer_free(p->range_buf);
+
+	http_request_range_free(p->ranges);
 
 	free(p);
 
@@ -169,7 +175,8 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 	/* start the range-header parser
 	 * bytes=<num>  */
 
-	ranges = http_request_range_init();
+	ranges = p->ranges;
+	http_request_range_reset(ranges);
 	switch (http_request_range_parse(range, ranges)) {
 	case PARSE_ERROR:
 		return -1; /* no range valid Range Header */

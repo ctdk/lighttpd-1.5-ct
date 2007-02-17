@@ -206,12 +206,15 @@ void stat_cache_free(stat_cache *sc) {
 	g_hash_table_foreach_remove(sc->dirs, stat_cache_free_hrfunc, NULL);
 #endif
 
+	g_hash_table_unref(sc->files);
+
 	buffer_free(sc->dir_name);
 	buffer_free(sc->hash_key);
 
 #if defined(HAVE_SYS_INOTIFY_H)
 	if (sc->sock) iosocket_free(sc->sock);
 #endif
+
 	free(sc);
 }
 

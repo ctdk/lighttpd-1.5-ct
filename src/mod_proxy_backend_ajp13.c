@@ -745,6 +745,16 @@ INIT_FUNC(mod_proxy_backend_ajp13_init) {
 	return p;
 }
 
+FREE_FUNC(mod_proxy_backend_ajp13_free) {
+	protocol_plugin_data *p = p_d;
+
+	if (!p) return HANDLER_GO_ON;
+
+	free(p);
+
+	return HANDLER_GO_ON;
+}
+
 int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
 	data_string *ds;
 
@@ -752,6 +762,7 @@ int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
 	p->name         = buffer_init_string("mod_proxy_backend_ajp13");
 
 	p->init         = mod_proxy_backend_ajp13_init;
+	p->cleanup      = mod_proxy_backend_ajp13_free;
 
 	p->data         = NULL;
 

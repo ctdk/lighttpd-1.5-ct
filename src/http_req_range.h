@@ -16,6 +16,8 @@ typedef struct {
 	buffer *errmsg;
 
 	http_req_range *ranges;
+
+	buffer_pool *unused_buffers;
 } http_req_range_ctx_t;
 
 http_req_range *http_request_range_init(void);

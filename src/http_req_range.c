@@ -143,9 +143,10 @@ parse_status_t http_request_range_parse(buffer *hdr, http_req_range *ranges) {
 	context.ok = 1;
 	context.errmsg = buffer_init();
 	context.ranges = ranges;
+	context.unused_buffers = buffer_pool_init();
 
 	pParser = http_req_range_parserAlloc( malloc );
-	token = buffer_init();
+	token = buffer_pool_get(context.unused_buffers);
 #if 0
 	http_req_range_parserTrace(stderr, "range: ");
 #endif
@@ -153,7 +154,7 @@ parse_status_t http_request_range_parse(buffer *hdr, http_req_range *ranges) {
 	while((1 == http_req_range_tokenizer(&t, &token_id, token)) && context.ok) {
 		http_req_range_parser(pParser, token_id, token, &context);
 
-		token = buffer_init();
+		token = buffer_pool_get(context.unused_buffers);
 	}
 
 	/* oops, the parser failed */
@@ -184,7 +185,8 @@ parse_status_t http_request_range_parse(buffer *hdr, http_req_range *ranges) {
 		ret = PARSE_SUCCESS;
 	}
 
-	buffer_free(token);
+	buffer_pool_append(context.unused_buffers, token);
+	buffer_pool_free(context.unused_buffers);
 	buffer_free(context.errmsg);
 
 	return ret;

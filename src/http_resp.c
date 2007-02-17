@@ -253,9 +253,9 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	http_resp_parser(pParser, 0, token, &context);
 	http_resp_parserFree(pParser, free);
 
-		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
-		}
+	if (!buffer_is_empty(context.errmsg)) {
+		TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+	}
 	if (context.ok == 0) {
 		/* we are missing the some tokens */
 

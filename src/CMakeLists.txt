@@ -12,6 +12,12 @@ INCLUDE(LighttpdMacros)
 
 ADD_DEFINITIONS(-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES)
 
+IF(WIN32)
+    MESSAGE(STATUS "Adding ${CMAKE_SOURCE_DIR}/win to include path")
+    INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/win)
+    ADD_DEFINITIONS(/Zi)
+ENDIF(WIN32)
+
 OPTION(WITH_XATTR "with xattr-support for the stat-cache [default: off]")
 OPTION(WITH_MYSQL "with mysql-support for the mod_sql_vhost [default: off]")
 OPTION(WITH_OPENSSL "with openssl-support [default: off]")
@@ -23,7 +29,6 @@ OPTION(WITH_LDAP "with LDAP-support for the mod_auth [default: off]")
 OPTION(WITH_LIBAIO "with libaio for the linux [default: off]")
 OPTION(WITH_LIBFCGI "with libfcgi for fcgi-stat-accel [default: off]")
 OPTION(WITH_LUA "with lua 5.1 for mod_magnet [default: off]")
-
 OPTION(BUILD_STATIC "build a static lighttpd with all modules added")
 IF(BUILD_STATIC)
   SET(LIGHTTPD_STATIC 1)
@@ -59,7 +64,8 @@ PKGCONFIG(gthread-2.0 GTHREAD_INCDIR GTHREAD_LIBDIR GTHREAD_LDFLAGS GTHREAD_CFLA
 
 MESSAGE(STATUS "found glib-2.0 at: ${GTHREAD_INCDIR} ${GTHREAD_LIBDIR} ${GTHREAD_LDFLAGS} ${GTHREAD_CFLAGS}")
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${GTHREAD_CFLAGS}")
+##INCLUDE_DIRECTORIES(${GTHREAD_INCDIR})
+ADD_DEFINITIONS(${GTHREAD_CFLAGS})
 
 IF(WITH_XATTR)
   CHECK_INCLUDE_FILES(attr/attributes.h HAVE_ATTR_ATTRIBUTES_H)
@@ -109,8 +115,26 @@ IF(WITH_XML)
 ENDIF(WITH_XML)
 
 IF(WITH_PCRE)
-  CHECK_INCLUDE_FILES(pcre.h HAVE_PCRE_H)
-  CHECK_LIBRARY_EXISTS(pcre pcre_exec "" HAVE_LIBPCRE)
+  FIND_PATH(PCRE_INCLUDE_DIR pcre.h
+  /usr/local/include
+  /usr/include
+  )
+
+  SET(PCRE_NAMES pcre)
+  FIND_LIBRARY(PCRE_LIBRARY
+  NAMES ${PCRE_NAMES}
+  PATHS /usr/lib /usr/local/lib
+  )
+
+    IF(PCRE_INCLUDE_DIR AND PCRE_LIBRARY)
+        SET(CMAKE_REQUIRED_INCLUDES ${PCRE_INCLUDE_DIR})
+        SET(CMAKE_REQUIRED_LIBRARIES ${PCRE_LIBRARY})
+        CHECK_INCLUDE_FILES(pcre.h HAVE_PCRE_H)
+        CHECK_LIBRARY_EXISTS(pcre pcre_exec "" HAVE_LIBPCRE)
+        SET(CMAKE_REQUIRED_INCLUDES)
+        SET(CMAKE_REQUIRED_LIBRARIES)
+        INCLUDE_DIRECTORIES(${PCRE_INCLUDE_DIR})
+    ENDIF(PCRE_INCLUDE_DIR AND PCRE_LIBRARY)
 ENDIF(WITH_PCRE)
 
 CHECK_INCLUDE_FILES(poll.h HAVE_POLL_H)
@@ -144,8 +168,30 @@ IF(HAVE_SYS_INOTIFY_H)
 ENDIF(HAVE_SYS_INOTIFY_H)
 
 IF(WITH_ZLIB)
-  CHECK_INCLUDE_FILES(zlib.h HAVE_ZLIB_H)
-  CHECK_LIBRARY_EXISTS(z deflate "" HAVE_LIBZ)
+
+ FIND_PATH(ZLIB_INCLUDE_DIR zlib.h
+  /usr/local/include
+  /usr/include
+  )
+
+  SET(ZLIB_NAMES z zlib zdll)
+  FIND_LIBRARY(ZLIB_LIBRARY
+  NAMES ${ZLIB_NAMES}
+  PATHS /usr/lib /usr/local/lib
+  )
+
+
+  IF(ZLIB_INCLUDE_DIR AND ZLIB_LIBRARY)
+    SET(CMAKE_REQUIRED_INCLUDES ${ZLIB_INCLUDE_DIR})
+    SET(CMAKE_REQUIRED_LIBRARIES ${ZLIB_LIBRARY})
+    GET_FILENAME_COMPONENT(ZLIB_NAME ${ZLIB_LIBRARY} NAME)
+    CHECK_INCLUDE_FILES(zlib.h HAVE_ZLIB_H)
+    CHECK_LIBRARY_EXISTS(${ZLIB_NAME} deflate "" HAVE_LIBZ)
+    SET(CMAKE_REQUIRED_INCLUDES)
+    SET(CMAKE_REQUIRED_LIBRARIES)
+    INCLUDE_DIRECTORIES(${ZLIB_INCLUDE_DIR})
+
+  ENDIF(ZLIB_INCLUDE_DIR AND ZLIB_LIBRARY)
 ENDIF(WITH_ZLIB)
 
 IF(WITH_LUA)
@@ -199,6 +245,8 @@ CHECK_FUNCTION_EXISTS(strptime HAVE_STRPTIME)
 CHECK_FUNCTION_EXISTS(syslog HAVE_SYSLOG)
 CHECK_FUNCTION_EXISTS(writev HAVE_WRITEV)
 CHECK_FUNCTION_EXISTS(inet_aton HAVE_INET_ATON)
+CHECK_FUNCTION_EXISTS(inet_atop HAVE_IPV6)
+
 IF(HAVE_CRYPT_H)
   ## check if we need libcrypt for crypt()
   CHECK_LIBRARY_EXISTS(crypt crypt "" HAVE_LIBCRYPT)
@@ -207,9 +255,19 @@ ENDIF(HAVE_CRYPT_H)
 ADD_DEFINITIONS(
   -DLIGHTTPD_VERSION_ID=10500
   -DPACKAGE_NAME="\\"${CMAKE_PROJECT_NAME}\\""
-  -DLIBRARY_DIR="\\"${CMAKE_INSTALL_PREFIX}/lib\\""
   -DPACKAGE_VERSION="\\"${CPACK_PACKAGE_VERSION}\\""
   )
+
+IF(NOT WIN32)
+ADD_DEFINITIONS(
+  -DLIBRARY_DIR="\\"${CMAKE_INSTALL_PREFIX}/lib\\""
+)
+ELSE(NOT WIN32)
+## We use relative path in windows
+ADD_DEFINITIONS(
+  -DLIBRARY_DIR="\\"lib\\""
+)
+ENDIF(NOT WIN32)
 
 ## Write out config.h
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h)
@@ -233,7 +291,6 @@ SET(COMMON_SRC
       connections-glue.c iosocket.c
       configfile-glue.c
       http-header-glue.c status_counter.c
-      splaytree.c
       network_writev.c
       network_write.c
       network_linux_sendfile.c
@@ -255,6 +312,11 @@ SET(COMMON_SRC
       filter.c
 )
 
+IF(WIN32)
+  MESSAGE(STATUS "Adding local getopt implementation.")
+  SET(COMMON_SRC ${COMMON_SRC} ${CMAKE_SOURCE_DIR}/win/xgetopt.c)
+ENDIF(WIN32)
+
 ADD_EXECUTABLE(lemon lemon.c)
 
 ## Build parsers by using lemon...
@@ -274,6 +336,8 @@ ENDIF(HAVE_LIBFCGI)
 
 ADD_EXECUTABLE(spawn-fcgi spawn-fcgi.c)
 
+ENDIF(NOT WIN32)
+
 ADD_EXECUTABLE(lighttpd
 	server.c
 	network.c
@@ -284,6 +348,9 @@ ADD_EXECUTABLE(lighttpd
 	request.c
 	response.c
 	${COMMON_SRC})
+
+ADD_EXECUTABLE(spawn-fcgi
+    spawn-fcgi.c)
 
 ADD_AND_INSTALL_LIBRARY(mod_access mod_access.c)
 ADD_AND_INSTALL_LIBRARY(mod_alias mod_alias.c)
@@ -308,7 +375,6 @@ ADD_AND_INSTALL_LIBRARY(mod_evhost mod_evhost.c)
 ADD_AND_INSTALL_LIBRARY(mod_expire mod_expire.c)
 ADD_AND_INSTALL_LIBRARY(mod_status mod_status.c)
 ADD_AND_INSTALL_LIBRARY(mod_compress mod_compress.c)
-ADD_AND_INSTALL_LIBRARY(mod_deflate mod_deflate.c)
 ADD_AND_INSTALL_LIBRARY(mod_redirect mod_redirect.c)
 ADD_AND_INSTALL_LIBRARY(mod_rewrite mod_rewrite.c)
 ADD_AND_INSTALL_LIBRARY(mod_auth "mod_auth.c;http_auth_digest.c;http_auth.c")
@@ -320,17 +386,22 @@ ADD_AND_INSTALL_LIBRARY(mod_evasive mod_evasive.c)
 ADD_AND_INSTALL_LIBRARY(mod_ssi "mod_ssi_exprparser.c;mod_ssi_expr.c;mod_ssi.c")
 ADD_AND_INSTALL_LIBRARY(mod_flv_streaming mod_flv_streaming.c)
 ADD_AND_INSTALL_LIBRARY(mod_chunked mod_chunked.c)
-ADD_AND_INSTALL_LIBRARY(mod_webdav mod_webdav.c)
 ADD_AND_INSTALL_LIBRARY(mod_magnet "mod_magnet.c;mod_magnet_cache.c")
+ADD_AND_INSTALL_LIBRARY(mod_deflate mod_deflate.c)
+IF(NOT WIN32)
+ADD_AND_INSTALL_LIBRARY(mod_webdav mod_webdav.c)
+ENDIF(NOT WIN32)
 
 SET(L_INSTALL_TARGETS ${L_INSTALL_TARGETS} lighttpd)
 
 IF(HAVE_PCRE_H)
-  TARGET_LINK_LIBRARIES(mod_rewrite pcre)
-  TARGET_LINK_LIBRARIES(mod_dirlisting pcre)
-  TARGET_LINK_LIBRARIES(mod_redirect pcre)
-  TARGET_LINK_LIBRARIES(mod_ssi pcre)
-  TARGET_LINK_LIBRARIES(mod_trigger_b4_dl pcre)
+  TARGET_LINK_LIBRARIES(lighttpd ${PCRE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mod_rewrite ${PCRE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mod_dirlisting ${PCRE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mod_redirect ${PCRE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mod_ssi ${PCRE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mod_trigger_b4_dl ${PCRE_LIBRARY})
+  TARGET_LINK_LIBRARIES(mod_proxy_core ${PCRE_LIBRARY})
 ENDIF(HAVE_PCRE_H)
 
 IF(HAVE_LUA_H)
@@ -367,11 +438,11 @@ TARGET_LINK_LIBRARIES(mod_auth ${L_MOD_AUTH})
 
 IF(HAVE_ZLIB_H)
   IF(HAVE_BZLIB_H)
-    TARGET_LINK_LIBRARIES(mod_compress z bz2)
-    TARGET_LINK_LIBRARIES(mod_deflate z bz2)
+    TARGET_LINK_LIBRARIES(mod_compress ${ZLIB_LIBRARY} bz2)
+    TARGET_LINK_LIBRARIES(mod_deflate ${ZLIB_LIBRARY} bz2)
   ELSE(HAVE_BZLIB_H)
-    TARGET_LINK_LIBRARIES(mod_compress z)
-    TARGET_LINK_LIBRARIES(mod_deflate z)
+    TARGET_LINK_LIBRARIES(mod_compress ${ZLIB_LIBRARY})
+    TARGET_LINK_LIBRARIES(mod_deflate ${ZLIB_LIBRARY})
   ENDIF(HAVE_BZLIB_H)
 ENDIF(HAVE_ZLIB_H)
 
@@ -392,6 +463,16 @@ IF(CMAKE_SYSTEM MATCHES "FreeBSD")
 ENDIF(CMAKE_SYSTEM MATCHES "FreeBSD")
 
 SET_TARGET_PROPERTIES(lighttpd PROPERTIES CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
+
+IF(WIN32)
+  TARGET_LINK_LIBRARIES(lighttpd ws2_32)
+  TARGET_LINK_LIBRARIES(mod_proxy_core ws2_32)
+  TARGET_LINK_LIBRARIES(mod_proxy_backend_ajp13 ws2_32)
+  TARGET_LINK_LIBRARIES(mod_proxy_backend_fastcgi ws2_32)
+  TARGET_LINK_LIBRARIES(mod_proxy_backend_scgi ws2_32)
+  TARGET_LINK_LIBRARIES(mod_ssi ws2_32)
+  SET_TARGET_PROPERTIES(lighttpd PROPERTIES LINK_FLAGS ${GTHREAD_LDFLAGS})
+ENDIF(WIN32)
 
 IF(NOT BUILD_STATIC)
   IF(HAVE_LIBDL)
@@ -416,8 +497,19 @@ IF(HAVE_LIBSSL AND HAVE_LIBCRYPTO)
   TARGET_LINK_LIBRARIES(lighttpd crypto)
 ENDIF(HAVE_LIBSSL AND HAVE_LIBCRYPTO)
 
+IF(NOT WIN32)
 INSTALL(TARGETS ${L_INSTALL_TARGETS}
 	RUNTIME DESTINATION bin
 	LIBRARY DESTINATION lib
 	ARCHIVE DESTINATION lib/static)
-
+ELSE(NOT WIN32)
+## HACK to make win32 to install our libraries in desired directory..
+INSTALL(TARGETS lighttpd
+	RUNTIME DESTINATION bin
+	ARCHIVE DESTINATION lib/static)
+LIST(REMOVE_ITEM L_INSTALL_TARGETS lighttpd)
+INSTALL(TARGETS ${L_INSTALL_TARGETS}
+	RUNTIME DESTINATION bin/lib
+	LIBRARY DESTINATION lib
+	ARCHIVE DESTINATION lib/static)
+ENDIF(NOT WIN32)

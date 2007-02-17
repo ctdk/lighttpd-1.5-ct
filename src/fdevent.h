@@ -166,16 +166,28 @@ typedef struct fdevents {
 	buffer_int unused;
 #endif
 #ifdef USE_SELECT
+	/* Temporary sets, cloned from permanent sets, and passed to select() */
 	fd_set select_read;
 	fd_set select_write;
 	fd_set select_error;
 
+	/* Permanent sets */
 	fd_set select_set_read;
 	fd_set select_set_write;
 	fd_set select_set_error;
 
+	/* Since windows socket IDs are as good as unpredictable, we need to keep track of each one.
+	   *nix socket IDs start at zero for each process and are reused throughout the life of the process. */
+#ifdef _WIN32
+	/* We could simply use select_set_error, because that is currently always inclusive,
+		 but better to keep it separate. */
+	fd_set select_set_all;
+#else
 	int select_max_fd;
 #endif
+#endif
+
+
 #ifdef USE_SOLARIS_DEVPOLL
 	int devpoll_fd;
 	struct pollfd *devpollfds;
@@ -201,55 +213,56 @@ typedef struct fdevents {
 	int (*fcntl_set)(struct fdevents *ev, int fd);
 } fdevents;
 
-fdevents *fdevent_init(size_t maxfds, fdevent_handler_t type);
-int fdevent_reset(fdevents *ev);
-void fdevent_free(fdevents *ev);
+LI_EXPORT fdevents* fdevent_init(size_t maxfds, fdevent_handler_t type);
+LI_EXPORT int fdevent_reset(fdevents *ev);
+LI_EXPORT void fdevent_free(fdevents *ev);
 
 /**
  * call the plugin for the number of available events
  */
-int fdevent_poll(fdevents *ev, int timeout_ms);
+LI_EXPORT int fdevent_poll(fdevents *ev, int timeout_ms);
 /**
  * get all available events
  */
-int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents);
+LI_EXPORT int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents);
 
 /**
  * add or remove a fd to the handled-pool
  */
-int fdevent_register(fdevents *ev, iosocket *sock, fdevent_handler handler, void *ctx);
-int fdevent_unregister(fdevents *ev, iosocket *sock);
+LI_EXPORT int fdevent_register(fdevents *ev, iosocket *sock, fdevent_handler handler, void *ctx);
+LI_EXPORT int fdevent_unregister(fdevents *ev, iosocket *sock);
 
 /**
  * add a event to a registered fd
  */
-int fdevent_event_add(fdevents *ev, iosocket *sock, int events);
-int fdevent_event_del(fdevents *ev, iosocket *sock);
+LI_EXPORT int fdevent_event_add(fdevents *ev, iosocket *sock, int events);
+LI_EXPORT int fdevent_event_del(fdevents *ev, iosocket *sock);
 
 /**
  * set non-blocking
  */
-int fdevent_fcntl_set(fdevents *ev, iosocket *sock);
+LI_EXPORT int fdevent_fcntl_set(fdevents *ev, iosocket *sock);
 
-fdevent_revents *fdevent_revents_init(void);
-void fdevent_revents_reset(fdevent_revents *revents);
-void fdevent_revents_add(fdevent_revents *revents, int fd, int events);
-void fdevent_revents_free(fdevent_revents *revents);
+LI_EXPORT fdevent_revents* fdevent_revents_init(void);
+LI_EXPORT void fdevent_revents_reset(fdevent_revents *revents);
+LI_EXPORT void fdevent_revents_add(fdevent_revents *revents, int fd, int events);
+LI_EXPORT void fdevent_revents_free(fdevent_revents *revents);
 
-fdevent_revent *fdevent_revent_init(void);
-void fdevent_revent_free(fdevent_revent *revent);
+LI_EXPORT fdevent_revent* fdevent_revent_init(void);
+LI_EXPORT void fdevent_revent_free(fdevent_revent *revent);
 
 
 /**
  * plugin init
  */
-int fdevent_select_init(fdevents *ev);
-int fdevent_poll_init(fdevents *ev);
-int fdevent_linux_rtsig_init(fdevents *ev);
-int fdevent_linux_sysepoll_init(fdevents *ev);
-int fdevent_solaris_devpoll_init(fdevents *ev);
-int fdevent_freebsd_kqueue_init(fdevents *ev);
+LI_EXPORT int fdevent_select_init(fdevents *ev);
+LI_EXPORT int fdevent_poll_init(fdevents *ev);
+LI_EXPORT int fdevent_linux_rtsig_init(fdevents *ev);
+LI_EXPORT int fdevent_linux_sysepoll_init(fdevents *ev);
+LI_EXPORT int fdevent_solaris_devpoll_init(fdevents *ev);
+LI_EXPORT int fdevent_freebsd_kqueue_init(fdevents *ev);
 
 #endif
+
 
 

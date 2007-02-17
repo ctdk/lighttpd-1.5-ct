@@ -1,6 +1,8 @@
 #ifndef ARRAY_H
 #define ARRAY_H
 
+#include "settings.h"
+
 #include <stdlib.h>
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -47,7 +49,7 @@ typedef struct {
 	int count;
 } data_count;
 
-data_count *data_count_init(void);
+LI_EXPORT data_count* data_count_init(void);
 
 typedef struct {
 	DATA_UNSET;
@@ -55,8 +57,8 @@ typedef struct {
 	buffer *value;
 } data_string;
 
-data_string *data_string_init(void);
-data_string *data_response_init(void);
+LI_EXPORT data_string* data_string_init(void);
+LI_EXPORT data_string* data_response_init(void);
 
 typedef struct {
 	DATA_UNSET;
@@ -64,7 +66,7 @@ typedef struct {
 	array *value;
 } data_array;
 
-data_array *data_array_init(void);
+LI_EXPORT data_array* data_array_init(void);
 
 /**
  * possible compare ops in the configfile parser
@@ -126,7 +128,7 @@ struct _data_config {
 #endif
 };
 
-data_config *data_config_init(void);
+LI_EXPORT data_config* data_config_init(void);
 
 typedef struct {
 	DATA_UNSET;
@@ -134,22 +136,21 @@ typedef struct {
 	int value;
 } data_integer;
 
-data_integer *data_integer_init(void);
-
-array *array_init(void);
-array *array_init_array(array *a);
-void array_free(array *a);
-void array_reset(array *a);
-int array_insert_unique(array *a, data_unset *str);
-data_unset *array_pop(array *a);
-int array_print(array *a, int depth);
-data_unset *array_get_unused_element(array *a, data_type_t t);
-data_unset *array_get_element(array *a, const char *key, size_t key_len);
-void array_set_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
-void array_append_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
-data_unset *array_replace(array *a, data_unset *du);
-int array_strcasecmp(const char *a, size_t a_len, const char *b, size_t b_len);
-void array_print_indent(int depth);
-size_t array_get_max_key_length(array *a);
+LI_EXPORT data_integer* data_integer_init(void);
+LI_EXPORT array* array_init(void);
+LI_EXPORT array* array_init_array(array *a);
+LI_EXPORT void array_free(array *a);
+LI_EXPORT void array_reset(array *a);
+LI_EXPORT int array_insert_unique(array *a, data_unset *str);
+LI_EXPORT data_unset* array_pop(array *a);
+LI_EXPORT int array_print(array *a, int depth);
+LI_EXPORT data_unset* array_get_unused_element(array *a, data_type_t t);
+LI_EXPORT data_unset* array_get_element(array *a, const char *key, size_t key_len);
+LI_EXPORT void array_set_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
+LI_EXPORT void array_append_key_value(array *hdrs, const char *key, size_t key_len, const char *value, size_t val_len);
+LI_EXPORT data_unset* array_replace(array *a, data_unset *du);
+LI_EXPORT int array_strcasecmp(const char *a, size_t a_len, const char *b, size_t b_len);
+LI_EXPORT void array_print_indent(int depth);
+LI_EXPORT size_t array_get_max_key_length(array *a);
 
 #endif

@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include "fdevent.h"
 #include "buffer.h"
@@ -159,27 +160,71 @@ void fdnode_free(fdnode *fdn) {
 	free(fdn);
 }
 
+/* Unix file descriptors begin at zero for each process, but not so win32.
+The fdevent system uses the file descriptors as indexers into the fdarray, but we can't
+just do that on windows. Lazily, this is O(n) on the number of file descriptors/sockets, but
+with select's limit of 64 events, this is not really a bottleneck. For the sake of win32,
+it would be nice if all file/socket descriptors were references to IO devices in our own
+global table, instead of just using the system-provided fd directly.
+*/
+#ifdef _WIN32
+
+size_t fdevent_find_free_slot(fdevents *ev, int fd) {
+	size_t i;
+	for ( i = 0; i < ev->maxfds; i++ )
+	{
+		if ( ev->fdarray[i] == NULL )
+			return i;
+	}
+	fprintf(stderr, "no more free fdevent.fdarray slots\n");
+	SEGFAULT();
+	return -1;
+}
+
+size_t fdevent_find_slot(fdevents *ev, int fd) {
+	size_t i;
+	for ( i = 0; i < ev->maxfds; i++ )
+	{
+		if ( ev->fdarray[i] && ev->fdarray[i]->fd == fd ) return i;
+	}
+	DebugBreak();
+	return -1;
+}
+
+#else
+
+#define fdevent_find_free_slot( ev, fd )    (fd)
+#define fdevent_find_slot( ev, fd )         (fd)
+
+#endif
+
 int fdevent_register(fdevents *ev, iosocket *sock, fdevent_handler handler, void *ctx) {
 	fdnode *fdn;
+	size_t fda_ndx;
+
+	fda_ndx = fdevent_find_free_slot(ev, sock->fd);
 
 	fdn = fdnode_init();
 	fdn->handler = handler;
 	fdn->fd      = sock->fd;
 	fdn->ctx     = ctx;
 
-	ev->fdarray[sock->fd] = fdn;
+	ev->fdarray[fda_ndx] = fdn;
 
 	return 0;
 }
 
 int fdevent_unregister(fdevents *ev, iosocket *sock) {
 	fdnode *fdn;
-        if (!ev) return 0;
-	fdn = ev->fdarray[sock->fd];
+	size_t fda_ndx;
+	if (!ev) return 0;
+	fda_ndx = fdevent_find_slot(ev, sock->fd);
+
+	fdn = ev->fdarray[fda_ndx];
 
 	fdnode_free(fdn);
 
-	ev->fdarray[sock->fd] = NULL;
+	ev->fdarray[fda_ndx] = NULL;
 
 	return 0;
 }
@@ -209,13 +254,17 @@ int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *reven
 	fdevent_revents_reset(revents);
 
 	ev->get_revents(ev, event_count, revents);
+	assert(revents->used == event_count);
 
 	/* patch the event handlers */
 	for (i = 0; i < event_count; i++) {
+		size_t fda_ndx;
 		fdevent_revent *r = revents->ptr[i];
 
-		r->handler = ev->fdarray[r->fd]->handler;
-		r->context = ev->fdarray[r->fd]->ctx;
+		fda_ndx = fdevent_find_slot(ev, r->fd);
+
+		r->handler = ev->fdarray[fda_ndx]->handler;
+		r->context = ev->fdarray[fda_ndx]->ctx;
 	}
 
 	return 0;
@@ -238,4 +287,5 @@ int fdevent_fcntl_set(fdevents *ev, iosocket *sock) {
 	return 0;
 #endif
 }
+
 

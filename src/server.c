@@ -1,6 +1,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
+#else
+#ifdef HAVE_TIME_H
+#include <time.h>
+#endif
+#endif
 
 #include <string.h>
 #include <errno.h>
@@ -27,14 +34,14 @@
 #include "plugin.h"
 #include "joblist.h"
 #include "status_counter.h"
-#ifdef _WIN32
-/* use local getopt implementation */
-# undef HAVE_GETOPT_H
-#endif
+
+
 #ifdef HAVE_GETOPT_H
 #include <getopt.h>
 #else
-#include "getopt.h"
+#ifdef _WIN32
+#include "xgetopt.h"
+#endif
 #endif
 
 #ifdef HAVE_VALGRIND_VALGRIND_H
@@ -1057,15 +1064,10 @@ int main (int argc, char **argv, char **envp) {
 	while(-1 != (o = getopt(argc, argv, "f:m:hvVDpt"))) {
 		switch(o) {
 		case 'f':
-#ifdef _WIN32
-			/* evil HACK for windows, optarg is not set */
-			optarg = argv[optind-1];
-#endif
 			if (config_read(srv, optarg)) {
 				server_free(srv);
 				return -1;
 			}
-
 			break;
 		case 'm':
 			buffer_copy_string(srv->srvconf.modules_dir, optarg);
@@ -1577,7 +1579,6 @@ int main (int argc, char **argv, char **envp) {
 	srv->stat_queue = g_async_queue_new();
 	srv->joblist_queue = g_async_queue_new();
 	srv->aio_write_queue = g_async_queue_new();
-
 #ifdef HAVE_SYS_INOTIFY_H
 	if (srv->srvconf.stat_cache_engine == STAT_CACHE_ENGINE_INOTIFY) {
 		srv->stat_cache->sock->fd = inotify_init();
@@ -1589,6 +1590,7 @@ int main (int argc, char **argv, char **envp) {
 	joblist_queue_mutex = g_mutex_new();
 	joblist_queue_cond = g_cond_new();
 	g_mutex_lock(joblist_queue_mutex);
+#endif
 
 	/* check if we really need this thread 
 	 *
@@ -1630,6 +1632,7 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif
 
+#ifndef _WIN32
 	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
 
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {

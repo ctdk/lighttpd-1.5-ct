@@ -2,7 +2,11 @@
 #define _MOD_PROXY_CORE_BACKLOG_H_
 
 #include <sys/types.h>
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+#include <time.h>
+#endif
 
 typedef struct _proxy_request {
 	void *con; /* a pointer to the client-connection, (type: connection) */
@@ -53,4 +57,5 @@ proxy_request *proxy_request_init(void);
 void proxy_request_free(proxy_request *req);
 
 #endif
+
 

@@ -755,7 +755,7 @@ FREE_FUNC(mod_proxy_backend_ajp13_free) {
 	return HANDLER_GO_ON;
 }
 
-int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
+LI_EXPORT int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
 	data_string *ds;
 
 	p->version      = LIGHTTPD_VERSION_ID;
@@ -772,4 +772,5 @@ int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
 
 	return 0;
 }
+
 

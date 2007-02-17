@@ -40,6 +40,8 @@ documentation and/or software.
 #define POINTER unsigned char *
 #endif
 
+#include "settings.h"
+
 /* MD5 context. */
 typedef struct {
   UINT4 state[4];                                   /* state (ABCD) */
@@ -47,7 +49,9 @@ typedef struct {
   unsigned char buffer[64];                         /* input buffer */
 } MD5_CTX;
 
-void MD5_Init (MD5_CTX *);
-void MD5_Update (MD5_CTX *, const unsigned char *, unsigned int);
-void MD5_Final (unsigned char [16], MD5_CTX *);
+LI_EXPORT void MD5_Init (MD5_CTX *);
+LI_EXPORT void MD5_Update (MD5_CTX *, const unsigned char *, unsigned int);
+LI_EXPORT void MD5_Final (unsigned char [16], MD5_CTX *);
+
+
 

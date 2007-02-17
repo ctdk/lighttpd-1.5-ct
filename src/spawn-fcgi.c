@@ -12,6 +12,10 @@
 #include "config.h"
 #endif
 
+#include "base.h"
+#include "sys-socket.h"
+#include "sys-files.h"
+
 #ifdef HAVE_PWD_H
 #include <grp.h>
 #include <pwd.h>
@@ -19,6 +23,10 @@
 
 #ifdef HAVE_GETOPT_H
 #include <getopt.h>
+#else
+#ifdef _WIN32
+#include "xgetopt.h"
+#endif
 #endif
 
 #define FCGI_LISTENSOCK_FILENO 0
@@ -27,8 +35,6 @@
 # define UNIX_PATH_MAX 108
 #endif
 
-#include "sys-socket.h"
-#include "sys-files.h"
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>

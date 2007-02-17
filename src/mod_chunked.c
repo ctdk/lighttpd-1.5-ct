@@ -348,7 +348,7 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
-int mod_chunked_plugin_init(plugin *p) {
+LI_EXPORT int mod_chunked_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("chunked");
 

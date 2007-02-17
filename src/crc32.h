@@ -18,6 +18,8 @@
 #define uint32_t unsigned __int32
 #endif
 
-uint32_t generate_crc32c(char *string, size_t length);
+#include "settings.h"
+
+LI_EXPORT uint32_t generate_crc32c(char *string, size_t length);
 
 #endif

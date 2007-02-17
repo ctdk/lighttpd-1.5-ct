@@ -1,6 +1,8 @@
 #ifndef _BUFFER_H_
 #define _BUFFER_H_
 
+#include "settings.h"
+
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -43,62 +45,62 @@ typedef struct {
 	size_t size;
 } read_buffer;
 
-buffer_ptr *buffer_ptr_init(buffer_ptr_free_t freer);
-void buffer_ptr_free(buffer_ptr *b);
-void buffer_ptr_clear(buffer_ptr *b);
-void buffer_ptr_append(buffer_ptr *b, void *item);
-void *buffer_ptr_pop(buffer_ptr *b);
-void *buffer_ptr_top(buffer_ptr *b);
+LI_EXPORT buffer_ptr* buffer_ptr_init(buffer_ptr_free_t freer);
+LI_EXPORT void buffer_ptr_free(buffer_ptr *b);
+LI_EXPORT void buffer_ptr_clear(buffer_ptr *b);
+LI_EXPORT void buffer_ptr_append(buffer_ptr *b, void *item);
+LI_EXPORT void* buffer_ptr_pop(buffer_ptr *b);
+LI_EXPORT void* buffer_ptr_top(buffer_ptr *b);
 
-buffer_array* buffer_array_init(void);
-void buffer_array_free(buffer_array *b);
-void buffer_array_reset(buffer_array *b);
-buffer *buffer_array_append_get_buffer(buffer_array *b);
+LI_EXPORT buffer_array* buffer_array_init(void);
+LI_EXPORT void buffer_array_free(buffer_array *b);
+LI_EXPORT void buffer_array_reset(buffer_array *b);
+LI_EXPORT buffer* buffer_array_append_get_buffer(buffer_array *b);
 
-buffer* buffer_init(void);
-buffer* buffer_init_buffer(buffer *b);
-buffer* buffer_init_string(const char *str);
-void buffer_free(buffer *b);
-void buffer_reset(buffer *b);
+LI_EXPORT buffer* buffer_init(void);
+LI_EXPORT buffer* buffer_init_buffer(buffer *b);
+LI_EXPORT buffer* buffer_init_string(const char *str);
+LI_EXPORT void buffer_free(buffer *b);
+LI_EXPORT void buffer_reset(buffer *b);
 
-int buffer_prepare_copy(buffer *b, size_t size);
-int buffer_prepare_append(buffer *b, size_t size);
+LI_EXPORT int buffer_prepare_copy(buffer *b, size_t size);
+LI_EXPORT int buffer_prepare_append(buffer *b, size_t size);
 
-int buffer_copy_string(buffer *b, const char *s);
-int buffer_copy_string_len(buffer *b, const char *s, size_t s_len);
-int buffer_copy_string_buffer(buffer *b, const buffer *src);
-int buffer_copy_string_hex(buffer *b, const char *in, size_t in_len);
+LI_EXPORT int buffer_copy_string(buffer *b, const char *s);
+LI_EXPORT int buffer_copy_string_len(buffer *b, const char *s, size_t s_len);
+LI_EXPORT int buffer_copy_string_buffer(buffer *b, const buffer *src);
+LI_EXPORT int buffer_copy_string_hex(buffer *b, const char *in, size_t in_len);
 
-int buffer_copy_long(buffer *b, long val);
+LI_EXPORT int buffer_copy_long(buffer *b, long val);
 
-int buffer_copy_memory(buffer *b, const char *s, size_t s_len);
+LI_EXPORT int buffer_copy_memory(buffer *b, const char *s, size_t s_len);
 
-int buffer_append_string(buffer *b, const char *s);
-int buffer_append_string_len(buffer *b, const char *s, size_t s_len);
-int buffer_append_string_buffer(buffer *b, const buffer *src);
-int buffer_append_string_lfill(buffer *b, const char *s, size_t maxlen);
-int buffer_append_string_rfill(buffer *b, const char *s, size_t maxlen);
+LI_EXPORT int buffer_append_string(buffer *b, const char *s);
+LI_EXPORT int buffer_append_string_len(buffer *b, const char *s, size_t s_len);
+LI_EXPORT int buffer_append_string_buffer(buffer *b, const buffer *src);
+LI_EXPORT int buffer_append_string_lfill(buffer *b, const char *s, size_t maxlen);
+LI_EXPORT int buffer_append_string_rfill(buffer *b, const char *s, size_t maxlen);
 
-int buffer_append_long_hex(buffer *b, unsigned long len);
-int buffer_append_long(buffer *b, long val);
+LI_EXPORT int buffer_append_long_hex(buffer *b, unsigned long len);
+LI_EXPORT int buffer_append_long(buffer *b, long val);
 
 #if defined(SIZEOF_LONG) && (SIZEOF_LONG == SIZEOF_OFF_T)
 #define buffer_copy_off_t(x, y)		buffer_copy_long(x, y)
 #define buffer_append_off_t(x, y)	buffer_append_long(x, y)
 #else
-int buffer_copy_off_t(buffer *b, off_t val);
-int buffer_append_off_t(buffer *b, off_t val);
+LI_EXPORT int buffer_copy_off_t(buffer *b, off_t val);
+LI_EXPORT int buffer_append_off_t(buffer *b, off_t val);
 #endif
 
-int buffer_append_memory(buffer *b, const char *s, size_t s_len);
+LI_EXPORT int buffer_append_memory(buffer *b, const char *s, size_t s_len);
 
-char * buffer_search_string_len(buffer *b, const char *needle, size_t len);
+LI_EXPORT char* buffer_search_string_len(buffer *b, const char *needle, size_t len);
 
-int buffer_is_empty(buffer *b);
-int buffer_is_equal(buffer *a, buffer *b);
-int buffer_is_equal_right_len(buffer *a, buffer *b, size_t len);
-int buffer_is_equal_string(buffer *a, const char *s, size_t b_len);
-int buffer_caseless_compare(const char *a, size_t a_len, const char *b, size_t b_len);
+LI_EXPORT int buffer_is_empty(buffer *b);
+LI_EXPORT int buffer_is_equal(buffer *a, buffer *b);
+LI_EXPORT int buffer_is_equal_right_len(buffer *a, buffer *b, size_t len);
+LI_EXPORT int buffer_is_equal_string(buffer *a, const char *s, size_t b_len);
+LI_EXPORT int buffer_caseless_compare(const char *a, size_t a_len, const char *b, size_t b_len);
 
 typedef enum {
 	ENCODING_UNSET,
@@ -109,24 +111,24 @@ typedef enum {
 	ENCODING_HEX      /* encode string as hex */
 } buffer_encoding_t;
 
-int buffer_append_string_encoded(buffer *b, const char *s, size_t s_len, buffer_encoding_t encoding);
+LI_EXPORT int buffer_append_string_encoded(buffer *b, const char *s, size_t s_len, buffer_encoding_t encoding);
 
-int buffer_urldecode_path(buffer *url);
-int buffer_urldecode_query(buffer *url);
-int buffer_path_simplify(buffer *dest, buffer *src);
+LI_EXPORT int buffer_urldecode_path(buffer *url);
+LI_EXPORT int buffer_urldecode_query(buffer *url);
+LI_EXPORT int buffer_path_simplify(buffer *dest, buffer *src);
 
-int buffer_to_lower(buffer *b);
-int buffer_to_upper(buffer *b);
+LI_EXPORT int buffer_to_lower(buffer *b);
+LI_EXPORT int buffer_to_upper(buffer *b);
 
 /** deprecated */
-int ltostr(char *buf, long val);
-char hex2int(unsigned char c);
-char int2hex(char i);
+LI_EXPORT int ltostr(char *buf, long val);
+LI_EXPORT char hex2int(unsigned char c);
+LI_EXPORT char int2hex(char i);
 
-int light_isdigit(int c);
-int light_isxdigit(int c);
-int light_isalpha(int c);
-int light_isalnum(int c);
+LI_EXPORT int light_isdigit(int c);
+LI_EXPORT int light_isxdigit(int c);
+LI_EXPORT int light_isalpha(int c);
+LI_EXPORT int light_isalnum(int c);
 
 #define BUFFER_CTYPE_FUNC(type) int buffer_is##type(buffer *b);
 BUFFER_CTYPE_FUNC(digit)
@@ -160,4 +162,5 @@ buffer *buffer_pool_get(buffer_pool *bp);
 void buffer_pool_append(buffer_pool *bp, buffer *);
 
 #endif
+
 

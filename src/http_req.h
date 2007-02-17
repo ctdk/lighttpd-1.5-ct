@@ -20,10 +20,10 @@ typedef struct {
 	buffer_pool *unused_buffers;
 } http_req_ctx_t;
 
-http_req *http_request_init(void);
-void http_request_free(http_req *req);
-void http_request_reset(http_req *req);
+LI_EXPORT http_req * http_request_init(void);
+LI_EXPORT void http_request_free(http_req *req);
+LI_EXPORT void http_request_reset(http_req *req);
 
-parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *http_request);
+LI_EXPORT parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *http_request);
 
 #endif

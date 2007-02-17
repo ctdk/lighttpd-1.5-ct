@@ -1070,7 +1070,7 @@ URIHANDLER_FUNC(mod_ssi_physical_path) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
-int mod_ssi_plugin_init(plugin *p) {
+LI_EXPORT int mod_ssi_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("ssi");
 

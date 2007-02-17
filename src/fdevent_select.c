@@ -25,7 +25,12 @@ static int fdevent_select_reset(fdevents *ev) {
 	FD_ZERO(&(ev->select_set_read));
 	FD_ZERO(&(ev->select_set_write));
 	FD_ZERO(&(ev->select_set_error));
+#ifdef _WIN32
+	FD_ZERO(&(ev->select_set_all));
+#endif
+#ifndef _WIN32
 	ev->select_max_fd = -1;
+#endif
 
 	return 0;
 }
@@ -36,6 +41,9 @@ static int fdevent_select_event_del(fdevents *ev, iosocket *sock) {
 	FD_CLR(sock->fd, &(ev->select_set_read));
 	FD_CLR(sock->fd, &(ev->select_set_write));
 	FD_CLR(sock->fd, &(ev->select_set_error));
+#ifdef _WIN32
+	FD_CLR(sock->fd, &(ev->select_set_all));
+#endif
 
 	/* mark the fdevent as deleted */
 	sock->fde_ndx = -1;
@@ -46,6 +54,7 @@ static int fdevent_select_event_del(fdevents *ev, iosocket *sock) {
 static int fdevent_select_event_add(fdevents *ev, iosocket *sock, int events) {
 	/* we should be protected by max-fds, but you never know */
 #ifndef _WIN32
+	u_int i;
 	assert(sock->fd < FD_SETSIZE);
 #endif
 
@@ -60,7 +69,11 @@ static int fdevent_select_event_add(fdevents *ev, iosocket *sock, int events) {
 	FD_SET(sock->fd, &(ev->select_set_error));
 
 	/* we need this for the poll */
+#ifdef _WIN32
+	FD_SET(sock->fd, &(ev->select_set_all));
+#else
 	if (sock->fd > ev->select_max_fd) ev->select_max_fd = sock->fd;
+#endif
 
 	/* mark fd as added */
 	sock->fde_ndx = sock->fd;
@@ -70,6 +83,12 @@ static int fdevent_select_event_add(fdevents *ev, iosocket *sock, int events) {
 
 static int fdevent_select_poll(fdevents *ev, int timeout_ms) {
 	struct timeval tv;
+#ifndef _WIN32
+	int max_ev = ev->select_max_fd + 1;
+#else
+	// windows ignores this
+	int max_ev = 0;
+#endif
 
 	tv.tv_sec =  timeout_ms / 1000;
 	tv.tv_usec = (timeout_ms % 1000) * 1000;
@@ -78,7 +97,7 @@ static int fdevent_select_poll(fdevents *ev, int timeout_ms) {
 	ev->select_write = ev->select_set_write;
 	ev->select_error = ev->select_set_error;
 
-	return select(ev->select_max_fd + 1, &(ev->select_read), &(ev->select_write), &(ev->select_error), &tv);
+	return select(max_ev, &(ev->select_read), &(ev->select_write), &(ev->select_error), &tv);
 }
 
 /**
@@ -87,24 +106,36 @@ static int fdevent_select_poll(fdevents *ev, int timeout_ms) {
 static int fdevent_select_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
 
 	int ndx = 0;
+#ifndef _WIN32
+	int top = ev->select_max_fd;
+#else
+	int top = ev->select_set_all.fd_count; // FD_SETSIZE;
+#endif
 
 	UNUSED(event_count);
 
-	for (ndx = 0; ndx < ev->select_max_fd; ndx++) {
+	for (ndx = 0; ndx < top; ndx++) {
 		int events = 0;
 
-		if (FD_ISSET(ndx, &(ev->select_read))) {
+#ifdef _WIN32
+		int fdx = ev->select_set_all.fd_array[ndx];
+		if ( fdx <= 0 ) continue;
+#else
+		int fdx = ndx;
+#endif
+
+		if (FD_ISSET(fdx, &(ev->select_read))) {
 			events |= FDEVENT_IN;
 		}
-		if (FD_ISSET(ndx, &(ev->select_write))) {
+		if (FD_ISSET(fdx, &(ev->select_write))) {
 			events |= FDEVENT_OUT;
 		}
-		if (FD_ISSET(ndx, &(ev->select_error))) {
+		if (FD_ISSET(fdx, &(ev->select_error))) {
 			events |= FDEVENT_ERR;
 		}
 
 		if (events) {
-			fdevent_revents_add(revents, ndx, events);
+			fdevent_revents_add(revents, fdx, events);
 		}
 	}
 

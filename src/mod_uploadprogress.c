@@ -546,10 +546,10 @@ TRIGGER_FUNC(mod_uploadprogress_trigger)
 
 	return HANDLER_GO_ON;
 }
-		
+
 /* this function is called at dlopen() time and inits the callbacks */
 
-int mod_uploadprogress_plugin_init(plugin *p) {
+LI_EXPORT int mod_uploadprogress_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("uploadprogress");
 

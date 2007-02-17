@@ -1,7 +1,11 @@
 #ifndef _MOD_PROXY_CORE_POOL_H_
 #define _MOD_PROXY_CORE_POOL_H_
 
+#ifndef _WIN32
 #include <sys/time.h>
+#else
+#include <time.h>
+#endif
 
 #include "iosocket.h"
 #include "array-static.h"
@@ -57,4 +61,5 @@ proxy_connection * proxy_connection_init(void);
 void proxy_connection_free(proxy_connection *pool);
 
 #endif
+
 

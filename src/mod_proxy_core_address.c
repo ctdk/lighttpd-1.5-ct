@@ -179,6 +179,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 		buffer_prepare_copy(a->name, 128);
 
 		switch (cur->ai_family) {
+#ifdef HAVE_IPV6
 		case AF_INET6:
 			a->name->ptr[0] = '[';
 			inet_ntop(cur->ai_family, &(a->addr.ipv6.sin6_addr), a->name->ptr + 1, a->name->size - 2);
@@ -186,6 +187,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 			buffer_append_string(a->name, "]:");
 			buffer_append_long(a->name, ntohs(a->addr.ipv6.sin6_port));
 			break;
+#endif
 		case AF_INET:
 			inet_ntop(cur->ai_family, &(a->addr.ipv4.sin_addr), a->name->ptr, a->name->size - 1);
 			a->name->used = strlen(a->name->ptr) + 1;

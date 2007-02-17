@@ -54,7 +54,7 @@ int stream_open(stream *f, buffer *fn) {
 			FILE_ATTRIBUTE_READONLY,
 			NULL);
 
-	if (!fh) return -1;
+	if (fh == INVALID_HANDLE_VALUE) return -1;
 
 	mh = CreateFileMapping( fh,
 			NULL,

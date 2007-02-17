@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "sys-strings.h"
 #include "inet_ntop_cache.h"
 #include "mod_proxy_core.h"
 #include "mod_proxy_core_protocol.h"
@@ -654,7 +655,7 @@ FREE_FUNC(mod_proxy_backend_fastcgi_free) {
 	return HANDLER_GO_ON;
 }
 
-int mod_proxy_backend_fastcgi_plugin_init(plugin *p) {
+LI_EXPORT int mod_proxy_backend_fastcgi_plugin_init(plugin *p) {
 	data_string *ds;
 
 	p->version      = LIGHTTPD_VERSION_ID;
@@ -671,4 +672,5 @@ int mod_proxy_backend_fastcgi_plugin_init(plugin *p) {
 
 	return 0;
 }
+
 

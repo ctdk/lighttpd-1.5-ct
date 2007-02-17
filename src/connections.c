@@ -1403,7 +1403,7 @@ int connection_state_machine(server *srv, connection *con) {
 							"CLOSE-read()", con->sock->fd, b);
 
 					/* */
-					read(con->sock->fd, buf, sizeof(buf));
+					sockread(con->sock->fd, buf, sizeof(buf));
 				} else {
 					/* nothing to read */
 

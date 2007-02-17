@@ -1,8 +1,10 @@
 #ifndef _SYS_FILES_H_
 #define _SYS_FILES_H_
 
-#define DIR_SEPERATOR_UNIX '/'
-#define DIR_SEPERATOR_WIN '\\'
+#define DIR_SEPERATOR_UNIX      '/'
+#define DIR_SEPERATOR_UNIX_STR  "/"
+#define DIR_SEPERATOR_WIN       '\\'
+#define DIR_SEPERATOR_WIN_STR   "\\"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -11,7 +13,8 @@
 
 #include "buffer.h"
 
-#define DIR_SEPERATOR DIR_SEPERATOR_WIN
+#define DIR_SEPERATOR     DIR_SEPERATOR_WIN
+#define DIR_SEPERATOR_STR DIR_SEPERATOR_WIN_STR
 
 #define __S_ISTYPE(mode, mask)  (((mode) & _S_IFMT) == (mask))
 
@@ -23,8 +26,11 @@
 #define S_ISLNK(mode)    0
 
 #define lstat stat
-#define mkstemp mktemp
+#define mkstemp(x) open(mktemp(x), O_RDWR)
 #define mkdir(x, y) mkdir(x)
+
+/* retrieve the most recent network, or general libc error */
+#define light_sock_errno() (WSAGetLastError())
 
 struct dirent {
     const char *d_name;
@@ -36,18 +42,21 @@ typedef struct {
     struct dirent dent;
 } DIR;
 
-DIR *opendir(const char *dn);
-struct dirent *readdir(DIR *d);
-void closedir(DIR *d);
+LI_EXPORT DIR * opendir(const char *dn);
+LI_EXPORT struct dirent * readdir(DIR *d);
+LI_EXPORT void closedir(DIR *d);
 
-buffer *filename_unix2local(buffer *b);
-buffer *pathname_unix2local(buffer *b);
+LI_EXPORT buffer * filename_unix2local(buffer *b);
+LI_EXPORT buffer * pathname_unix2local(buffer *b);
 
 #else
 #include <unistd.h>
 #include <dirent.h>
 
-#define DIR_SEPERATOR DIR_SEPERATOR_UNIX
+#define DIR_SEPERATOR     DIR_SEPERATOR_UNIX
+#define DIR_SEPERATOR_STR DIR_SEPERATOR_UNIX_STR
+
+#define light_sock_errno() (errno)
 
 #define filename_unix2local(x) /* (x) */
 #define pathname_unix2local(x) /* (x) */
@@ -68,4 +77,5 @@ buffer *pathname_unix2local(buffer *b);
 #endif
 
 #endif
+
 

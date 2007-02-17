@@ -2,18 +2,22 @@
 
 #ifdef USE_OPENSSL
 #include <sys/types.h>
-#include <sys/socket.h>
+#include "sys-socket.h"
 #include <sys/stat.h>
 #include <sys/time.h>
+#ifndef _WIN32
 #include <sys/resource.h>
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <unistd.h>
+#include <netdb.h>
+#else
+#include <sys/types.h>
+#endif
 
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -31,10 +35,11 @@ NETWORK_BACKEND_READ(openssl) {
 	off_t len;
 	int read_something = 0;
 	off_t max_read = 256 * 1024;
+	off_t start_bytes_in = cq->bytes_in;
 
 	UNUSED(srv);
 	UNUSED(con);
-	off_t start_bytes_in = cq->bytes_in;
+
 	do {
 		b = chunkqueue_get_append_buffer(cq);
 		buffer_prepare_copy(b, 8192 + 12); /* ssl-chunk-size is 8kb */

@@ -5,6 +5,7 @@
 #define strcasecmp stricmp
 #define strncasecmp strnicmp
 #define strtoll(p, e, b) _strtoi64(p, e, b)
+#define strtoull _strtoui64
 #endif
 
 #endif

@@ -89,7 +89,7 @@ SETDEFAULTS_FUNC(mod_redirect_set_defaults) {
 		plugin_config *s;
 		size_t j;
 		array *ca;
-		data_array *da = (data_array *)du;
+		data_array *da = NULL;
 
 		s = calloc(1, sizeof(plugin_config));
 		s->redirect   = pcre_keyvalue_buffer_init();
@@ -213,7 +213,7 @@ static handler_t mod_redirect_uri_handler(server *srv, connection *con, void *p_
 }
 
 
-int mod_redirect_plugin_init(plugin *p) {
+LI_EXPORT int mod_redirect_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("redirect");
 

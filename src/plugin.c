@@ -192,11 +192,8 @@ PLUGIN_STATIC(mod_magnet),
 
 int plugins_load(server *srv) {
 	plugin *p;
-#ifdef _WIN32
-	FARPROC init;
-#else
 	int (*init)(plugin *pl);
-#endif
+
 	const char *error;
 	size_t i, j, k;
 
@@ -222,7 +219,7 @@ int plugins_load(server *srv) {
 #else
 		buffer_copy_string_buffer(srv->tmp_buf, srv->srvconf.modules_dir);
 
-		buffer_append_string(srv->tmp_buf, "/");
+		if (strlen(srv->srvconf.modules_dir->ptr) != 0) buffer_append_string(srv->tmp_buf, DIR_SEPERATOR_STR);
 		buffer_append_string(srv->tmp_buf, modules);
 #if defined(_WIN32) || defined(__CYGWIN__)
 		buffer_append_string(srv->tmp_buf, ".dll");
@@ -266,7 +263,7 @@ int plugins_load(server *srv) {
 		buffer_append_string(srv->tmp_buf, "_plugin_init");
 
 #ifdef _WIN32
-		init = GetProcAddress(p->lib, srv->tmp_buf->ptr);
+		init = (int (*)(plugin *pl)) GetProcAddress(p->lib, srv->tmp_buf->ptr);
 
 		if (init == NULL)  {
 			LPVOID lpMsgBuf;

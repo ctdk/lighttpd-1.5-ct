@@ -1,19 +1,28 @@
-#ifndef WIN32_SOCKET_H
-#define WIN32_SOCKET_H
+#ifndef SYS_SOCKET_H
+#define SYS_SOCKET_H
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #ifdef _WIN32
-
+#ifndef FD_SETSIZE
+/* By default this is 64 */
+#define FD_SETSIZE 4096
+#endif
 #include <winsock2.h>
+#include <ws2tcpip.h>
+//#include <wspiapi.h>
+//#define HAVE_IPV6 -- not until we've resolved the inet_ntop issue.
 
 #define ECONNRESET WSAECONNRESET
 #define EINPROGRESS WSAEINPROGRESS
 #define EALREADY WSAEALREADY
 #define ENOTCONN WSAENOTCONN
 #define EWOULDBLOCK WSAEWOULDBLOCK
+#define ECONNABORTED WSAECONNABORTED
+#define ECONNREFUSED WSAECONNREFUSED
+#define EHOSTUNREACH WSAEHOSTUNREACH
 #define ioctl ioctlsocket
 #define hstrerror(x) ""
 #define STDIN_FILENO 0
@@ -21,6 +30,9 @@
 #define STDERR_FILENO 2
 #define ssize_t int
 
+#define sockread( fd, buf, bytes ) recv( fd, buf, bytes, 0 )
+
+LI_EXPORT const char * inet_ntop(int af, const void *src, char *dst, socklen_t cnt);
 int inet_aton(const char *cp, struct in_addr *inp);
 #define HAVE_INET_ADDR
 #undef HAVE_INET_ATON
@@ -39,6 +51,7 @@ int inet_aton(const char *cp, struct in_addr *inp);
         (sizeof(*(su)) - sizeof((su)->sun_path) + strlen((su)->sun_path))
 #endif
 
+#define sockread( fd, buf, bytes ) read( fd, buf, bytes )
 #define closesocket(x) close(x)
 
 #include <netdb.h>

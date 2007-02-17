@@ -1,6 +1,7 @@
 /*
  * make sure _GNU_SOURCE is defined
  */
+#include "settings.h"
 #include "network_backends.h"
 #ifdef USE_GTHREAD
 #include <sys/types.h>

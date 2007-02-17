@@ -59,32 +59,32 @@ typedef struct {
 	off_t  bytes_in, bytes_out;
 } chunkqueue;
 
-chunkqueue *chunkqueue_init(void);
-int chunkqueue_set_tempdirs(chunkqueue *c, array *tempdirs);
-int chunkqueue_append_file(chunkqueue *c, buffer *fn, off_t offset, off_t len);
-int chunkqueue_append_mem(chunkqueue *c, const char *mem, size_t len);
-int chunkqueue_append_buffer(chunkqueue *c, buffer *mem);
-int chunkqueue_prepend_buffer(chunkqueue *c, buffer *mem);
+LI_EXPORT chunkqueue* chunkqueue_init(void);
+LI_EXPORT int chunkqueue_set_tempdirs(chunkqueue *c, array *tempdirs);
+LI_EXPORT int chunkqueue_append_file(chunkqueue *c, buffer *fn, off_t offset, off_t len);
+LI_EXPORT int chunkqueue_append_mem(chunkqueue *c, const char *mem, size_t len);
+LI_EXPORT int chunkqueue_append_buffer(chunkqueue *c, buffer *mem);
+LI_EXPORT int chunkqueue_prepend_buffer(chunkqueue *c, buffer *mem);
 
-buffer * chunkqueue_get_append_buffer(chunkqueue *c);
-buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
-chunk * chunkqueue_get_append_tempfile(chunkqueue *cq);
-int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in);
-int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c);
-int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len);
-int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in);
-int chunkqueue_skip(chunkqueue *cq, off_t skip);
-void chunkqueue_remove_empty_last_chunk(chunkqueue *cq);
+LI_EXPORT buffer * chunkqueue_get_append_buffer(chunkqueue *c);
+LI_EXPORT buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
+LI_EXPORT chunk * chunkqueue_get_append_tempfile(chunkqueue *cq);
+LI_EXPORT int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in);
+LI_EXPORT int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c);
+LI_EXPORT int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len);
+LI_EXPORT int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in);
+LI_EXPORT int chunkqueue_skip(chunkqueue *cq, off_t skip);
+LI_EXPORT void chunkqueue_remove_empty_last_chunk(chunkqueue *cq);
 
-int chunkqueue_remove_finished_chunks(chunkqueue *cq);
+LI_EXPORT int chunkqueue_remove_finished_chunks(chunkqueue *cq);
 
-off_t chunkqueue_length(chunkqueue *c);
-off_t chunkqueue_written(chunkqueue *c);
-void chunkqueue_free(chunkqueue *c);
-void chunkqueue_reset(chunkqueue *c);
+LI_EXPORT off_t chunkqueue_length(chunkqueue *c);
+LI_EXPORT off_t chunkqueue_written(chunkqueue *c);
+LI_EXPORT void chunkqueue_free(chunkqueue *c);
+LI_EXPORT void chunkqueue_reset(chunkqueue *c);
 
-int chunkqueue_is_empty(chunkqueue *c);
+LI_EXPORT int chunkqueue_is_empty(chunkqueue *c);
 
-void chunkqueue_print(chunkqueue *cq);
+LI_EXPORT void chunkqueue_print(chunkqueue *cq);
 
 #endif

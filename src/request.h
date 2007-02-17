@@ -4,6 +4,6 @@
 #include "base.h"
 #include "http_req.h"
 
-int http_request_parse(server *srv, connection *con, http_req *req);
+LI_EXPORT int http_request_parse(server *srv, connection *con, http_req *req);
 
 #endif

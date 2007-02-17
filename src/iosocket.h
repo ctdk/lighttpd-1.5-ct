@@ -18,6 +18,8 @@
 # include <openssl/ssl.h>
 #endif
 
+#include "settings.h"
+
 typedef enum {
 	IOSOCKET_TYPE_UNSET,
 	IOSOCKET_TYPE_SOCKET,
@@ -38,7 +40,7 @@ typedef struct {
 	iosocket_t type; /**< sendfile on solaris doesn't work on pipes */
 } iosocket;
 
-iosocket *iosocket_init(void);
-void iosocket_free(iosocket *sock);
+LI_EXPORT iosocket * iosocket_init(void);
+LI_EXPORT void iosocket_free(iosocket *sock);
 
 #endif

@@ -1,17 +1,20 @@
 #ifndef _PLUGIN_H_
 #define _PLUGIN_H_
 
+#include "settings.h"
 #include "base.h"
 #include "buffer.h"
 
+
+
 #define SERVER_FUNC(x) \
-		static handler_t x(server *srv, void *p_d)
+		LI_EXPORT handler_t x(server *srv, void *p_d)
 
 #define CONNECTION_FUNC(x) \
-		static handler_t x(server *srv, connection *con, void *p_d)
+		LI_EXPORT handler_t x(server *srv, connection *con, void *p_d)
 
 #define INIT_FUNC(x) \
-		static void *x(server *srv)
+		LI_EXPORT void * x(server *srv)
 /*
  * The PATCH_OPTION() macro is used in the patch_connection() functions
  * of the modules to update the config object for the current request.
@@ -74,38 +77,38 @@ typedef struct {
 	array *required_plugins;
 } plugin;
 
-int plugins_load(server *srv);
-void plugins_free(server *srv);
+LI_EXPORT int plugins_load(server *srv);
+LI_EXPORT void plugins_free(server *srv);
 
-handler_t plugins_call_handle_uri_raw(server *srv, connection *con);
-handler_t plugins_call_handle_uri_clean(server *srv, connection *con);
-handler_t plugins_call_handle_docroot(server *srv, connection *con);
-handler_t plugins_call_handle_physical(server *srv, connection *con);
-handler_t plugins_call_handle_start_backend(server *srv, connection *con);
-handler_t plugins_call_handle_send_request_content(server *srv, connection *con);
-handler_t plugins_call_handle_response_header(server *srv, connection *con);
-handler_t plugins_call_handle_read_response_content(server *srv, connection *con);
-handler_t plugins_call_handle_filter_response_content(server *srv, connection *con);
-handler_t plugins_call_handle_response_done(server *srv, connection *con);
-handler_t plugins_call_handle_connection_close(server *srv, connection *con);
-handler_t plugins_call_handle_joblist(server *srv, connection *con);
-handler_t plugins_call_connection_reset(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_uri_raw(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_uri_clean(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_docroot(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_physical(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_start_backend(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_send_request_content(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_response_header(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_read_response_content(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_filter_response_content(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_response_done(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_connection_close(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_handle_joblist(server *srv, connection *con);
+LI_EXPORT handler_t plugins_call_connection_reset(server *srv, connection *con);
 
-handler_t plugins_call_handle_trigger(server *srv);
-handler_t plugins_call_handle_sighup(server *srv);
+LI_EXPORT handler_t plugins_call_handle_trigger(server *srv);
+LI_EXPORT handler_t plugins_call_handle_sighup(server *srv);
 
-handler_t plugins_call_init(server *srv);
-handler_t plugins_call_set_defaults(server *srv);
-handler_t plugins_call_cleanup(server *srv);
+LI_EXPORT handler_t plugins_call_init(server *srv);
+LI_EXPORT handler_t plugins_call_set_defaults(server *srv);
+LI_EXPORT handler_t plugins_call_cleanup(server *srv);
 
-int config_insert_values_global(server *srv, array *ca, const config_values_t *cv);
-int config_insert_values_internal(server *srv, array *ca, const config_values_t *cv);
-int config_setup_connection(server *srv, connection *con);
-int config_patch_connection(server *srv, connection *con, comp_key_t comp);
-int config_check_cond(server *srv, connection *con, data_config *dc);
-int config_append_cond_match_buffer(connection *con, data_config *dc, buffer *buf, int n);
-int config_exec_pcre_keyvalue_buffer(connection *con, pcre_keyvalue_buffer *kvb, data_config *context, buffer *match_buf, buffer *result);
+LI_EXPORT int config_insert_values_global(server *srv, array *ca, const config_values_t *cv);
+LI_EXPORT int config_insert_values_internal(server *srv, array *ca, const config_values_t *cv);
+LI_EXPORT int config_setup_connection(server *srv, connection *con);
+LI_EXPORT int config_patch_connection(server *srv, connection *con, comp_key_t comp);
+LI_EXPORT int config_check_cond(server *srv, connection *con, data_config *dc);
+LI_EXPORT int config_append_cond_match_buffer(connection *con, data_config *dc, buffer *buf, int n);
+LI_EXPORT int config_exec_pcre_keyvalue_buffer(connection *con, pcre_keyvalue_buffer *kvb, data_config *context, buffer *match_buf, buffer *result);
 
-void *plugin_get_config(server *srv, const char *name);
+LI_EXPORT void* plugin_get_config(server *srv, const char *name);
 
 #endif

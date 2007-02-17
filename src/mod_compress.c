@@ -735,7 +735,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	return HANDLER_GO_ON;
 }
 
-int mod_compress_plugin_init(plugin *p) {
+LI_EXPORT int mod_compress_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("compress");
 

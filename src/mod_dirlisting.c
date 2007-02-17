@@ -623,7 +623,7 @@ static int http_list_directory(server *srv, connection *con, plugin_data *p, buf
 
 #ifdef _WIN32
 	/* append *.* to the path */
-	buffer_append_string(path, "*.*");
+	buffer_append_string(p->path, "*.*");
 #endif
 
 	if (NULL == (dp = opendir(p->path->ptr))) {
@@ -911,7 +911,7 @@ URIHANDLER_FUNC(mod_dirlisting_subrequest) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
-int mod_dirlisting_plugin_init(plugin *p) {
+LI_EXPORT int mod_dirlisting_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("dirlisting");
 

@@ -91,6 +91,8 @@
 * win32 only recv/send
 */
 #ifdef _WIN32
+/* Not yet ready for gthread */
+#undef USE_GTHREAD
 # define USE_WIN32_SEND
 /* wait for async-io support
 # define USE_WIN32_TRANSMITFILE
@@ -108,5 +110,46 @@ typedef enum { HANDLER_UNSET,
 		HANDLER_ERROR,
 		HANDLER_WAIT_FOR_FD
 } handler_t;
+
+/* Shared library support */
+#ifdef _WIN32
+  #define LI_IMPORT __declspec(dllimport)
+  #define LI_EXPORT __declspec(dllexport)
+  #define LI_DLLLOCAL
+  #define LI_DLLPUBLIC
+#else
+  #define LI_IMPORT
+  #ifdef GCC_HASCLASSVISIBILITY
+    #define LI_EXPORT __attribute__ ((visibility("default")))
+    #define LI_DLLLOCAL __attribute__ ((visibility("hidden")))
+    #define LI_DLLPUBLIC __attribute__ ((visibility("default")))
+  #else
+    #define LI_EXPORT
+    #define LI_DLLLOCAL
+    #define LI_DLLPUBLIC
+  #endif
+#endif
+
+/* Define LI_API for DLL builds */
+#ifdef LI_DLL
+  #ifdef LI_DLL_EXPORTS
+    #define LI_API LI_EXPORT
+  #else
+    #define LI_API LI_IMPORT
+  #endif
+#else
+  #define LI_API
+#endif
+
+/* Throwable classes must always be visible on GCC in all binaries */
+#ifdef _WIN32
+  #define LI_EXCEPTIONAPI(api) api
+#elif defined(GCC_HASCLASSVISIBILITY)
+  #define LI_EXCEPTIONAPI(api) LI_EXPORT
+#else
+  #define LI_EXCEPTIONAPI(api)
+#endif
+
+
 
 #endif

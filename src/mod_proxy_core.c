@@ -4,6 +4,13 @@
 #include <errno.h>
 #include <ctype.h>
 #include <assert.h>
+#include <fcntl.h>
+#include "base.h"
+#include "sys-strings.h"
+
+#include "buffer.h"
+#include "array.h"
+#include "log.h"
 
 #include "plugin.h"
 #include "joblist.h"
@@ -888,6 +895,10 @@ handler_t proxy_stream_encode_decode(server *srv, proxy_session *sess) {
 
 handler_t proxy_connection_connect(proxy_connection *con) {
 	int fd;
+#ifdef _WIN32
+	int io_ctl = 1;
+	int win_err = 0;
+#endif
 
 	if (-1 == (fd = socket(con->address->addr.plain.sa_family, SOCK_STREAM, 0))) {
 		switch (errno) {
@@ -899,20 +910,27 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 		}
 	}
 
+#ifdef O_NONBLOCK
 	fcntl(fd, F_SETFL, O_NONBLOCK | O_RDWR);
+#elif defined _WIN32
+	ioctlsocket(fd, FIONBIO, &io_ctl);
+#endif
 
 	con->sock->fd = fd;
 	con->sock->fde_ndx = -1;
 	con->sock->type = IOSOCKET_TYPE_SOCKET;
 
 	if (-1 == connect(fd, &(con->address->addr.plain), con->address->addrlen)) {
-		switch(errno) {
+		switch(light_sock_errno()) {
 		case EINPROGRESS:
 		case EALREADY:
 		case EINTR:
+#ifdef _WIN32
+		case EWOULDBLOCK:
+#endif
 			return HANDLER_WAIT_FOR_EVENT;
 		default:
-			close(fd);
+			closesocket(fd);
 			con->sock->fd = -1;
 
 			ERROR("connect(%s) failed: %s (%d)", 
@@ -951,7 +969,7 @@ static handler_t proxy_handle_fdevent_idle(void *s, void *ctx, int revents) {
 			/* close + unregister have to be in the same call,
 			 * otherwise we get a events for a re-opened fd */
 
-			read(proxy_con->sock->fd, buf, sizeof(buf));
+			sockread(proxy_con->sock->fd, buf, sizeof(buf));
 
 			fdevent_event_del(srv->ev, proxy_con->sock);
 
@@ -2347,7 +2365,7 @@ TRIGGER_FUNC(mod_proxy_trigger) {
 	return HANDLER_GO_ON;
 }
 
-int mod_proxy_core_plugin_init(plugin *p) {
+LI_EXPORT int mod_proxy_core_plugin_init(plugin *p) {
 	p->version      = LIGHTTPD_VERSION_ID;
 	p->name         = buffer_init_string("mod_proxy_core");
 

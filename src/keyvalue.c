@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "base.h"
 #include "server.h"
 #include "keyvalue.h"
 

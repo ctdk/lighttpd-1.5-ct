@@ -1285,6 +1285,8 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	hctx->fl = fl;
 	hctx->in = fl->prev->cq;
 	hctx->out = fl->cq;
+    
+	rc = -1;
 
 	/* select best matching encoding */
 	if (matched_encodings & HTTP_ACCEPT_ENCODING_BZIP2) {
@@ -1294,6 +1296,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 		rc = stream_bzip2_init(srv, con, hctx);
 #endif
 	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_GZIP) {
+#ifdef USE_ZLIB
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_GZIP;
 		compression_name = ENCODING_NAME_GZIP;
 		rc = stream_deflate_init(srv, con, hctx);
@@ -1301,6 +1304,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 		hctx->compression_type = HTTP_ACCEPT_ENCODING_DEFLATE;
 		compression_name = ENCODING_NAME_DEFLATE;
 		rc = stream_deflate_init(srv, con, hctx);
+#endif
 	}
 	if(rc == -1) {
 		log_error_write(srv, __FILE__, __LINE__, "s",

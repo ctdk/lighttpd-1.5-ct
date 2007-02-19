@@ -94,7 +94,9 @@
 * win32 only recv/send
 */
 #ifdef _WIN32
-/* Not yet ready for gthread */
+
+# define WIN32_LEAN_AND_MEAN
+# define NOGDI
 # define USE_WIN32_SEND
 /* wait for async-io support
 # define USE_WIN32_TRANSMITFILE

@@ -11,12 +11,12 @@
 #include "network.h"
 
 #define NETWORK_BACKEND_WRITE_CHUNK(x) \
-    network_status_t network_write_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq, chunk *c)
+    LI_EXPORT network_status_t network_write_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq, chunk *c)
 
 #define NETWORK_BACKEND_WRITE(x) \
-    network_status_t network_write_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq)
+    LI_EXPORT network_status_t network_write_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq)
 #define NETWORK_BACKEND_READ(x) \
-    network_status_t network_read_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq)
+    LI_EXPORT network_status_t network_read_chunkqueue_##x(server *srv, connection *con, iosocket *sock, chunkqueue *cq)
 
 NETWORK_BACKEND_WRITE_CHUNK(writev_mem);
 

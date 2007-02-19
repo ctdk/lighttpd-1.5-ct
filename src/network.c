@@ -458,7 +458,7 @@ int network_init(server *srv) {
 #if defined USE_POSIX_AIO
 		{ NETWORK_BACKEND_POSIX_AIO,            "posix-aio" },
 #endif
-#if defined USE_GTHREAD
+#if defined USE_GTHREAD_AIO
 		{ NETWORK_BACKEND_GTHREAD_AIO,          "gthread-aio" },
 #endif
 #if defined USE_WRITEV
@@ -561,7 +561,7 @@ int network_init(server *srv) {
 		SET_NETWORK_BACKEND(read, posixaio);
 		break;
 #endif
-#ifdef USE_GTHREAD
+#ifdef USE_GTHREAD_AIO
 	case NETWORK_BACKEND_GTHREAD_AIO:
 		SET_NETWORK_BACKEND(read, gthreadaio);
 		break;

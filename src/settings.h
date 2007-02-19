@@ -55,6 +55,9 @@
 #  define USE_POSIX_AIO
 #  include <aio.h>
 # endif
+# ifdef HAVE_MMAP
+#  define USE_GTHREAD_AIO
+# endif
 #endif
 
 #if defined HAVE_SYS_UIO_H && defined HAVE_SENDFILE && defined HAVE_WRITEV && (defined(__FreeBSD__) || defined(__DragonFly__))
@@ -92,7 +95,6 @@
 */
 #ifdef _WIN32
 /* Not yet ready for gthread */
-#undef USE_GTHREAD
 # define USE_WIN32_SEND
 /* wait for async-io support
 # define USE_WIN32_TRANSMITFILE

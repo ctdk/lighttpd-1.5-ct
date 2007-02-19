@@ -69,7 +69,7 @@
 #ifdef __APPLE__
 #include <crt_externs.h>
 #define environ (* _NSGetEnviron())
-#else
+#elif !defined(_WIN32)
 extern char **environ;
 #endif
 

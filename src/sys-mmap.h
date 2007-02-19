@@ -1,6 +1,8 @@
 #ifndef WIN32_MMAP_H
 #define WIN32_MMAP_H
 
+#include "settings.h"
+
 #ifdef _WIN32
 
 #define MAP_FAILED -1

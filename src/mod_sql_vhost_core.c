@@ -9,6 +9,7 @@
 
 #include "plugin.h"
 #include "log.h"
+#include "sys-files.h"
 
 #include "stat_cache.h"
 

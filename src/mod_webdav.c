@@ -46,9 +46,13 @@
  * - for now it is read-only and we only support PROPFIND
  *
  */
-
+#ifdef _WIN32
+#define WEBDAV_FILE_MODE _S_IREAD | _S_IWRITE
+#define WEBDAV_DIR_MODE  _S_IREAD | _S_IWRITE
+#else
 #define WEBDAV_FILE_MODE S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
 #define WEBDAV_DIR_MODE  S_IRWXU | S_IRWXG | S_IRWXO
+#endif
 
 /* plugin config for all request/connections */
 

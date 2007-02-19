@@ -6,6 +6,8 @@
 #define DIR_SEPERATOR_WIN       '\\'
 #define DIR_SEPERATOR_WIN_STR   "\\"
 
+#include "settings.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>     /* open */

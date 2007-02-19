@@ -33,6 +33,10 @@
 
 #include "sys-files.h"
 
+#ifdef _WIN32
+#define STDERR_FILENO 2
+#endif
+
 #ifdef HAVE_VALGRIND_VALGRIND_H
 #include <valgrind/valgrind.h>
 #endif

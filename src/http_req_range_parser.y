@@ -11,6 +11,7 @@
 #include <string.h>
 #include "http_req_range.h"
 #include "log.h"
+#include "sys-strings.h"
 }
 
 %parse_failure {

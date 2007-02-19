@@ -10,7 +10,10 @@ SET(CPACK_PACKAGE_VERSION_MAJOR 1)
 SET(CPACK_PACKAGE_VERSION_MINOR 5)
 SET(CPACK_PACKAGE_VERSION_PATCH 0)
 
-SET(CPACK_GENERATOR "TGZ")
+SET(CPACK_RESOURCE_FILE_LICENSE "COPYING")
+SET(CPACK_RESOURCE_FILE_README "README")
+SET(CPACK_PACKAGE_VENDOR "jan@kneschke.de")
+
 SET(CPACK_SOURCE_GENERATOR "TGZ")
 SET(CPACK_SOURCE_IGNORE_FILES "/\\\\.;~$;/_;build/;CMakeFiles/;CMakeCache;gz$;Makefile\\\\.;trace;Testing/;foo;autom4te;cmake_install;CPack;\\\\.pem;ltmain.sh;configure;libtool;/config\\\\.;missing;SCons;autogen.sh;install-sh;Dart;aclocal;log$;Makefile$")
 

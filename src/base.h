@@ -452,6 +452,7 @@ typedef struct {
 	buffer *bindhost;
 
 	unsigned short dont_daemonize;
+	unsigned short daemonize_on_shutdown;
 	buffer *changeroot;
 	buffer *username;
 	buffer *groupname;

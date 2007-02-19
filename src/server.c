@@ -477,6 +477,8 @@ static void show_help (void) {
 " -p         print the parsed config-file in internal form, and exit\n" \
 " -t         test the config-file, and exit\n" \
 " -D         don't go to background (default: go to background)\n" \
+" -I         go to background on SIGINT (useful with -D)\n" \
+"            has no effect when using kqueue or /dev/poll\n" \
 " -v         show version\n" \
 " -V         show compile-time features\n" \
 " -h         show this help\n" \
@@ -813,6 +815,17 @@ int lighty_mainloop(server *srv) {
 						closesocket(srv_socket->sock->fd);
 						srv_socket->sock->fd = -1;
 
+#ifdef HAVE_FORK
+						/* FreeBSD kqueue could possibly work with rfork(RFFDG)
+						* while Solaris /dev/poll would require re-registering
+						* all fd */
+						if (srv->srvconf.daemonize_on_shutdown &&
+							srv->event_handler != FDEVENT_HANDLER_FREEBSD_KQUEUE &&
+							srv->event_handler != FDEVENT_HANDLER_SOLARIS_DEVPOLL) {
+							daemonize();
+						}
+#endif
+
 						/* network_close() will cleanup after us */
 					}
 				}
@@ -1058,10 +1071,11 @@ int main (int argc, char **argv, char **envp) {
 	i_am_root = 0;
 #endif
 	srv->srvconf.dont_daemonize = 0;
+	srv->srvconf.daemonize_on_shutdown = 0;
 	srv->srvconf.max_stat_threads = 4;
 	srv->srvconf.max_read_threads = 8;
 
-	while(-1 != (o = getopt(argc, argv, "f:m:hvVDpt"))) {
+	while(-1 != (o = getopt(argc, argv, "f:m:hvVDIpt"))) {
 		switch(o) {
 		case 'f':
 			if (config_read(srv, optarg)) {
@@ -1075,6 +1089,7 @@ int main (int argc, char **argv, char **envp) {
 		case 'p': print_config = 1; break;
 		case 't': test_config = 1; break;
 		case 'D': srv->srvconf.dont_daemonize = 1; break;
+		case 'I': srv->srvconf.daemonize_on_shutdown = 1; break;
 		case 'v': show_version(); return 0;
 		case 'V': show_features(); return 0;
 		case 'h': show_help(); return 0;

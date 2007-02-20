@@ -1029,10 +1029,6 @@ int main (int argc, char **argv, char **envp) {
 	GError *gerr = NULL;
 #endif
 
-#ifdef _WIN32
-	char *optarg = NULL;
-#endif
-
 #ifdef HAVE_SIGACTION
 	struct sigaction act;
 #endif

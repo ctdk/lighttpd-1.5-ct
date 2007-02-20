@@ -320,6 +320,7 @@ static int connection_handle_response_header(server *srv, connection *con) {
 	case 201:
 	case 301:
 	case 302:
+	case 303:
 		break;
 
 	case 206: /* write_queue is already prepared */

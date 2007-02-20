@@ -59,32 +59,32 @@ typedef struct {
 	off_t  bytes_in, bytes_out;
 } chunkqueue;
 
-LI_EXPORT chunkqueue* chunkqueue_init(void);
-LI_EXPORT int chunkqueue_set_tempdirs(chunkqueue *c, array *tempdirs);
-LI_EXPORT int chunkqueue_append_file(chunkqueue *c, buffer *fn, off_t offset, off_t len);
-LI_EXPORT int chunkqueue_append_mem(chunkqueue *c, const char *mem, size_t len);
-LI_EXPORT int chunkqueue_append_buffer(chunkqueue *c, buffer *mem);
-LI_EXPORT int chunkqueue_prepend_buffer(chunkqueue *c, buffer *mem);
+LI_API chunkqueue* chunkqueue_init(void);
+LI_API int chunkqueue_set_tempdirs(chunkqueue *c, array *tempdirs);
+LI_API int chunkqueue_append_file(chunkqueue *c, buffer *fn, off_t offset, off_t len);
+LI_API int chunkqueue_append_mem(chunkqueue *c, const char *mem, size_t len);
+LI_API int chunkqueue_append_buffer(chunkqueue *c, buffer *mem);
+LI_API int chunkqueue_prepend_buffer(chunkqueue *c, buffer *mem);
 
-LI_EXPORT buffer * chunkqueue_get_append_buffer(chunkqueue *c);
-LI_EXPORT buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
-LI_EXPORT chunk * chunkqueue_get_append_tempfile(chunkqueue *cq);
-LI_EXPORT int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in);
-LI_EXPORT int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c);
-LI_EXPORT int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len);
-LI_EXPORT int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in);
-LI_EXPORT int chunkqueue_skip(chunkqueue *cq, off_t skip);
-LI_EXPORT void chunkqueue_remove_empty_last_chunk(chunkqueue *cq);
+LI_API buffer * chunkqueue_get_append_buffer(chunkqueue *c);
+LI_API buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
+LI_API chunk * chunkqueue_get_append_tempfile(chunkqueue *cq);
+LI_API int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in);
+LI_API int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c);
+LI_API int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len);
+LI_API int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in);
+LI_API int chunkqueue_skip(chunkqueue *cq, off_t skip);
+LI_API void chunkqueue_remove_empty_last_chunk(chunkqueue *cq);
 
-LI_EXPORT int chunkqueue_remove_finished_chunks(chunkqueue *cq);
+LI_API int chunkqueue_remove_finished_chunks(chunkqueue *cq);
 
-LI_EXPORT off_t chunkqueue_length(chunkqueue *c);
-LI_EXPORT off_t chunkqueue_written(chunkqueue *c);
-LI_EXPORT void chunkqueue_free(chunkqueue *c);
-LI_EXPORT void chunkqueue_reset(chunkqueue *c);
+LI_API off_t chunkqueue_length(chunkqueue *c);
+LI_API off_t chunkqueue_written(chunkqueue *c);
+LI_API void chunkqueue_free(chunkqueue *c);
+LI_API void chunkqueue_reset(chunkqueue *c);
 
-LI_EXPORT int chunkqueue_is_empty(chunkqueue *c);
+LI_API int chunkqueue_is_empty(chunkqueue *c);
 
-LI_EXPORT void chunkqueue_print(chunkqueue *cq);
+LI_API void chunkqueue_print(chunkqueue *cq);
 
 #endif

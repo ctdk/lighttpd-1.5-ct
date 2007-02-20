@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <fcntl.h>
 
+#include "settings.h"
 #include "plugin.h"
 #include "http_auth.h"
 #include "log.h"
@@ -627,21 +628,21 @@ handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s) {
 					}
 
 					if (!buffer_is_empty(s->auth_ldap_cert)) {
-						if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_CERTFILE, 
+						if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_CERTFILE,
 										s->auth_ldap_cert->ptr))) {
-							log_error_write(srv, __FILE__, __LINE__, "ss", 
+							log_error_write(srv, __FILE__, __LINE__, "ss",
 									"Loading TLS certificate failed:", ldap_err2string(ret));
-						
+
 							return HANDLER_ERROR;
 						}
 					}
-					
+
 					if (!buffer_is_empty(s->auth_ldap_key)) {
-						if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_KEYFILE, 
+						if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(NULL, LDAP_OPT_X_TLS_KEYFILE,
 										s->auth_ldap_key->ptr))) {
-							log_error_write(srv, __FILE__, __LINE__, "ss", 
+							log_error_write(srv, __FILE__, __LINE__, "ss",
 									"Loading TLS key certificate failed:", ldap_err2string(ret));
-						
+
 							return HANDLER_ERROR;
 						}
 					}

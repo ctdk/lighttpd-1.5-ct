@@ -12,10 +12,6 @@ INCLUDE(LighttpdMacros)
 
 ADD_DEFINITIONS(-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -D_LARGE_FILES)
 
-IF(WIN32)
-    ADD_DEFINITIONS(/Zi)
-ENDIF(WIN32)
-
 OPTION(WITH_XATTR "with xattr-support for the stat-cache [default: off]")
 OPTION(WITH_MYSQL "with mysql-support for the mod_sql_vhost [default: off]")
 OPTION(WITH_OPENSSL "with openssl-support [default: off]")
@@ -368,7 +364,6 @@ ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_fastcgi mod_proxy_backend_fastcgi.c)
 ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_scgi mod_proxy_backend_scgi.c)
 ADD_AND_INSTALL_LIBRARY(mod_proxy_backend_ajp13 mod_proxy_backend_ajp13.c)
 ADD_AND_INSTALL_LIBRARY(mod_userdir mod_userdir.c)
-ADD_AND_INSTALL_LIBRARY(mod_cgi mod_cgi.c)
 ADD_AND_INSTALL_LIBRARY(mod_secdownload mod_secure_download.c)
 ADD_AND_INSTALL_LIBRARY(mod_accesslog mod_accesslog.c)
 ADD_AND_INSTALL_LIBRARY(mod_simple_vhost mod_simple_vhost.c)
@@ -390,6 +385,10 @@ ADD_AND_INSTALL_LIBRARY(mod_chunked mod_chunked.c)
 ADD_AND_INSTALL_LIBRARY(mod_magnet "mod_magnet.c;mod_magnet_cache.c")
 ADD_AND_INSTALL_LIBRARY(mod_deflate mod_deflate.c)
 ADD_AND_INSTALL_LIBRARY(mod_webdav mod_webdav.c)
+
+IF(NOT WIN32)
+ADD_AND_INSTALL_LIBRARY(mod_cgi mod_cgi.c)
+ENDIF(NOT WIN32)
 
 SET(L_INSTALL_TARGETS ${L_INSTALL_TARGETS} lighttpd)
 
@@ -464,6 +463,7 @@ ENDIF(CMAKE_SYSTEM MATCHES "FreeBSD")
 SET_TARGET_PROPERTIES(lighttpd PROPERTIES CMAKE_INSTALL_PREFIX ${CMAKE_INSTALL_PREFIX})
 
 IF(WIN32)
+  SET_TARGET_PROPERTIES(lighttpd PROPERTIES COMPILE_FLAGS "-DLI_DECLARE_EXPORTS")
   TARGET_LINK_LIBRARIES(lighttpd ws2_32)
   TARGET_LINK_LIBRARIES(mod_proxy_core ws2_32)
   TARGET_LINK_LIBRARIES(mod_proxy_backend_ajp13 ws2_32)

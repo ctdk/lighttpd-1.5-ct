@@ -23,10 +23,10 @@ typedef struct {
 	buffer_pool *unused_buffers;
 } http_resp_ctx_t;
 
-LI_EXPORT http_resp * http_response_init(void);
-LI_EXPORT void http_response_free(http_resp *resp);
-LI_EXPORT void http_response_reset(http_resp *resp);
+LI_API http_resp * http_response_init(void);
+LI_API void http_response_free(http_resp *resp);
+LI_API void http_response_reset(http_resp *resp);
 
-LI_EXPORT parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *http_response);
+LI_API parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *http_response);
 
 #endif

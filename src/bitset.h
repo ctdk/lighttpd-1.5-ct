@@ -10,12 +10,12 @@ typedef struct {
 	size_t nbits;
 } bitset;
 
-LI_EXPORT bitset* bitset_init(size_t nbits);
-LI_EXPORT void bitset_reset(bitset *set);
-LI_EXPORT void bitset_free(bitset *set);
+LI_API bitset* bitset_init(size_t nbits);
+LI_API void bitset_reset(bitset *set);
+LI_API void bitset_free(bitset *set);
 
-LI_EXPORT void bitset_clear_bit(bitset *set, size_t pos);
-LI_EXPORT void bitset_set_bit(bitset *set, size_t pos);
-LI_EXPORT int bitset_test_bit(bitset *set, size_t pos);
+LI_API void bitset_clear_bit(bitset *set, size_t pos);
+LI_API void bitset_set_bit(bitset *set, size_t pos);
+LI_API int bitset_test_bit(bitset *set, size_t pos);
 
 #endif

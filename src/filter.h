@@ -29,14 +29,14 @@ typedef struct {
 
 } filter_chain;
 
-LI_EXPORT filter_chain * filter_chain_init(void);
-LI_EXPORT void filter_chain_free(filter_chain *chain);
-LI_EXPORT void filter_chain_reset(filter_chain *chain);
+LI_API filter_chain * filter_chain_init(void);
+LI_API void filter_chain_free(filter_chain *chain);
+LI_API void filter_chain_reset(filter_chain *chain);
 
-LI_EXPORT filter * filter_chain_create_filter(filter_chain *chain, int id);
-LI_EXPORT filter * filter_chain_get_filter(filter_chain *chain, int id);
-LI_EXPORT void filter_chain_remove_filter(filter_chain *chain, filter *fl);
+LI_API filter * filter_chain_create_filter(filter_chain *chain, int id);
+LI_API filter * filter_chain_get_filter(filter_chain *chain, int id);
+LI_API void filter_chain_remove_filter(filter_chain *chain, filter *fl);
 
-LI_EXPORT int filter_chain_copy_output(filter_chain *chain, chunkqueue *out);
+LI_API int filter_chain_copy_output(filter_chain *chain, chunkqueue *out);
 
 #endif

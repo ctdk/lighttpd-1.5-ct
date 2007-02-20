@@ -83,30 +83,30 @@ KVB(s_keyvalue);
 KVB(httpauth_keyvalue);
 KVB(pcre_keyvalue);
 
-LI_EXPORT const char * get_http_status_name(int i);
-LI_EXPORT const char * get_http_version_name(int i);
-LI_EXPORT const char * get_http_method_name(http_method_t i);
-LI_EXPORT const char * get_http_status_body_name(int i);
-LI_EXPORT int get_http_version_key(const char *s);
-LI_EXPORT http_method_t get_http_method_key(const char *s);
+LI_API const char * get_http_status_name(int i);
+LI_API const char * get_http_version_name(int i);
+LI_API const char * get_http_method_name(http_method_t i);
+LI_API const char * get_http_status_body_name(int i);
+LI_API int get_http_version_key(const char *s);
+LI_API http_method_t get_http_method_key(const char *s);
 
-LI_EXPORT const char * keyvalue_get_value(keyvalue *kv, int k);
-LI_EXPORT int keyvalue_get_key(keyvalue *kv, const char *s);
+LI_API const char * keyvalue_get_value(keyvalue *kv, int k);
+LI_API int keyvalue_get_key(keyvalue *kv, const char *s);
 
-LI_EXPORT keyvalue_buffer * keyvalue_buffer_init(void);
-LI_EXPORT int keyvalue_buffer_append(keyvalue_buffer *kvb, int k, const char *value);
-LI_EXPORT void keyvalue_buffer_free(keyvalue_buffer *kvb);
+LI_API keyvalue_buffer * keyvalue_buffer_init(void);
+LI_API int keyvalue_buffer_append(keyvalue_buffer *kvb, int k, const char *value);
+LI_API void keyvalue_buffer_free(keyvalue_buffer *kvb);
 
-LI_EXPORT s_keyvalue_buffer * s_keyvalue_buffer_init(void);
-LI_EXPORT int s_keyvalue_buffer_append(s_keyvalue_buffer *kvb, const char *key, const char *value);
-LI_EXPORT void s_keyvalue_buffer_free(s_keyvalue_buffer *kvb);
+LI_API s_keyvalue_buffer * s_keyvalue_buffer_init(void);
+LI_API int s_keyvalue_buffer_append(s_keyvalue_buffer *kvb, const char *key, const char *value);
+LI_API void s_keyvalue_buffer_free(s_keyvalue_buffer *kvb);
 
-LI_EXPORT httpauth_keyvalue_buffer * httpauth_keyvalue_buffer_init(void);
-LI_EXPORT int httpauth_keyvalue_buffer_append(httpauth_keyvalue_buffer *kvb, const char *key, const char *realm, httpauth_type type);
-LI_EXPORT void httpauth_keyvalue_buffer_free(httpauth_keyvalue_buffer *kvb);
+LI_API httpauth_keyvalue_buffer * httpauth_keyvalue_buffer_init(void);
+LI_API int httpauth_keyvalue_buffer_append(httpauth_keyvalue_buffer *kvb, const char *key, const char *realm, httpauth_type type);
+LI_API void httpauth_keyvalue_buffer_free(httpauth_keyvalue_buffer *kvb);
 
-LI_EXPORT pcre_keyvalue_buffer * pcre_keyvalue_buffer_init(void);
-LI_EXPORT int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, const char *value);
-LI_EXPORT void pcre_keyvalue_buffer_free(pcre_keyvalue_buffer *kvb);
+LI_API pcre_keyvalue_buffer * pcre_keyvalue_buffer_init(void);
+LI_API int pcre_keyvalue_buffer_append(pcre_keyvalue_buffer *kvb, const char *key, const char *value);
+LI_API void pcre_keyvalue_buffer_free(pcre_keyvalue_buffer *kvb);
 
 #endif

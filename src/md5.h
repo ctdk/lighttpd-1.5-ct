@@ -49,9 +49,9 @@ typedef struct {
   unsigned char buffer[64];                         /* input buffer */
 } MD5_CTX;
 
-LI_EXPORT void MD5_Init (MD5_CTX *);
-LI_EXPORT void MD5_Update (MD5_CTX *, const unsigned char *, unsigned int);
-LI_EXPORT void MD5_Final (unsigned char [16], MD5_CTX *);
+LI_API void MD5_Init (MD5_CTX *);
+LI_API void MD5_Update (MD5_CTX *, const unsigned char *, unsigned int);
+LI_API void MD5_Final (unsigned char [16], MD5_CTX *);
 
 
 

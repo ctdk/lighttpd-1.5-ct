@@ -5,8 +5,6 @@
 #include "config.h"
 #endif
 
-#include "settings.h"
-
 #define HASHLEN 16
 typedef unsigned char HASH[HASHLEN];
 #define HASHHEXLEN 32
@@ -18,7 +16,7 @@ typedef char HASHHEX[HASHHEXLEN+1];
 #endif
 #define OUT
 
-LI_EXPORT void CvtHex(
+void CvtHex(
     IN HASH Bin,
     OUT HASHHEX Hex
     );

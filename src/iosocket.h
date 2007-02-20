@@ -40,7 +40,7 @@ typedef struct {
 	iosocket_t type; /**< sendfile on solaris doesn't work on pipes */
 } iosocket;
 
-LI_EXPORT iosocket * iosocket_init(void);
-LI_EXPORT void iosocket_free(iosocket *sock);
+LI_API iosocket * iosocket_init(void);
+LI_API void iosocket_free(iosocket *sock);
 
 #endif

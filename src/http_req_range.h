@@ -20,10 +20,10 @@ typedef struct {
 	buffer_pool *unused_buffers;
 } http_req_range_ctx_t;
 
-LI_EXPORT http_req_range * http_request_range_init(void);
-LI_EXPORT void http_request_range_free(http_req_range *range);
-LI_EXPORT void http_request_range_reset(http_req_range *range);
+LI_API http_req_range * http_request_range_init(void);
+LI_API void http_request_range_free(http_req_range *range);
+LI_API void http_request_range_reset(http_req_range *range);
 
-LI_EXPORT parse_status_t http_request_range_parse(buffer *range_hdr, http_req_range *ranges);
+LI_API parse_status_t http_request_range_parse(buffer *range_hdr, http_req_range *ranges);
 
 #endif

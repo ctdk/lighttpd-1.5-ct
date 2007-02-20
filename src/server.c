@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 
+#include "settings.h"
 #include "server.h"
 #include "buffer.h"
 #include "network.h"
@@ -518,7 +519,7 @@ static void *joblist_queue_thread(void *_data) {
 	while (!srv_shutdown) {
 		GTimeVal ts;
 		connection *con;
-		
+
 		g_cond_wait(joblist_queue_cond, joblist_queue_mutex);
 		/* wait for getting signaled */
 
@@ -538,7 +539,7 @@ static void *joblist_queue_thread(void *_data) {
 			int killme = 0;
 			do {
 				if (con == (void *)1) {
-					/* ignore the wakeup-packet, it is only used to break out of the 
+					/* ignore the wakeup-packet, it is only used to break out of the
 					 * blocking nature of g_async_queue_timed_pop()  */
 				} else {
 					killme++;
@@ -552,13 +553,13 @@ static void *joblist_queue_thread(void *_data) {
 
 		g_mutex_unlock(joblist_queue_mutex);
 	}
-		
+
 	return NULL;
 }
 #endif
 
 /**
- * call this function whenever you get a EMFILE or ENFILE as return-value 
+ * call this function whenever you get a EMFILE or ENFILE as return-value
  *
  * after each socket(), accept(), connect() or open() call
  *
@@ -841,7 +842,7 @@ int lighty_mainloop(server *srv) {
 
 				srv->sockets_disabled = 1;
 
-				/* we count the number of free fds indirectly. 
+				/* we count the number of free fds indirectly.
 				 *
 				 * instead of checking the fds we only check the connection handles we free'd since
 				 * the server-sockets got disabled
@@ -897,7 +898,7 @@ int lighty_mainloop(server *srv) {
 #ifdef USE_GTHREAD
 		if (FALSE == g_mutex_trylock(joblist_queue_mutex)) {
 			/**
-			 * we couldn't get the lock, looks like the joblist-thread 
+			 * we couldn't get the lock, looks like the joblist-thread
 			 * is still blocking on g_async_queue_timed_pop()
 			 *
 			 * let's send it a bogus job to jump out of the blocking mode
@@ -1603,11 +1604,11 @@ int main (int argc, char **argv, char **envp) {
 	g_mutex_lock(joblist_queue_mutex);
 #endif
 
-	/* check if we really need this thread 
+	/* check if we really need this thread
 	 *
 	 * it simplifies debugging if there is no 'futex()' making noise in the strace()s
 	 *
-	 * 
+	 *
 	 * */
 
 	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO ||
@@ -1625,7 +1626,7 @@ int main (int argc, char **argv, char **envp) {
 		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));
 	}
 #endif
-	
+
 #ifdef USE_LINUX_AIO_SENDFILE
 	if (srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE) {
 		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
@@ -1633,7 +1634,7 @@ int main (int argc, char **argv, char **envp) {
 			ERROR("g_thread_create failed: %s", gerr->message);
 
 			return -1;
-		}		
+		}
 		srv->linux_io_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->linux_io_iocbs));
 		if (0 != io_setup(srv->srvconf.max_read_threads, &(srv->linux_io_ctx))) {
 			ERROR("io-setup() failed somehow %s", "");
@@ -1725,12 +1726,12 @@ int main (int argc, char **argv, char **envp) {
 	g_cond_signal(joblist_queue_cond);
 
 	if (joblist_queue_thread_id) g_thread_join(joblist_queue_thread_id);
-	
+
 #if 0
 	g_mutex_lock(joblist_queue_mutex);
 
 	g_cond_free(joblist_queue_cond);
-	
+
 	g_mutex_unlock(joblist_queue_mutex);
 
 	/* if I leave this enabled I get:
@@ -1738,10 +1739,10 @@ int main (int argc, char **argv, char **envp) {
 	 * GThread-ERROR **: file gthread-posix.c: line 160 (): error 'Device or resource busy' during 'pthread_mutex_destroy ((pthread_mutex_t *) mutex)'
 	 * aborting...
 	 *
-	 * $ man pthread_mutex_destroy 
+	 * $ man pthread_mutex_destroy
 	 *
-	 *        EBUSY  The implementation has detected an attempt to destroy the object referenced by mutex while it is locked 
-	 *               or referenced (for example, while being used in a pthread_cond_timedwait() or pthread_cond_wait()) 
+	 *        EBUSY  The implementation has detected an attempt to destroy the object referenced by mutex while it is locked
+	 *               or referenced (for example, while being used in a pthread_cond_timedwait() or pthread_cond_wait())
 	 *               by another thread.
 	 *
 	 * */

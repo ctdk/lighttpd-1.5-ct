@@ -20,6 +20,6 @@
 
 #include "settings.h"
 
-LI_EXPORT uint32_t generate_crc32c(char *string, size_t length);
+LI_API uint32_t generate_crc32c(char *string, size_t length);
 
 #endif

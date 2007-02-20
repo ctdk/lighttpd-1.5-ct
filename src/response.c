@@ -12,6 +12,8 @@
 
 #include <stdio.h>
 
+#include "settings.h"
+
 #include "response.h"
 #include "keyvalue.h"
 #include "log.h"

@@ -7,6 +7,8 @@
 #include <fcntl.h>
 #include <assert.h>
 
+#include "settings.h"
+
 #include "server.h"
 #include "connections.h"
 #include "fdevent.h"
@@ -789,20 +791,20 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 		case CON_STATE_CLOSE: /* ignore the even, we will clean-up soon */
 			break;
 		case CON_STATE_ERROR:
-			ERROR("we are in (CON_STATE_ERROR), but still get a FDEVENT_IN, removing event from fd = %d, %04x for (%s)", 
+			ERROR("we are in (CON_STATE_ERROR), but still get a FDEVENT_IN, removing event from fd = %d, %04x for (%s)",
 					con->sock->fd,
-					revents, 
+					revents,
 					BUF_STR(con->uri.path));
-			
+
 			fdevent_event_del(srv->ev, con->sock);
 
 			joblist_append(srv, con);
 			break;
 		default:
-			ERROR("I thought only READ_REQUEST_* need fdevent-in: %d, fd = %d, %04x for (%s)", 
-					con->state, 
+			ERROR("I thought only READ_REQUEST_* need fdevent-in: %d, fd = %d, %04x for (%s)",
+					con->state,
 					con->sock->fd,
-					revents, 
+					revents,
 					BUF_STR(con->uri.path));
 			break;
 		}
@@ -857,7 +859,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 		case ECONNABORTED: /* this is a FreeBSD thingy */
 			/* we were stopped _after_ we had a connection */
 			break;
-			
+
 		case EMFILE: /* we are out of FDs */
 			server_out_of_fds(srv, NULL);
 			break;
@@ -1336,11 +1338,11 @@ int connection_state_machine(server *srv, connection *con) {
 
 				return HANDLER_WAIT_FOR_EVENT;
 			case NETWORK_STATUS_WAIT_FOR_FD:
-				/* the backend received a EMFILE 
+				/* the backend received a EMFILE
 				 * - e.g. for a mmap() of /dev/zero */
 
 				server_out_of_fds(srv, con);
-				
+
 				return HANDLER_WAIT_FOR_FD;
 			case NETWORK_STATUS_INTERRUPTED:
 			case NETWORK_STATUS_UNSET:

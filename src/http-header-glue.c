@@ -14,6 +14,7 @@
 #include "buffer.h"
 #include "log.h"
 #include "etag.h"
+#include "response.h"
 
 /*
  * This was 'borrowed' from tcpdump.

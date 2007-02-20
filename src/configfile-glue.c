@@ -6,6 +6,7 @@
 #include "array.h"
 #include "log.h"
 #include "plugin.h"
+#include "configfile.h"
 
 /**
  * like all glue code this file contains functions which

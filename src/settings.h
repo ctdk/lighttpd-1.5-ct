@@ -134,15 +134,10 @@ typedef enum { HANDLER_UNSET,
   #endif
 #endif
 
-/* Define LI_API for DLL builds */
-#ifdef LI_DLL
-  #ifdef LI_DLL_EXPORTS
-    #define LI_API LI_EXPORT
-  #else
-    #define LI_API LI_IMPORT
-  #endif
+#ifdef LI_DLL_EXPORTS
+#define LI_API LI_EXPORT
 #else
-  #define LI_API
+#define LI_API LI_IMPORT
 #endif
 
 /* Throwable classes must always be visible on GCC in all binaries */

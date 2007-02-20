@@ -439,6 +439,8 @@ INIT_FUNC(mod_proxy_backend_scgi_init) {
 FREE_FUNC(mod_proxy_backend_scgi_free) {
 	protocol_plugin_data *p = p_d;
 
+	UNUSED(srv);
+
 	if (!p) return HANDLER_GO_ON;
 
 	free(p);

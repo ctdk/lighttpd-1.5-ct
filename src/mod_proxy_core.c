@@ -1557,6 +1557,15 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			/* if Status: ... is not set, 200 is our default status-code */
 			if (con->http_status == 0) con->http_status = 200;
 
+			/* check if all the response content has been read/decoded. */
+			if (sess->bytes_read == sess->content_length) {
+				sess->is_request_finished = 1;
+				/* close response content chunkqueue */
+				sess->recv->is_closed = 1;
+			}
+			/* copy any response content we might have. */
+			proxy_copy_response(srv, con, sess);
+
 			sess->state = PROXY_STATE_READ_RESPONSE_BODY;
 
 			/**
@@ -1591,6 +1600,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 		if(sess->is_request_finished) {
 			sess->recv->is_closed = 1;
+			con->send->is_closed = 1;
 			/* recycle proxy connection. */
 			proxy_recycle_backend_connection(srv, p, sess);
 

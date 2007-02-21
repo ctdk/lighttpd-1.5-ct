@@ -334,7 +334,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_scgi_stream_decoder) {
 	UNUSED(srv);
 
 	if (in->first == NULL) {
-		if ((sess->content_length > 0 && sess->bytes_read == sess->content_length) || in->is_closed) {
+		if ((sess->content_length >= 0 && sess->bytes_read == sess->content_length) || in->is_closed) {
 			sess->is_request_finished = 1;
 			return HANDLER_FINISHED;
 		}

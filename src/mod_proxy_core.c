@@ -449,6 +449,7 @@ proxy_session *proxy_session_init(void) {
 	sess->recv = chunkqueue_init();
 
 	sess->is_chunked = 0;
+	sess->content_length = -1;
 	sess->send_response_content = 1;
 	sess->do_new_session = 0;
 	sess->do_x_rewrite_backend = 0;
@@ -476,7 +477,7 @@ void proxy_session_reset(proxy_session *sess) {
 
 	sess->bytes_read = 0;
 	sess->connect_start_ts = 0;
-	sess->content_length = 0;
+	sess->content_length = -1;
 	sess->internal_redirect_count = 0;
 	sess->do_internal_redirect = 0;
 	sess->is_closing = 0;

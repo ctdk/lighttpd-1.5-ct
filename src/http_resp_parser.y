@@ -116,3 +116,18 @@ header(HDR) ::= STRING(A) COLON STRING(B) CRLF. {
     array_insert_unique(resp->headers, (data_unset *)HDR);
 }
 
+/* empty headers */
+header(HDR) ::= STRING(A) COLON CRLF. {
+    http_resp *resp = ctx->resp;
+
+    if (NULL == (HDR = (data_string *)array_get_unused_element(resp->headers, TYPE_STRING))) {
+        HDR = data_response_init();
+    }
+    
+    buffer_copy_string_buffer(HDR->key, A);
+    buffer_copy_string(HDR->value, ""); 
+    buffer_pool_append(ctx->unused_buffers, A); 
+
+    array_insert_unique(resp->headers, (data_unset *)HDR);
+}
+

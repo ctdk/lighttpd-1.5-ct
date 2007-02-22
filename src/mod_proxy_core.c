@@ -998,6 +998,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	proxy_session *sess = ctx;
 	proxy_connection *proxy_con = sess->proxy_con;
 	connection  *con  = sess->remote_con;
+	int call_append = 1;
 
 	if (revents & FDEVENT_IN) {
 		chunkqueue_remove_finished_chunks(proxy_con->recv);
@@ -1018,10 +1019,16 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	}
 
 	if (revents & FDEVENT_OUT) {
+		fdevent_event_add(srv->ev, proxy_con->sock, FDEVENT_IN);
+
 		switch (srv->network_backend_write(srv, con, proxy_con->sock, proxy_con->send)) {
 		case NETWORK_STATUS_SUCCESS:
-		case NETWORK_STATUS_WAIT_FOR_EVENT:
+			break;
 		case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
+			call_append = 0; /* let the joblist-queue-handler call the connection again */
+			break;
+		case NETWORK_STATUS_WAIT_FOR_EVENT:
+			fdevent_event_add(srv->ev, proxy_con->sock, FDEVENT_IN | FDEVENT_OUT);
 			break;
 		case NETWORK_STATUS_CONNECTION_CLOSE:
 			/* done mark the connection closed here only the send queue,
@@ -1048,13 +1055,15 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 
 	if (sess->is_closed) {
 		fdevent_event_del(srv->ev, sess->proxy_con->sock);
-	} else {
-		/* update the fd events. */
-		proxy_connection_enable_events(srv, proxy_con);
 	}
 
-	/* let the proxy_state_engine() handle the data read/written. */
-	joblist_append(srv, con);
+	/**
+	 * on NETWORK_STATUS_WAIT_FOR_AIO_EVENT we are no allowed to call the state-engine 
+	 * the connection has to sleep until our disk-read is finished 
+	 *
+	 * the joblist_append() will be called by the joblist_append_queue_handler in server.c
+	 */
+	if (call_append) joblist_append(srv, con);
 
 	return HANDLER_GO_ON;
 }

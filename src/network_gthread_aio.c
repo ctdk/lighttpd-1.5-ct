@@ -82,7 +82,7 @@ gpointer aio_write_thread(gpointer _srv) {
 				max_toSend : c->file.length - c->offset;
 
 			c->file.copy.offset = 0;
-			c->file.copy.length = toSend;
+			c->file.copy.length = 0;
 
 			/* open a file in /dev/shm to write to */
 			if (c->file.mmap.start == MAP_FAILED) {
@@ -96,7 +96,7 @@ gpointer aio_write_thread(gpointer _srv) {
 					}
 				} else {
 					c->file.mmap.offset = 0;
-					c->file.mmap.length = c->file.copy.length; /* align to page-size */
+					c->file.mmap.length = toSend;
 	
 					c->file.mmap.start = mmap(0, c->file.mmap.length,
 							PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
@@ -110,9 +110,7 @@ gpointer aio_write_thread(gpointer _srv) {
 			}
 		
 			if (c->file.mmap.start != MAP_FAILED) {
-				lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
-
-				if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
+				if (-1 == (r = pread(c->file.fd, c->file.mmap.start, toSend, c->file.start + c->offset))) {
 					switch(errno) {
 					default:
 						ERROR("reading file failed: %d (%s)", errno, strerror(errno));
@@ -120,13 +118,11 @@ gpointer aio_write_thread(gpointer _srv) {
 						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					}
 				} else if (r == 0) {
-					ERROR("read() returned 0 ... not good: %s", "");
+					ERROR("pread(%s) returned 0 ... not good", BUF_STR(c->file.name));
 	
 					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
-				} else if (r != c->file.copy.length) {
-					ERROR("read() returned %d instead of %d", r, c->file.copy.length);
-	
-					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+				} else {
+					c->file.copy.length = r;
 				}
 			}
 

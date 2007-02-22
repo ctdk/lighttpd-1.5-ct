@@ -1315,6 +1315,10 @@ int connection_state_machine(server *srv, connection *con) {
 						/* send out the 100 Continue header and handle the request as normal afterwards */
 						con->http_status = 0;
 
+						/* cleanup send chunkqueue's. */
+						chunkqueue_reset(con->send);
+						chunkqueue_reset(con->send_raw);
+
 						connection_set_state(srv, con, CON_STATE_HANDLE_REQUEST_HEADER);
 					} else {
 						connection_set_state(srv, con, CON_STATE_RESPONSE_END);

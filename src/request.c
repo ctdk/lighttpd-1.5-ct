@@ -316,6 +316,18 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 
 		buffer_copy_string(con->request.uri, sl);
 		buffer_copy_string_len(con->request.http_host, BUF_STR(req->uri_raw) + 7, sl - BUF_STR(req->uri_raw) - 7);
+
+		if (request_check_hostname(con->request.http_host)) {
+			if (srv->srvconf.log_request_header_on_error) {
+				TRACE("Host header is invalid (Status: 400), was %s", BUF_STR(con->request.http_host));
+			}
+			con->http_status = 400;
+			con->keep_alive = 0;
+
+			buffer_reset(con->request.http_host);
+
+			return 0;
+		}
 	}
 
 	con->request.http_method = req->method;

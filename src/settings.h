@@ -53,6 +53,7 @@
 # if defined(HAVE_AIO_H) && (!defined(__FreeBSD__))
 /* FreeBSD has no SIGEV_THREAD for us */
 #  define USE_POSIX_AIO
+#  include <sys/types.h> /* macosx wants it */
 #  include <aio.h>
 # endif
 # ifdef HAVE_MMAP

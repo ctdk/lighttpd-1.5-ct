@@ -143,6 +143,7 @@ int log_error_open(buffer *file, int use_syslog) {
 		fcntl(err->fd, F_SETFD, FD_CLOEXEC);
 #endif
 		err->mode = ERRORLOG_FILE;
+		err->file = file;
 	}
 
 	TRACE("%s", "server started");

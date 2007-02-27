@@ -365,7 +365,7 @@ int log_trace(const char *fmt, ...) {
 
 
 #if REMOVE_PATH_FROM_FILE
-char *remove_path(char *path) {
+const char *remove_path(const char *path) {
 	char *p = strrchr(path, DIR_SEPERATOR);
 	if (NULL != p && *(p) != '\0') {
 		return (p + 1);

@@ -12,7 +12,7 @@ LI_API int log_error_write(void *srv, const char *filename, unsigned int line, c
 LI_API int log_error_cycle();
 #define REMOVE_PATH_FROM_FILE 1
 #if REMOVE_PATH_FROM_FILE
-LI_API char *remove_path(const char *path);
+LI_API char *remove_path(char *path);
 #define REMOVE_PATH(file) remove_path(file)
 #else
 #define REMOVE_PATH(file) file

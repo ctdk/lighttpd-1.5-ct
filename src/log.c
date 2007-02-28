@@ -317,17 +317,34 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 	return 0;
 }
 
-static int log_trace_write(const char *fmt, va_list ap) {
+int log_trace(const char *fmt, ...) {
 	buffer *b;
-	size_t l;
+	int l;
 	errorlog *err = myconfig;
+	va_list ap;
 
 	b = buffer_init();
-	buffer_prepare_copy(b, 1024);
-	l = vsnprintf(b->ptr, b->size - 1, fmt, ap);
-	if (l > 0) {
-		b->used = (l > b->size - 1) ? b->size : l + 1;
-	}
+	buffer_prepare_copy(b, 4096);
+
+	do {
+		va_start(ap, fmt);
+		l = vsnprintf(b->ptr, b->size, fmt, ap);
+		va_end(ap);
+
+		if (l > -1 && l < b->size) {
+			b->used = l + 1;
+
+			break;
+		}
+
+		if (l > -1) {
+			/* l is the mem-size we need */
+			buffer_prepare_copy(b, l);
+		} else {
+			/* try to get some more bytes and try again */
+			buffer_prepare_append(b, 512);
+		}
+	} while(1);
 
 	/* write b */
 	switch(err->mode) {
@@ -350,19 +367,6 @@ static int log_trace_write(const char *fmt, va_list ap) {
 
 	return 0;
 }
-
-int log_trace(const char *fmt, ...) {
-	va_list ap;
-
-	va_start(ap, fmt);
-
-	log_trace_write(fmt, ap);
-
-	va_end(ap);
-
-	return 0;
-}
-
 
 #if REMOVE_PATH_FROM_FILE
 const char *remove_path(const char *path) {

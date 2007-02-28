@@ -1040,7 +1040,6 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	}
 	if(end) {
 		hctx->out->is_closed = 1;
-		deflate_compress_cleanup(srv, con, hctx);
 		if(p->conf.debug) {
 			log_error_write(srv, __FILE__, __LINE__, "sbsb",
 					"finished uri:", con->uri.path_raw, ", query:", con->uri.query);
@@ -1355,6 +1354,8 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	/* check if we finished compressing all the content. */
 	if (rc == HANDLER_GO_ON && hctx->out->is_closed) {
 		con->response.content_length = chunkqueue_length(hctx->out);
+		
+		deflate_compress_cleanup(srv, con, hctx);
 	}
 
 	return rc;
@@ -1363,12 +1364,19 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 CONNECTION_FUNC(mod_deflate_handle_filter_response_content) {
 	plugin_data *p = p_d;
 	handler_ctx *hctx = con->plugin_ctx[p->id];
+	handler_t ret;
 
 	if(hctx == NULL) return HANDLER_GO_ON;
 	if(!hctx->stream_open) return HANDLER_GO_ON;
 	if(con->request.http_method == HTTP_METHOD_HEAD) return HANDLER_GO_ON;
 
-	return deflate_compress_response(srv, con, hctx, 0); 
+	ret = deflate_compress_response(srv, con, hctx, 0); 
+
+	if (ret == HANDLER_GO_ON && hctx->out->is_closed) {
+		deflate_compress_cleanup(srv, con, hctx);
+	}
+
+	return ret;
 }
 
 handler_t mod_deflate_cleanup(server *srv, connection *con, void *p_d) {

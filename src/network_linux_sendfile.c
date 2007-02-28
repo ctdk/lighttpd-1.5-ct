@@ -110,6 +110,10 @@ NETWORK_BACKEND_WRITE(linuxsendfile) {
 				case EPIPE:
 				case ECONNRESET:
 					return NETWORK_STATUS_CONNECTION_CLOSE;
+				case ENOSYS:
+					ERROR("sendfile(%s) is not implemented, use server.network-backend = \"writev\"", 
+						BUF_STR(c->file.name));
+					return NETWORK_STATUS_FATAL_ERROR;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd",
 							"sendfile failed:", strerror(errno), sock->fd);

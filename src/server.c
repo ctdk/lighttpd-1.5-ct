@@ -1644,7 +1644,6 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif
 
-#ifndef _WIN32
 	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
 
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
@@ -1656,6 +1655,7 @@ int main (int argc, char **argv, char **envp) {
 		}
 	}
 
+#ifndef _WIN32
 	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
 		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
 		for (i = 0; i < srv->srvconf.max_read_threads; i++) {

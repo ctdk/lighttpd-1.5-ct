@@ -48,7 +48,8 @@ response_hdr ::= headers CRLF . {
         }
     }
 }
-/* HTTP/1.0 <status> ... */
+
+/* HTTP-Version SP Status-Code SP Reason-Phrase CRLF ... */
 response_hdr ::= protocol(B) number(C) reason(D) CRLF headers CRLF . {
     http_resp *resp = ctx->resp;
     
@@ -56,6 +57,15 @@ response_hdr ::= protocol(B) number(C) reason(D) CRLF headers CRLF . {
     resp->protocol = B;
     buffer_copy_string_buffer(resp->reason, D);
     buffer_pool_append(ctx->unused_buffers, D); 
+}
+
+/* HTTP-Version SP Status-Code CRLF ... */
+response_hdr ::= protocol(B) number(C) CRLF headers CRLF . {
+    http_resp *resp = ctx->resp;
+    
+    resp->status = C;
+    resp->protocol = B;
+    buffer_reset(resp->reason);
 }
 
 protocol(A) ::= STRING(B). {

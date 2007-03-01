@@ -792,6 +792,7 @@ static handler_t magnet_attract(server *srv, connection *con, plugin_data *p, bu
 
 static handler_t magnet_attract_array(server *srv, connection *con, plugin_data *p, array *files) {
 	size_t i;
+	handler_t ret = HANDLER_GO_ON;
 
 	/* no filename set */
 	if (files->used == 0) return HANDLER_GO_ON;
@@ -801,16 +802,17 @@ static handler_t magnet_attract_array(server *srv, connection *con, plugin_data 
 	 */
 	for (i = 0; i < files->used; i++) {
 		data_string *ds = (data_string *)files->data[i];
-		handler_t ret;
 
 		if (buffer_is_empty(ds->value)) continue;
 
 		ret = magnet_attract(srv, con, p, ds->value);
 
-		if (ret != HANDLER_GO_ON) return ret;
+		if (ret != HANDLER_GO_ON) break;
 	}
+	/* reset conditional cache. */
+	config_cond_cache_reset(srv, con);
 
-	return HANDLER_GO_ON;
+	return ret;
 }
 
 URIHANDLER_FUNC(mod_magnet_uri_handler) {

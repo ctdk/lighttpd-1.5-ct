@@ -1277,25 +1277,45 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 				switch (ret) {
 				case PCRE_ERROR_NOMATCH:
 					/* hmm, ok. no problem */
-					buffer_append_string_buffer(sess->request_uri, con->request.uri);
+					buffer_copy_string_buffer(sess->request_uri, con->request.uri);
 					break;
 				default:
 					TRACE("oops, pcre_replace failed with: %d", ret);
 					break;
 				}
 			} else {
-				buffer_append_string_buffer(sess->request_uri, p->replace_buf);
+				buffer_copy_string_buffer(sess->request_uri, p->replace_buf);
 			}
 
 			break;
+		} else if (buffer_is_equal_string(rw->header, CONST_STR_LEN("_docroot"))) {
+			int ret;
+
+			if ((ret = pcre_replace(rw->regex, rw->replace, con->physical.doc_root, p->replace_buf)) < 0) {
+				switch (ret) {
+				case PCRE_ERROR_NOMATCH:
+					/* hmm, ok. no problem */
+					break;
+				default:
+					TRACE("oops, pcre_replace failed with: %d", ret);
+					break;
+				}
+			} else {
+				/* adjust DOCUMENT_ROOT */
+				buffer_copy_string_buffer(con->physical.doc_root, p->replace_buf);
+
+				/* adjust SCRIPT_FILENAME */
+				buffer_copy_string_buffer(con->physical.path, p->replace_buf);
+				buffer_append_string_buffer(con->physical.path, con->physical.rel_path);
+			}
 		}
 	}
 
 	if (i == p->conf.request_rewrites->used) {
-		buffer_append_string_buffer(sess->request_uri, con->request.uri);
+		buffer_copy_string_buffer(sess->request_uri, con->request.uri);
 	}
 #else
-	buffer_append_string_buffer(sess->request_uri, con->request.uri);
+	buffer_copy_string_buffer(sess->request_uri, con->request.uri);
 #endif
 
 	proxy_encode_request_headers(srv, sess, con->recv);

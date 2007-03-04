@@ -202,9 +202,7 @@ gboolean stat_cache_free_hrfunc(gpointer _key, gpointer _value, gpointer _user_d
 
 void stat_cache_free(stat_cache *sc) {
 	g_hash_table_foreach_remove(sc->files, stat_cache_free_hrfunc, NULL);
-#if 0
-	g_hash_table_foreach_remove(sc->dirs, stat_cache_free_hrfunc, NULL);
-#endif
+	g_hash_table_destroy(sc->files);
 
 	buffer_free(sc->dir_name);
 	buffer_free(sc->hash_key);

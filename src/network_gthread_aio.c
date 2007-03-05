@@ -249,7 +249,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
-#ifdef HAVE_POSIX_FADVISE
+#if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_SEQUENTIAL)
 				/* tell the kernel that we want to stream the file */
 				if (-1 == posix_fadvise(c->file.fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
 					if (ENOSYS != errno) {

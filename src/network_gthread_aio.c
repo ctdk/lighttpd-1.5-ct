@@ -46,6 +46,42 @@ static void write_job_free(write_job *wj) {
 	free(wj);
 }
 
+#define kByte * (1024)
+#define MByte * (1024 kByte)
+
+#ifdef LOG_TIMING
+/**
+ * log the time-stamps of the different stages
+ */
+int timing_log(server *srv, connection *con, int field) {
+	g_get_current_time(&(con->timestamps[field]));
+
+}
+
+int timing_print(server *srv, connection *con) {
+#define TIME_DIFF(t2, t1) \
+	((con->timestamps[t2].tv_sec - con->timestamps[t1].tv_sec) * 1000 + \
+	 (con->timestamps[t2].tv_usec - con->timestamps[t1].tv_usec) / 1000)
+					
+	TRACE("write-start: %d.%06d "
+	      "read-queue-wait: %d ms "
+	      "read-time: %d ms "
+	      "write-time: %d ms ",
+	       con->timestamps[TIME_SEND_WRITE_START].tv_sec,
+	       con->timestamps[TIME_SEND_WRITE_START].tv_usec,
+
+	       TIME_DIFF(TIME_SEND_ASYNC_READ_START, TIME_SEND_ASYNC_READ_QUEUED),
+	       TIME_DIFF(TIME_SEND_ASYNC_READ_END, TIME_SEND_ASYNC_READ_START),
+	       TIME_DIFF(TIME_SEND_WRITE_END, TIME_SEND_ASYNC_READ_END_QUEUED)
+       );
+				
+
+}
+#else
+#define timing_log(x, y, z)
+#define timing_print(x, y)
+#endif
+
 gpointer aio_write_thread(gpointer _srv) {
         server *srv = (server *)_srv;
 
@@ -72,9 +108,23 @@ gpointer aio_write_thread(gpointer _srv) {
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
-			const off_t max_toSend = 4 * 256 * 1024; /** should be larger than the send buffer */
 			chunk *c = wj->c;
 			int mmap_fd;
+			connection *con = wj->con;
+			off_t max_toSend = 64 kByte; /** should be larger than the send buffer */
+
+#if 0
+			/* try to be adaptive */
+			int snd_buf_size = 0;
+			socklen_t snd_buf_size_size = sizeof(snd_buf_size);
+
+			if (0 == getsockopt(con->sock->fd, SOL_SOCKET, SO_SNDBUF, &snd_buf_size, &snd_buf_size_size)) {
+				/* adjust the read-data to the send-buffer */
+				if (snd_buf_size * 4 > max_toSend) {
+					max_toSend = snd_buf_size * 4;
+				}
+			}
+#endif
 			
 			offset = c->file.start + c->offset;
 
@@ -110,6 +160,8 @@ gpointer aio_write_thread(gpointer _srv) {
 			}
 		
 			if (c->file.mmap.start != MAP_FAILED) {
+				timing_log(srv, con, TIME_SEND_ASYNC_READ_START);
+
 				if (-1 == (r = pread(c->file.fd, c->file.mmap.start, toSend, c->file.start + c->offset))) {
 					switch(errno) {
 					default:
@@ -122,10 +174,12 @@ gpointer aio_write_thread(gpointer _srv) {
 	
 					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 				} else {
+					timing_log(srv, con, TIME_SEND_ASYNC_READ_END);
 					c->file.copy.length = r;
 				}
 			}
 
+			timing_log(srv, con, TIME_SEND_ASYNC_READ_END_QUEUED);
 			/* read async, write as usual */ 
 			g_async_queue_push(outq, wj->con);
 	
@@ -195,13 +249,23 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 #ifdef FD_CLOEXEC
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
+#ifdef HAVE_POSIX_FADVISE
+				/* tell the kernel that we want to stream the file */
+				if (-1 == posix_fadvise(c->file.fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
+					if (ENOSYS != errno) {
+						ERROR("posix_fadvise(%s) failed: %s (%d)", c->file.name->ptr, strerror(errno), errno);
+					}
+				}
+#endif
 			}
-
 			/* check if we have content */
 			if (c->file.copy.length == 0) {
-				const off_t max_toSend = 2 * 256 * 1024; /** should be larger than the send buffer */
+				const off_t max_toSend = 64 kByte; /** should be larger than the send buffer */
 				size_t toSend;
 				off_t offset;
+
+				/* start to write a block out the to net work */
+				timing_log(srv, con, TIME_SEND_WRITE_START);
 
 				offset = c->file.start + c->offset;
 
@@ -275,6 +339,8 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 					g_async_queue_push(srv->aio_write_queue, wj);
 
+					timing_log(srv, con, TIME_SEND_ASYNC_READ_QUEUED);
+
 					return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 				}
 			}
@@ -304,6 +370,11 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 			cq->bytes_out += r;
 
 			if (c->file.mmap.length == c->file.copy.offset) {
+				/* this block is sent, get a new one */
+				timing_log(srv, con, TIME_SEND_WRITE_END);
+
+				timing_print(srv, con);
+
 				c->file.copy.length = 0;
 			}
 

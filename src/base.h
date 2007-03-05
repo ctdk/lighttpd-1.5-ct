@@ -91,6 +91,44 @@ typedef unsigned __int32 uint32_t;
 
 #include "settings.h"
 
+typedef enum {
+	TIME_CONNECTION_ACCEPT,
+	TIME_REQUEST_START,
+	TIME_BACKEND_CONNECT,
+
+	TIME_BACKEND_SEND_HEADER_START,
+	TIME_BACKEND_SEND_HEADER_END,
+	TIME_BACKEND_SEND_CONTENT_START,
+	TIME_BACKEND_SEND_CONTENT_END,
+
+	TIME_BACKEND_RECV_HEADER_START,
+	TIME_BACKEND_RECV_HEADER_END,
+	TIME_BACKEND_RECV_CONTENT_START,
+	TIME_BACKEND_RECV_CONTENT_END,
+
+	TIME_BACKEND_DISCONNECT,
+
+	TIME_SEND_HEADER_START,
+	TIME_SEND_HEADER_END,
+
+	TIME_SEND_CONTENT_START,
+	
+	TIME_SEND_ASYNC_READ_QUEUED, /* for async-io read */
+	TIME_SEND_ASYNC_READ_START, /* for async-io read */
+	TIME_SEND_ASYNC_READ_END, /* for async-io read */
+	TIME_SEND_ASYNC_READ_END_QUEUED, /* for async-io read */
+
+	TIME_SEND_WRITE_START,
+	TIME_SEND_WRITE_END,
+	
+	TIME_SEND_CONTENT_END,
+
+	TIME_REQUEST_END,
+	TIME_CONNECTION_CLOSE,
+
+	TIME_LAST_ELEMENT
+} connection_time_field_t;
+
 typedef enum { T_CONFIG_UNSET,
 		T_CONFIG_STRING,
 		T_CONFIG_SHORT,
@@ -397,6 +435,10 @@ typedef struct {
 	int in_error_handler;
 
 	void *srv_socket;   /* reference to the server-socket (typecast to server_socket) */
+
+	/**/
+
+	GTimeVal timestamps[TIME_LAST_ELEMENT];
 } connection;
 
 typedef struct {

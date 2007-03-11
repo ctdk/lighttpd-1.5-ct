@@ -335,18 +335,18 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 		return HANDLER_WAIT_FOR_EVENT;
 	}
 #endif
-	/* second round */
-	if (-1 == stat(name->ptr, &st)) {
+	/*
+	 * O_NONBLOCK skips named pipes and locked files
+	 * */
+	if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 		return HANDLER_ERROR;
 	}
 
-	if (S_ISREG(st.st_mode)) {
-		/* try to open the file to check if we can read it */
-		if (-1 == (fd = open(name->ptr, O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
-			return HANDLER_ERROR;
-		}
-		close(fd);
+	if (-1 == fstat(fd, &st)) {
+		return HANDLER_ERROR;
 	}
+
+	close(fd);
 
 	sce->st = st;
 	sce->stat_ts = srv->cur_ts;

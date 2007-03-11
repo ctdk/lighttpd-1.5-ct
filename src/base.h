@@ -517,6 +517,7 @@ typedef struct {
 
 	unsigned short log_request_header_on_error;
 	unsigned short log_state_handling;
+	unsigned short log_timing;
 
 	enum { STAT_CACHE_ENGINE_UNSET,
 			STAT_CACHE_ENGINE_NONE,
@@ -543,6 +544,7 @@ typedef enum {
 	NETWORK_BACKEND_LINUX_AIO_SENDFILE,
 	NETWORK_BACKEND_POSIX_AIO,
 	NETWORK_BACKEND_GTHREAD_AIO,
+	NETWORK_BACKEND_GTHREAD_SENDFILE,
 
 	NETWORK_BACKEND_FREEBSD_SENDFILE,
 	NETWORK_BACKEND_SOLARIS_SENDFILEV,

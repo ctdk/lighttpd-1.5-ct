@@ -22,6 +22,7 @@
 #include "log.h"
 #include "stat_cache.h"
 #include "joblist.h"
+#include "timing.h"
 
 #include "sys-files.h"
 #include "sys-socket.h"
@@ -49,20 +50,12 @@ static void write_job_free(write_job *wj) {
 #define kByte * (1024)
 #define MByte * (1024 kByte)
 
-#ifdef LOG_TIMING
 /**
  * log the time-stamps of the different stages
  */
-int timing_log(server *srv, connection *con, int field) {
-	g_get_current_time(&(con->timestamps[field]));
+static void timing_print(server *srv, connection *con) {
+	if (!srv->srvconf.log_timing) return;
 
-}
-
-int timing_print(server *srv, connection *con) {
-#define TIME_DIFF(t2, t1) \
-	((con->timestamps[t2].tv_sec - con->timestamps[t1].tv_sec) * 1000 + \
-	 (con->timestamps[t2].tv_usec - con->timestamps[t1].tv_usec) / 1000)
-					
 	TRACE("write-start: %d.%06d "
 	      "read-queue-wait: %d ms "
 	      "read-time: %d ms "
@@ -74,19 +67,15 @@ int timing_print(server *srv, connection *con) {
 	       TIME_DIFF(TIME_SEND_ASYNC_READ_END, TIME_SEND_ASYNC_READ_START),
 	       TIME_DIFF(TIME_SEND_WRITE_END, TIME_SEND_ASYNC_READ_END_QUEUED)
        );
-				
-
 }
-#else
-#define timing_log(x, y, z)
-#define timing_print(x, y)
-#endif
 
-gpointer aio_write_thread(gpointer _srv) {
+gpointer network_gthread_aio_read_thread(gpointer _srv) {
         server *srv = (server *)_srv;
 
 	GAsyncQueue * inq;
 	GAsyncQueue * outq;
+
+	int fadvise_is_enosys = 0;
 
 	g_async_queue_ref(srv->joblist_queue);
 	g_async_queue_ref(srv->aio_write_queue);
@@ -112,6 +101,10 @@ gpointer aio_write_thread(gpointer _srv) {
 			int mmap_fd;
 			connection *con = wj->con;
 			off_t max_toSend = 64 kByte; /** should be larger than the send buffer */
+
+			int fadvise_fd = 0;
+			off_t fadvise_offset = 0;
+			off_t fadvise_len = 0;
 
 #if 0
 			/* try to be adaptive */
@@ -179,10 +172,33 @@ gpointer aio_write_thread(gpointer _srv) {
 				}
 			}
 
+			if (c->file.copy.length && !fadvise_is_enosys) {
+				fadvise_fd     = c->file.fd;
+				fadvise_offset = c->file.start  + c->offset + c->file.copy.length;
+				fadvise_len    = c->file.length - c->offset - c->file.copy.length;
+			       
+				if (fadvise_len > max_toSend) {
+					fadvise_len = max_toSend;
+				}
+			}
 			timing_log(srv, con, TIME_SEND_ASYNC_READ_END_QUEUED);
 			/* read async, write as usual */ 
 			g_async_queue_push(outq, wj->con);
-	
+
+#if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
+			/* read ahead */
+			if (c->file.copy.length && !fadvise_is_enosys && fadvise_len) {
+				/* let's hope that the fd is still valid when we try to read ahead */
+				if (-1 == posix_fadvise(fadvise_fd, fadvise_offset, fadvise_len, POSIX_FADV_WILLNEED)) {
+					if (ENOSYS != errno) {
+						ERROR("posix_fadvise(%d) failed: %s (%d)", fadvise_fd, strerror(errno), errno);
+					} else {
+						/* don't try again as we don't support it */
+						fadvise_is_enosys = 1;
+					}
+				}
+			}
+#endif
 			write_job_free(wj);
 		}
 	}
@@ -251,7 +267,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 #endif
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_SEQUENTIAL)
 				/* tell the kernel that we want to stream the file */
-				if (-1 == posix_fadvise(c->file.fd, 0, 0, POSIX_FADV_SEQUENTIAL)) {
+				if (-1 == posix_fadvise(c->file.fd, c->file.start, c->file.length, POSIX_FADV_SEQUENTIAL)) {
 					if (ENOSYS != errno) {
 						ERROR("posix_fadvise(%s) failed: %s (%d)", c->file.name->ptr, strerror(errno), errno);
 					}

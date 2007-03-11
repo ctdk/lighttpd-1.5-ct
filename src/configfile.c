@@ -90,10 +90,11 @@ static int config_insert(server *srv) {
 		{ "server.upload-dirs",          NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },   /* 44 */
 		{ "server.core-files",           NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 45 */
 		{ "debug.log-condition-cache-handling", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },    /* 46 */
-		{ "server.use-noatime",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 47 */
+		{ "server.use-noatime",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 49 */
 		{ "server.max-stat-threads",     NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 48 */
 		{ "server.max-read-threads",    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 49 */
 		{ "server.max-connection-idle",  NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 50 */
+		{ "debug.log-timing",            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 51 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -139,6 +140,8 @@ static int config_insert(server *srv) {
 	cv[47].destination = &(srv->srvconf.use_noatime);
 	cv[48].destination = &(srv->srvconf.max_stat_threads);
 	cv[49].destination = &(srv->srvconf.max_read_threads);
+	
+	cv[51].destination = &(srv->srvconf.log_timing);
 
 	srv->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 

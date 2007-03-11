@@ -91,7 +91,8 @@ static volatile sig_atomic_t handle_sig_hup = 0;
 
 #ifdef USE_GTHREAD
 gpointer stat_cache_thread(gpointer );
-gpointer aio_write_thread(gpointer );
+gpointer network_gthread_aio_read_thread(gpointer );
+gpointer network_gthread_sendfile_read_thread(gpointer );
 gpointer linux_aio_read_thread(gpointer );
 #endif
 
@@ -1614,6 +1615,7 @@ int main (int argc, char **argv, char **envp) {
 	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO ||
 	    srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE ||
 	    srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO ||
+	    srv->network_backend == NETWORK_BACKEND_GTHREAD_SENDFILE ||
 	    srv->srvconf.max_stat_threads > 0) {
 		joblist_queue_thread_id = g_thread_create(joblist_queue_thread, srv, 1, &gerr);
 		if (gerr) {
@@ -1656,16 +1658,32 @@ int main (int argc, char **argv, char **envp) {
 	}
 
 #ifndef _WIN32
-	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
+	switch (srv->network_backend) {
+	case NETWORK_BACKEND_GTHREAD_AIO:
 		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
 		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
-			aio_write_threads[i] = g_thread_create(aio_write_thread, srv, 1, &gerr);
+			aio_write_threads[i] = g_thread_create(network_gthread_aio_read_thread, srv, 1, &gerr);
 			if (gerr) {
 				ERROR("g_thread_create failed: %s", gerr->message);
 
 				return -1;
 			}
 		}
+		break;
+	case NETWORK_BACKEND_GTHREAD_SENDFILE:
+		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
+		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
+			aio_write_threads[i] = g_thread_create(network_gthread_sendfile_read_thread, srv, 1, &gerr);
+			if (gerr) {
+				ERROR("g_thread_create failed: %s", gerr->message);
+
+				return -1;
+			}
+		}
+		break;
+
+	default:
+		break;
 	}
 #endif
 

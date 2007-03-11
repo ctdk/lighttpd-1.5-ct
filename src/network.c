@@ -460,6 +460,9 @@ int network_init(server *srv) {
 #endif
 #if defined USE_GTHREAD_AIO
 		{ NETWORK_BACKEND_GTHREAD_AIO,          "gthread-aio" },
+#if defined USE_LINUX_SENDFILE
+		{ NETWORK_BACKEND_GTHREAD_SENDFILE,     "gthread-sendfile" },
+#endif
 #endif
 #if defined USE_WRITEV
 		{ NETWORK_BACKEND_WRITEV,		"writev" },
@@ -565,6 +568,12 @@ int network_init(server *srv) {
 	case NETWORK_BACKEND_GTHREAD_AIO:
 		SET_NETWORK_BACKEND(read, gthreadaio);
 		break;
+	
+#ifdef USE_LINUX_SENDFILE
+	case NETWORK_BACKEND_GTHREAD_SENDFILE:
+		SET_NETWORK_BACKEND(read, gthreadsendfile);
+		break;
+#endif
 #endif
 #ifdef USE_FREEBSD_SENDFILE
 	case NETWORK_BACKEND_FREEBSD_SENDFILE:

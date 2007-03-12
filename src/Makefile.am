@@ -70,10 +70,10 @@ common_src=buffer.c log.c \
       network_solaris_sendfilev.c network_openssl.c \
       network_linux_aio.c \
       network_posix_aio.c \
-      network_gthread_aio.c \
+      network_gthread_aio.c network_gthread_sendfile.c \
       http_resp.c http_resp_parser.c \
       http_req.c http_req_parser.c \
-      http_req_range.c http_req_range_parser.c 
+      http_req_range.c http_req_range_parser.c timing.c
       
 src = server.c response.c connections.c network.c \
       configfile.c configparser.c request.c proc_open.c

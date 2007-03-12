@@ -71,6 +71,7 @@ common_src=buffer.c log.c \
       network_linux_aio.c \
       network_posix_aio.c \
       network_gthread_aio.c network_gthread_sendfile.c \
+      network_gthread_sendfile.c \
       http_resp.c http_resp_parser.c \
       http_req.c http_req_parser.c \
       http_req_range.c http_req_range_parser.c timing.c
@@ -325,7 +326,8 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       http_parser.h \
       ajp13.h \
       mod_proxy_core_protocol.h \
-      mod_magnet_cache.h
+      mod_magnet_cache.h \
+      timing.h
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 

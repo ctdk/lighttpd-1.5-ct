@@ -153,9 +153,8 @@ int http_response_redirect_to_directory(server *srv, connection *con) {
 
 				char dst[INET6_ADDRSTRLEN];
 
-				log_error_write(srv, __FILE__, __LINE__,
-						"SSSS", "NOTICE: getnameinfo failed: ",
-						strerror(errno), ", using ip-address instead");
+				ERROR("NOTICE: getnameinfo() failed: %s, using ip-address instead",
+						strerror(errno));
 
 				buffer_append_string(o,
 						     inet_ntop(AF_INET6, (char *)&our_addr.ipv6.sin6_addr,
@@ -167,9 +166,8 @@ int http_response_redirect_to_directory(server *srv, connection *con) {
 #endif
 		case AF_INET:
 			if (NULL == (he = gethostbyaddr((char *)&our_addr.ipv4.sin_addr, sizeof(struct in_addr), AF_INET))) {
-				log_error_write(srv, __FILE__, __LINE__,
-						"SdSS", "NOTICE: gethostbyaddr failed: ",
-						h_errno, ", using ip-address instead");
+				ERROR("NOTICE: gethostbyaddr() failed: %d, using ip-address instead",
+						h_errno);
 
 				buffer_append_string(o, inet_ntoa(our_addr.ipv4.sin_addr));
 			} else {
@@ -177,8 +175,7 @@ int http_response_redirect_to_directory(server *srv, connection *con) {
 			}
 			break;
 		default:
-			log_error_write(srv, __FILE__, __LINE__,
-					"S", "ERROR: unsupported address-type");
+			ERROR("ERROR: unsupported address-type, %d", our_addr.plain.sa_family);
 
 			buffer_free(o);
 			return -1;

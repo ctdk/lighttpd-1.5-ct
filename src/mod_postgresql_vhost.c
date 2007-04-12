@@ -294,7 +294,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 	}
 
 	if (PQresultStatus(result) != PGRES_TUPLES_OK) {
-		ERROR("PQerrorMessage: %s", PQerrorMessage(p->conf.conn));
+		ERROR("PQresultStatus(%s): %s", BUF_STR(p->tmp_buf), PQerrorMessage(p->conf.conn));
 
 		PQclear(result);
 

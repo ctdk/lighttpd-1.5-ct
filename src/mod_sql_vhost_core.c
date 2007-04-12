@@ -257,7 +257,7 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	    NULL == (vhost = g_hash_table_lookup(p->conf.vhost_table, con->uri.authority)) || /* 2. check if the host is already known */
 	    srv->cur_ts - vhost->added_ts >= p->conf.cache_ttl) {                             /* 3. the cache value is old */
 		/* ask the backend for the data */
-		if (p->conf.debug) TRACE("cache-miss for %s (%p)", BUF_STR(con->uri.authority), vhost);
+		if (p->conf.debug) TRACE("cache-miss for %s", BUF_STR(con->uri.authority));
 
 		if (HANDLER_GO_ON != p->conf.get_vhost(srv, con, p->conf.backend_data, p->docroot, p->host)) {
 			return HANDLER_GO_ON;

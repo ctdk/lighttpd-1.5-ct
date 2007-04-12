@@ -150,6 +150,14 @@ typedef enum { HANDLER_UNSET,
   #define LI_EXCEPTIONAPI(api)
 #endif
 
+#ifdef UNUSED_PARAM
+#elif defined(__GNUC__)
+# define UNUSED_PARAM(x) UNUSED_ ## x __attribute__((unused))
+#elif defined(__LCLINT__)
+# define UNUSED_PARAM(x) /*@unused@*/ x
+#else
+# define UNUSED_PARAM(x) x
+#endif
 
 
 #endif

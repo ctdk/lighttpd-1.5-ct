@@ -32,6 +32,7 @@
 // do a countdown for when to do some cleanup.
 
 typedef struct {
+	PGconn **pconn;
 	PGconn *conn;
 
 	buffer  *postgresql_pre;
@@ -128,6 +129,7 @@ SERVER_FUNC(mod_postgresql_vhost_set_defaults) {
 
 		s->core = core_config->config_storage[i];
 		s->conn = NULL;
+		s->pconn = &(s->conn);
 
 		s->postgresql_pre = buffer_init();
 		s->postgresql_post = buffer_init();
@@ -183,6 +185,7 @@ static int mod_postgresql_vhost_patch_connection(server *srv, connection *con, p
 	PATCH_OPTION(postgresql_pre);
 	PATCH_OPTION(postgresql_post);
 	PATCH_OPTION(conn);
+	PATCH_OPTION(pconn);
 	PATCH_OPTION(conninfo);
 
 	/* skip the first, the global context */
@@ -195,6 +198,7 @@ static int mod_postgresql_vhost_patch_connection(server *srv, connection *con, p
 
 		if (!buffer_is_equal_string(s->core->backend, CONST_STR_LEN("postgresql"))) continue;
 
+		PATCH_OPTION(pconn);
 		PATCH_OPTION(conn);
 		PATCH_OPTION(conninfo);
 		PATCH_OPTION(postgresql_pre);
@@ -229,6 +233,10 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 
 			return HANDLER_ERROR;
 		}
+
+		/* we have to update the pointer in the conditional cache too */
+		*(p->conf.pconn) = p->conf.conn;
+
 		/* For when we move to Async requests
 		* PQsetnonblocking(s->conn,1);
 		*/

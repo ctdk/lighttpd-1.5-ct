@@ -266,7 +266,11 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 				fcntl(c->file.fd, F_SETFD, FD_CLOEXEC);
 #endif
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_SEQUENTIAL)
-				/* tell the kernel that we want to stream the file */
+				/* tell the kernel that we want to stream the file
+				 *
+				 * - POSIX_FADV_SEQUENTIAL doubles the read-ahead on Linux
+				 *
+				 *  */
 				if (-1 == posix_fadvise(c->file.fd, c->file.start, c->file.length, POSIX_FADV_SEQUENTIAL)) {
 					if (ENOSYS != errno) {
 						ERROR("posix_fadvise(%s) failed: %s (%d)", c->file.name->ptr, strerror(errno), errno);

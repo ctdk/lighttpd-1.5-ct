@@ -129,6 +129,7 @@ PLUGIN_STATIC(mod_deflate);
 PLUGIN_STATIC(mod_chunked);
 PLUGIN_STATIC(mod_indexfile);
 PLUGIN_STATIC(mod_mysql_vhost);
+PLUGIN_STATIC(mod_postgresql_vhost);
 PLUGIN_STATIC(mod_proxy_backend_ajp13);
 PLUGIN_STATIC(mod_proxy_backend_fastcgi);
 PLUGIN_STATIC(mod_proxy_backend_http);
@@ -167,6 +168,7 @@ PLUGIN_STATIC(mod_deflate),
 PLUGIN_STATIC(mod_chunked),
 PLUGIN_STATIC(mod_indexfile),
 PLUGIN_STATIC(mod_mysql_vhost),
+PLUGIN_STATIC(mod_postgresql_vhost),
 PLUGIN_STATIC(mod_proxy_backend_ajp13),
 PLUGIN_STATIC(mod_proxy_backend_fastcgi),
 PLUGIN_STATIC(mod_proxy_backend_http),

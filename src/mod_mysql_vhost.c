@@ -111,7 +111,6 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 	/* get the config of the core-plugin */
 	core_config = plugin_get_config(srv, CORE_PLUGIN);
 
-
 	/* walk through all conditionals and check for assignments */
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
@@ -236,11 +235,11 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 	MYSQL_RES *result = NULL;
 
 	/* no host specified? */
-	if (!con->uri.authority->used) return HANDLER_GO_ON;
+	if (!con->uri.authority->used) return HANDLER_ERROR;
 
 	mod_mysql_vhost_patch_connection(srv, con, p);
 
-	if (!p->conf.mysql) return HANDLER_GO_ON;
+	if (!p->conf.mysql) return HANDLER_ERROR;
 
 	/* build and run SQL query */
 	buffer_copy_string_buffer(p->tmp_buf, p->conf.mysql_pre);
@@ -248,11 +247,11 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 		buffer_append_string_buffer(p->tmp_buf, con->uri.authority);
 		buffer_append_string_buffer(p->tmp_buf, p->conf.mysql_post);
 	}
-   	if (mysql_query(p->conf.mysql, p->tmp_buf->ptr)) {
-		log_error_write(srv, __FILE__, __LINE__, "s", mysql_error(p->conf.mysql));
+   	if (mysql_query(p->conf.mysql, BUF_STR(p->tmp_buf))) {
+		ERROR("mysql_query(%s) failed: %s", BUF_STR(p->tmp_buf), mysql_error(p->conf.mysql));
 
 		mysql_free_result(result);
-		return HANDLER_GO_ON;
+		return HANDLER_ERROR;
 	}
 	result = mysql_store_result(p->conf.mysql);
 	cols = mysql_num_fields(result);
@@ -261,7 +260,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 	if (!row || cols < 1) {
 		/* no such virtual host */
 		mysql_free_result(result);
-		return HANDLER_GO_ON;
+		return HANDLER_ERROR;
 	}
 
 	buffer_copy_string(docroot, row[0]);

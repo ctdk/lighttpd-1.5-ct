@@ -4,6 +4,8 @@
 #include "buffer.h"
 #include "plugin.h"
 
+#include <glib.h>
+
 #define SQLVHOST_BACKEND_GETVHOST_PARAMS \
 	(server *srv, connection *con, void *p_d, buffer *docroot, buffer *host)
 
@@ -28,6 +30,11 @@ typedef struct {
 	void *backend_data;
 
 	buffer *select_vhost;
+	
+	unsigned short cache_ttl;
+	unsigned short debug;
+
+	GHashTable *vhost_table;
 
 	SQLVHOST_BACKEND_GETVHOST_PTR(get_vhost);
 } mod_sql_vhost_core_plugin_config;

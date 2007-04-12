@@ -187,6 +187,7 @@ static int mod_postgresql_vhost_patch_connection(server *srv, connection *con, p
 	PATCH_OPTION(conn);
 	PATCH_OPTION(pconn);
 	PATCH_OPTION(conninfo);
+	PATCH_OPTION(core);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -203,6 +204,7 @@ static int mod_postgresql_vhost_patch_connection(server *srv, connection *con, p
 		PATCH_OPTION(conninfo);
 		PATCH_OPTION(postgresql_pre);
 		PATCH_OPTION(postgresql_post);
+		PATCH_OPTION(core);
 	}
 
 	return 0;
@@ -228,6 +230,8 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 	 * try to connect the pg-server
 	 */
 	if (p->conf.conn == NULL) {
+		if (p->conf.core->debug) TRACE("connecting to postgres: %s", BUF_STR(p->conf.conninfo));
+
 		if (NULL == (p->conf.conn = PQconnectdb(BUF_STR(p->conf.conninfo)))) {
 			ERROR("%s", "postgresql malloc failure");
 
@@ -285,7 +289,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 	 * result = PQsendQuery(p->conf.conn, p->tmp_buf->ptr);
 	 */
 	if (result == NULL) {
-		ERROR("%s", "postgresql malloc failure");
+		ERROR("PQexec(%s) failed: %s", BUF_STR(p->tmp_buf), PQerrorMessage(p->conf.conn));
 		return HANDLER_ERROR;
 	}
 

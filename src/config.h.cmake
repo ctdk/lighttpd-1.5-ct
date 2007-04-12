@@ -29,6 +29,10 @@
 #cmakedefine  HAVE_MYSQL_H
 #cmakedefine  HAVE_LIBMYSQL
 
+/* postgresql */
+#cmakedefine  HAVE_LIBPQ_FE_H
+#cmakedefine  HAVE_LIBPQ
+
 /* OpenSSL */
 #cmakedefine  HAVE_OPENSSL_SSL_H
 #cmakedefine  HAVE_LIBCRYPTO

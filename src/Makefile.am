@@ -79,6 +79,7 @@ src = server.c response.c connections.c network.c \
       configfile.c configparser.c request.c proc_open.c
 
 spawn_fcgi_SOURCES=spawn-fcgi.c
+spawn_fcgi_LDADD = $(GTHREAD_LIBS)
 
 if CHECK_WITH_FASTCGI
 fcgi_stat_accel_SOURCES=fcgi-stat-accel.c

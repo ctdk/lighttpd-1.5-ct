@@ -253,9 +253,9 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	/* do we have backend ? */
 	if (!p->conf.get_vhost) return HANDLER_GO_ON;
 
-	/* check if the host is already known */
-	if (NULL == (vhost = g_hash_table_lookup(p->conf.vhost_table, con->uri.authority)) || 
-	    srv->cur_ts - vhost->added_ts > p->conf.cache_ttl) {
+	if (p->conf.cache_ttl == 0 ||                                                         /* 1. we don't cache */
+	    NULL == (vhost = g_hash_table_lookup(p->conf.vhost_table, con->uri.authority)) || /* 2. check if the host is already known */
+	    srv->cur_ts - vhost->added_ts >= p->conf.cache_ttl) {                             /* 3. the cache value is old */
 		/* ask the backend for the data */
 		if (p->conf.debug) TRACE("cache-miss for %s (%p)", BUF_STR(con->uri.authority), vhost);
 
@@ -263,25 +263,28 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 			return HANDLER_GO_ON;
 		}
 
-		if (vhost) {
-			if (p->conf.debug) TRACE("refreshing %s: %s", BUF_STR(con->uri.authority), BUF_STR(p->docroot));
-			buffer_copy_string_buffer(vhost->docroot, p->docroot);
-			vhost->added_ts = srv->cur_ts;
-		} else {
-			buffer *key;
-
-			vhost = g_new0(cached_vhost, 1);
-			vhost->docroot  = buffer_init_buffer(p->docroot);
-			vhost->added_ts = srv->cur_ts;
-			vhost->ttl      = p->conf.cache_ttl;
-
-			key = buffer_init_buffer(con->uri.authority); 
-			
-			if (p->conf.debug) TRACE("adding %s: %s", BUF_STR(key), BUF_STR(vhost->docroot));
-
-			g_hash_table_insert(p->conf.vhost_table, key, vhost);
-
-			g_assert(g_hash_table_lookup(p->conf.vhost_table, key));
+		if (p->conf.cache_ttl > 0) {
+			/* check if the cache-ttl is > 0, otherwise we would always trash the cache-entry */
+			if (vhost) {
+				if (p->conf.debug) TRACE("refreshing %s: %s", BUF_STR(con->uri.authority), BUF_STR(p->docroot));
+				buffer_copy_string_buffer(vhost->docroot, p->docroot);
+				vhost->added_ts = srv->cur_ts;
+			} else {
+				buffer *key;
+	
+				vhost = g_new0(cached_vhost, 1);
+				vhost->docroot  = buffer_init_buffer(p->docroot);
+				vhost->added_ts = srv->cur_ts;
+				vhost->ttl      = p->conf.cache_ttl;
+	
+				key = buffer_init_buffer(con->uri.authority); 
+				
+				if (p->conf.debug) TRACE("adding %s: %s", BUF_STR(key), BUF_STR(vhost->docroot));
+	
+				g_hash_table_insert(p->conf.vhost_table, key, vhost);
+	
+				g_assert(g_hash_table_lookup(p->conf.vhost_table, key));
+			}
 		}
 	} else {
 		if (p->conf.debug) TRACE("cache-hit for %s: %s", BUF_STR(vhost->docroot), BUF_STR(con->uri.authority));

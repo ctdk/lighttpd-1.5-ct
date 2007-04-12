@@ -36,6 +36,15 @@
 #include "joblist.h"
 #include "status_counter.h"
 
+/**
+ * stack-size of the aio-threads
+ *
+ * the default is 8Mbyte which is a bit to much. Reducing it to 64k seems to be fine
+ * If you experience random segfaults, increase it.
+ */
+
+#define LI_THREAD_STACK_SIZE (64 * 1024)
+
 
 #ifdef HAVE_GETOPT_H
 #include <getopt.h>
@@ -1023,6 +1032,7 @@ int main (int argc, char **argv, char **envp) {
 	int num_childs = 0;
 	int pid_fd = -1, fd;
 	size_t i;
+	int need_joblist_queue_thread = 0;
 #ifdef USE_GTHREAD
 	GThread **stat_cache_threads;
 	GThread **aio_write_threads = NULL;
@@ -1605,51 +1615,11 @@ int main (int argc, char **argv, char **envp) {
 	g_mutex_lock(joblist_queue_mutex);
 #endif
 
-	/* check if we really need this thread
-	 *
-	 * it simplifies debugging if there is no 'futex()' making noise in the strace()s
-	 *
-	 *
-	 * */
-
-	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO ||
-	    srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE ||
-	    srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO ||
-	    srv->network_backend == NETWORK_BACKEND_GTHREAD_SENDFILE ||
-	    srv->srvconf.max_stat_threads > 0) {
-		joblist_queue_thread_id = g_thread_create(joblist_queue_thread, srv, 1, &gerr);
-		if (gerr) {
-			return -1;
-		}
-	}
-
-#ifdef USE_POSIX_AIO
-	if (srv->network_backend == NETWORK_BACKEND_POSIX_AIO) {
-		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));
-	}
-#endif
-
-#ifdef USE_LINUX_AIO_SENDFILE
-	if (srv->network_backend == NETWORK_BACKEND_LINUX_AIO_SENDFILE) {
-		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
-		if (gerr) {
-			ERROR("g_thread_create failed: %s", gerr->message);
-
-			return -1;
-		}
-		srv->linux_io_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->linux_io_iocbs));
-		if (0 != io_setup(srv->srvconf.max_read_threads, &(srv->linux_io_ctx))) {
-			ERROR("io-setup() failed somehow %s", "");
-
-			return -1;
-		}
-	}
-#endif
-
 	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
 
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
 		stat_cache_threads[i] = g_thread_create(stat_cache_thread, srv, 1, &gerr);
+		need_joblist_queue_thread = 1;
 		if (gerr) {
 			ERROR("g_thread_create failed: %s", gerr->message);
 
@@ -1662,30 +1632,70 @@ int main (int argc, char **argv, char **envp) {
 	case NETWORK_BACKEND_GTHREAD_AIO:
 		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
 		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
-			aio_write_threads[i] = g_thread_create(network_gthread_aio_read_thread, srv, 1, &gerr);
+			aio_write_threads[i] = g_thread_create_full(network_gthread_aio_read_thread, srv, LI_THREAD_STACK_SIZE, 1, TRUE, G_THREAD_PRIORITY_NORMAL, &gerr);
 			if (gerr) {
 				ERROR("g_thread_create failed: %s", gerr->message);
 
 				return -1;
 			}
 		}
+		need_joblist_queue_thread = 1;
 		break;
 	case NETWORK_BACKEND_GTHREAD_SENDFILE:
 		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
 		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
-			aio_write_threads[i] = g_thread_create(network_gthread_sendfile_read_thread, srv, 1, &gerr);
+			aio_write_threads[i] = g_thread_create_full(network_gthread_sendfile_read_thread, srv, LI_THREAD_STACK_SIZE, 1, TRUE, G_THREAD_PRIORITY_NORMAL, &gerr);
 			if (gerr) {
 				ERROR("g_thread_create failed: %s", gerr->message);
 
 				return -1;
 			}
 		}
+		need_joblist_queue_thread = 1;
 		break;
+#ifdef USE_POSIX_AIO
+	case NETWORK_BACKEND_POSIX_AIO:
+		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));
+		need_joblist_queue_thread = 1;
+		break;
+#endif
+#ifdef USE_LINUX_AIO_SENDFILE
+	case NETWORK_BACKEND_LINUX_AIO_SENDFILE:
+		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
+		if (gerr) {
+			ERROR("g_thread_create failed: %s", gerr->message);
 
+			return -1;
+		}
+		srv->linux_io_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->linux_io_iocbs));
+		if (0 != io_setup(srv->srvconf.max_read_threads, &(srv->linux_io_ctx))) {
+			ERROR("io-setup() failed somehow %s", "");
+
+			return -1;
+		}
+
+		need_joblist_queue_thread = 1;
+		break;
+#endif
 	default:
 		break;
 	}
 #endif
+
+	/* check if we really need this thread
+	 *
+	 * it simplifies debugging if there is no 'futex()' making noise in the strace()s
+	 *
+	 *
+	 * */
+
+
+	if (need_joblist_queue_thread) {
+		joblist_queue_thread_id = g_thread_create_full(joblist_queue_thread, srv, LI_THREAD_STACK_SIZE, 1, TRUE, G_THREAD_PRIORITY_NORMAL, &gerr);
+		if (gerr) {
+			return -1;
+		}
+	}
 
 	for (i = 0; i < srv->srv_sockets.used; i++) {
 		server_socket *srv_socket = srv->srv_sockets.ptr[i];

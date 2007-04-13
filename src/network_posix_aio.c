@@ -37,14 +37,6 @@
 #include "sys-files.h"
 #include "status_counter.h"
 
-#if defined(__linux__)
-#define HAVE_MEM_MMAP_ZERO
-#endif
-
-#if defined(__APPLE__)
-#define HAVE_MEM_MMAP_ANON
-#endif
-
 typedef struct {
 	server *srv;
 	connection *con;

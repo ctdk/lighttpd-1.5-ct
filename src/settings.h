@@ -94,6 +94,18 @@
 #endif
 
 /**
+ * how to mmap() a piece of memory 
+ */
+#if defined(__linux__)
+#define HAVE_MEM_MMAP_ZERO
+#endif
+
+#if defined(__APPLE__)
+#define HAVE_MEM_MMAP_ANON
+#endif
+
+
+/**
 * unix can use read/write or recv/send on sockets
 * win32 only recv/send
 */

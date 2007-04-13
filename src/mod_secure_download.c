@@ -209,32 +209,66 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 	if (buffer_is_empty(p->conf.uri_prefix)) return HANDLER_GO_ON;
 
 	if (buffer_is_empty(p->conf.secret)) {
-		log_error_write(srv, __FILE__, __LINE__, "s",
-				"secdownload.secret has to be set");
+		ERROR("secdownload.secret has to be set: %s", "");
+
 		return HANDLER_ERROR;
 	}
 
 	if (buffer_is_empty(p->conf.doc_root)) {
-		log_error_write(srv, __FILE__, __LINE__, "s",
-				"secdownload.document-root has to be set");
+		ERROR("secdownload.document-root has to be set: %s", "");
+		
 		return HANDLER_ERROR;
+	}
+
+	if (con->conf.log_request_handling) {
+		TRACE("-- handling %s in mod_secdownload", BUF_STR(con->uri.path));
 	}
 
 	/*
 	 *  /<uri-prefix>[a-f0-9]{32}/[a-f0-9]{8}/<rel-path>
 	 */
 
-	if (0 != strncmp(con->uri.path->ptr, p->conf.uri_prefix->ptr, p->conf.uri_prefix->used - 1)) return HANDLER_GO_ON;
+	if (0 != strncmp(con->uri.path->ptr, p->conf.uri_prefix->ptr, p->conf.uri_prefix->used - 1)) {
+		if (con->conf.log_request_handling) {
+			TRACE("prefix '%s' didn't matched the url: %s", BUF_STR(p->conf.uri_prefix), BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
 
 	md5_str = con->uri.path->ptr + p->conf.uri_prefix->used - 1;
 
-	if (!is_hex_len(md5_str, 32)) return HANDLER_GO_ON;
-	if (*(md5_str + 32) != '/') return HANDLER_GO_ON;
+	if (!is_hex_len(md5_str, 32)) {
+		if (con->conf.log_request_handling) {
+			TRACE("expected a 32-char hex-val as md5-hash: %s", BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
+	if (*(md5_str + 32) != '/') {
+		if (con->conf.log_request_handling) {
+			TRACE("missing a / after the md5-hash: %s", BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
 
 	ts_str = md5_str + 32 + 1;
 
-	if (!is_hex_len(ts_str, 8)) return HANDLER_GO_ON;
-	if (*(ts_str + 8) != '/') return HANDLER_GO_ON;
+	if (!is_hex_len(ts_str, 8)) {
+		if (con->conf.log_request_handling) {
+			TRACE("expected a 8-char hex-val after md5-hash: %s", BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
+	if (*(ts_str + 8) != '/') {
+		if (con->conf.log_request_handling) {
+			TRACE("missing a / after the timestamp: %s", BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
 
 	for (i = 0; i < 8; i++) {
 		ts = (ts << 4) + hex2int(*(ts_str + i));
@@ -243,6 +277,10 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 	/* timed-out */
 	if (srv->cur_ts - ts > p->conf.timeout ||
 	    srv->cur_ts - ts < -p->conf.timeout) {
+		if (con->conf.log_request_handling) {
+			TRACE("timestamp is too old: %d, timeout: %d", ts, p->conf.timeout);
+		}
+
 		con->http_status = 408;
 
 		return HANDLER_FINISHED;
@@ -268,9 +306,7 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 	if (0 != strncmp(md5_str, p->md5->ptr, 32)) {
 		con->http_status = 403;
 
-		log_error_write(srv, __FILE__, __LINE__, "sss",
-				"md5 invalid:",
-				md5_str, p->md5->ptr);
+		TRACE("MD5 didn't matched: %s == %s", md5_str, BUF_STR(p->md5));
 
 		return HANDLER_FINISHED;
 	}
@@ -282,6 +318,10 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 	buffer_copy_string(con->physical.rel_path, rel_uri);
 	buffer_copy_string_buffer(con->physical.path, con->physical.doc_root);
 	buffer_append_string_buffer(con->physical.path, con->physical.rel_path);
+
+	if (con->conf.log_request_handling) {
+		TRACE("MD5 matched, timestamp is ok, sending %s", BUF_STR(con->physical.path));
+	}
 
 	return HANDLER_GO_ON;
 }

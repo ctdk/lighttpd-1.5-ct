@@ -193,6 +193,10 @@ URIHANDLER_FUNC(mod_flv_streaming_path_handler) {
 
 	if (buffer_is_empty(con->physical.path)) return HANDLER_GO_ON;
 
+	if (con->conf.log_request_handling) {
+		TRACE("-- handling %s in mod_flv_streaming", BUF_STR(con->physical.path));
+	}
+
 	mod_flv_streaming_patch_connection(srv, con, p);
 
 	s_len = con->physical.path->used - 1;
@@ -218,26 +222,55 @@ URIHANDLER_FUNC(mod_flv_streaming_path_handler) {
 			split_get_params(p->get_params, p->query_str);
 
 			if (NULL == (get_param = (data_string *)array_get_element(p->get_params, CONST_STR_LEN("start")))) {
+				if (con->conf.log_request_handling) {
+					TRACE("start=... not found, skipping %s", BUF_STR(con->physical.path));
+				}
+
 				return HANDLER_GO_ON;
 			}
 
 			/* too short */
-			if (get_param->value->used < 2) return HANDLER_GO_ON;
+			if (get_param->value->used < 2) {
+				if (con->conf.log_request_handling) {
+					TRACE("start=... found, but empty, skipping %s", BUF_STR(con->physical.path));
+				}
+
+				return HANDLER_GO_ON;
+			}
 
 			/* check if it is a number */
 			start = strtol(get_param->value->ptr, &err, 10);
 			if (*err != '\0') {
+				if (con->conf.log_request_handling) {
+					TRACE("parsing start '%s' as number failed, skipping %s", 
+							BUF_STR(get_param->value), BUF_STR(con->physical.path));
+				}
+
 				return HANDLER_GO_ON;
 			}
 
-			if (start <= 0) return HANDLER_GO_ON;
+			if (start <= 0) {
+				if (con->conf.log_request_handling) {
+					TRACE("start is <= 0, skipping %s", BUF_STR(con->physical.path));
+				}
+
+				return HANDLER_GO_ON;
+			}
 
 			/* check if start is > filesize */
 			if (HANDLER_GO_ON != stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+				if (con->conf.log_request_handling) {
+					TRACE("stat() for %s failed", BUF_STR(con->physical.path));
+				}
+
 				return HANDLER_GO_ON;
 			}
 
 			if (start > sce->st.st_size) {
+				if (con->conf.log_request_handling) {
+					TRACE("start > file-size, skipping %s", BUF_STR(con->physical.path));
+				}
+
 				return HANDLER_GO_ON;
 			}
 
@@ -251,8 +284,16 @@ URIHANDLER_FUNC(mod_flv_streaming_path_handler) {
 
 			con->send->is_closed = 1;
 
+			if (con->conf.log_request_handling) {
+				TRACE("sending %s from position %ld", BUF_STR(con->physical.path), start);
+			}
+
 			return HANDLER_FINISHED;
 		}
+	}
+
+	if (con->conf.log_request_handling) {
+		TRACE("none of the extensions matched %s, leaving", BUF_STR(con->physical.path));
 	}
 
 	/* not found */

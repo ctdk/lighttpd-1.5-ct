@@ -47,8 +47,11 @@
 
 /* all the Async IO backends need GTHREAD support */
 #if defined(USE_GTHREAD)
-# if defined(USE_LINUX_SENDFILE) && defined(HAVE_LIBAIO_H)
-#  define USE_LINUX_AIO_SENDFILE
+# if defined(USE_LINUX_SENDFILE)
+#  if defined(HAVE_LIBAIO_H)
+#    define USE_LINUX_AIO_SENDFILE
+#  endif
+#  define USE_GTHREAD_SENDFILE
 # endif
 # if defined(HAVE_AIO_H) && (!defined(__FreeBSD__))
 /* FreeBSD has no SIGEV_THREAD for us */

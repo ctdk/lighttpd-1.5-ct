@@ -1641,6 +1641,7 @@ int main (int argc, char **argv, char **envp) {
 		}
 		need_joblist_queue_thread = 1;
 		break;
+#ifdef USE_GTHREAD_SENDFILE
 	case NETWORK_BACKEND_GTHREAD_SENDFILE:
 		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
 		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
@@ -1653,6 +1654,7 @@ int main (int argc, char **argv, char **envp) {
 		}
 		need_joblist_queue_thread = 1;
 		break;
+#endif
 #ifdef USE_POSIX_AIO
 	case NETWORK_BACKEND_POSIX_AIO:
 		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));

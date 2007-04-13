@@ -3,7 +3,7 @@
  */
 #include "settings.h"
 #include "network_backends.h"
-#ifdef USE_GTHREAD_AIO
+#if defined(USE_GTHREAD_SENDFILE)
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef HAVE_SYS_TIME_H

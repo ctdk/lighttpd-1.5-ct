@@ -37,6 +37,14 @@
 #include "sys-files.h"
 #include "status_counter.h"
 
+#if defined(__linux__)
+#define HAVE_MEM_MMAP_ZERO
+#endif
+
+#if defined(__APPLE__)
+#define HAVE_MEM_MMAP_ANON
+#endif
+
 typedef struct {
 	server *srv;
 	connection *con;
@@ -207,9 +215,12 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					 * if someone finds the reason for this, feel free to remove
 					 * this if again and number of reduce the syscalls a bit.
 					 */
-					if (-1 != c->file.copy.fd) {
+					if (c->file.mmap.start) {
 						munmap(c->file.mmap.start, c->file.mmap.length);
+						c->file.mmap.start = MAP_FAILED;
+					}
 
+					if (-1 != c->file.copy.fd) {
 						close(c->file.copy.fd);
 						c->file.copy.fd = -1;
 					}
@@ -232,6 +243,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					 * in case we don't have a iocb available, we still need the mmap() for the blocking
 					 * read()
 					 *  */
+#if defined(HAVE_MEM_MMAP_ZERO)
 					if (-1 == c->file.copy.fd ) {
 						int mmap_fd = -1;
 
@@ -262,6 +274,18 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						
 						}
 					}
+#elif defined(HAVE_MEM_MMAP_ANON)
+					c->file.mmap.offset = 0;
+					c->file.mmap.length = c->file.copy.length; /* align to page-size */
+					c->file.mmap.start = mmap(0, c->file.mmap.length,
+						PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+							
+					if (c->file.mmap.start == MAP_FAILED) {
+						async_error = 1;
+					}
+#else
+#error hmm, does your system support mmap(/dev/zero) or mmap(MAP_ANON)
+#endif
 
 					/* looks like we couldn't get a temp-file [disk-full]
 					 *

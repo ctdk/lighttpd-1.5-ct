@@ -457,7 +457,19 @@ URIHANDLER_FUNC(mod_webdav_uri_handler) {
 
 	mod_webdav_patch_connection(srv, con, p);
 
-	if (!p->conf.enabled) return HANDLER_GO_ON;
+	if (!p->conf.enabled) {
+		if (con->conf.log_request_handling) {
+			TRACE("-- skipping %s in mod_webdav, not enabled", 
+				BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
+
+	if (con->conf.log_request_handling) {
+		TRACE("-- handling request in mod_webdav: %s", 
+			BUF_STR(con->uri.path));
+	}
 
 	switch (con->request.http_method) {
 	case HTTP_METHOD_OPTIONS:
@@ -470,12 +482,17 @@ URIHANDLER_FUNC(mod_webdav_uri_handler) {
 		} else {
 			response_header_insert(srv, con, CONST_STR_LEN("Allow"), CONST_STR_LEN("PROPFIND, DELETE, MKCOL, PUT, MOVE, COPY, PROPPATCH, LOCK, UNLOCK"));
 		}
+	
+		if (con->conf.log_request_handling) {
+			TRACE("sending OPTIONS response for: %s", 
+				BUF_STR(con->uri.path));
+		}
+
 		break;
 	default:
 		break;
 	}
 
-	/* not found */
 	return HANDLER_GO_ON;
 }
 static int webdav_gen_prop_tag(server *srv, connection *con,
@@ -997,7 +1014,7 @@ static int webdav_get_props(server *srv, connection *con, plugin_data *p, physic
 static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p, chunkqueue *cq, xmlDoc **ret_xml) {
 	xmlParserCtxtPtr ctxt;
 	xmlDoc *xml;
-	int res;
+	int res = 0;
 	int err;
 
 	chunk *c;
@@ -1021,14 +1038,13 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 			if (c->file.mmap.start == MAP_FAILED) {
 				if (-1 == c->file.fd &&  /* open the file if not already open */
 				    -1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY))) {
-					log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
+					ERROR("open(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return -1;
 				}
 
 				if (MAP_FAILED == (c->file.mmap.start = mmap(0, c->file.length, PROT_READ, MAP_SHARED, c->file.fd, 0))) {
-					log_error_write(srv, __FILE__, __LINE__, "ssbd", "mmap failed: ",
-							strerror(errno), c->file.name,  c->file.fd);
+					ERROR("mmap(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
 
 					return -1;
 				}
@@ -1042,6 +1058,7 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 			}
 
 			if (XML_ERR_OK != (err = xmlParseChunk(ctxt, c->file.mmap.start + c->offset, weHave, 0))) {
+				ERROR("xmlParseChunk() failed: %d", err);
 				log_error_write(srv, __FILE__, __LINE__, "sddd", "xmlParseChunk failed at:", cq->bytes_out, weHave, err);
 			}
 
@@ -1056,11 +1073,11 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 			if (weHave > weWant) weHave = weWant;
 
 			if (p->conf.log_xml) {
-				log_error_write(srv, __FILE__, __LINE__, "ss", "XML-request-body:", c->mem->ptr + c->offset);
+				TRACE("XML-request-body: %s", c->mem->ptr + c->offset);
 			}
 
 			if (XML_ERR_OK != (err = xmlParseChunk(ctxt, c->mem->ptr + c->offset, weHave, 0))) {
-				log_error_write(srv, __FILE__, __LINE__, "sddd", "xmlParseChunk failed at:", cq->bytes_out, weHave, err);
+				ERROR("xmlParseChunk(%s) failed: %d", c->mem->ptr + c->offset, err);
 			}
 
 			c->offset += weHave;
@@ -1079,7 +1096,7 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 	case XML_ERR_OK:
 		break;
 	default:
-		log_error_write(srv, __FILE__, __LINE__, "sd", "xmlParseChunk failed at final packet:", err);
+		ERROR("xmlParseChunk() failed: %d", err);
 		break;
 	}
 
@@ -1180,7 +1197,7 @@ int webdav_has_lock(server *srv, connection *con, plugin_data *p, buffer *uri) {
 	 * - untagged:
 	 *   go on if the resource has the etag [...] and the lock
 	 */
-	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "If"))) {
+	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("If")))) {
 		/* Ooh, ooh. A if tag, now the fun begins.
 		 *
 		 * this can only work with a real parser
@@ -1225,6 +1242,11 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 	UNUSED(srv);
 
+	if (con->conf.log_request_handling) {
+		TRACE("-- handling request in mod_webdav: %s", 
+			BUF_STR(con->uri.path));
+	}
+
 	if (!p->conf.enabled) return HANDLER_GO_ON;
 	/* physical path is setup */
 	if (con->physical.path->used == 0) return HANDLER_GO_ON;
@@ -1234,16 +1256,35 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		depth = strtol(ds->value->ptr, NULL, 10);
 	}
 
+	if (con->conf.log_request_handling) {
+		TRACE("depth for %s: %d", 
+			BUF_STR(con->uri.path), depth);
+	}
+
+	if (con->conf.log_request_handling) {
+		TRACE("method for %s: %s", 
+			BUF_STR(con->uri.path), get_http_method_name(con->request.http_method));
+	}
+
 	switch (con->request.http_method) {
 	case HTTP_METHOD_PROPFIND:
 		/* they want to know the properties of the directory */
 		req_props = NULL;
 
 		/* is there a content-body ? */
+		if (con->conf.log_request_handling) {
+			TRACE("path-name: %s", 
+				BUF_STR(con->physical.path));
+		}
 
 		switch (stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
 		case HANDLER_ERROR:
 			if (errno == ENOENT) {
+				if (con->conf.log_request_handling) {
+					TRACE("path-name: %s ... not found", 
+						BUF_STR(con->physical.path));
+				}
+
 				con->http_status = 404;
 				return HANDLER_FINISHED;
 			}
@@ -1281,9 +1322,8 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 								    (0 == xmlStrcmp(prop->ns->href, BAD_CAST "")) &&
 								    (0 != xmlStrcmp(prop->ns->prefix, BAD_CAST ""))) {
 									size_t i;
-									log_error_write(srv, __FILE__, __LINE__, "ss",
-											"no name space for:",
-											prop->name);
+
+									ERROR("no name space for: %s", prop->name);
 
 									xmlFreeDoc(xml);
 
@@ -1337,6 +1377,8 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 				xmlFreeDoc(xml);
 			} else {
+				ERROR("webdav_parse_chunkqueue() failed: %s", "");
+
 				con->http_status = 400;
 				return HANDLER_FINISHED;
 			}
@@ -1489,8 +1531,13 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		buffer_append_string(b,"</D:multistatus>\n");
 
+		if (con->conf.log_request_handling) {
+			TRACE("sending XML: %s", 
+				BUF_STR(b));
+		}
+
 		if (p->conf.log_xml) {
-			log_error_write(srv, __FILE__, __LINE__, "sb", "XML-response-body:", b);
+			TRACE("XML-response-body: %s", b);
 		}
 		con->send->is_closed = 1;
 
@@ -2201,7 +2248,7 @@ propmatch_cleanup:
 			xmlDocPtr xml;
 			buffer *hdr_if = NULL;
 
-			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "If"))) {
+			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("If")))) {
 				hdr_if = ds->value;
 			}
 
@@ -2365,7 +2412,7 @@ propmatch_cleanup:
 			}
 		} else {
 
-			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "If"))) {
+			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("If")))) {
 				buffer *locktoken = ds->value;
 				sqlite3_stmt *stmt = p->conf.stmt_refresh_lock;
 
@@ -2385,8 +2432,7 @@ propmatch_cleanup:
 					  SQLITE_TRANSIENT);
 
 				if (SQLITE_DONE != sqlite3_step(stmt)) {
-					log_error_write(srv, __FILE__, __LINE__, "ss",
-						"refresh lock:", sqlite3_errmsg(p->conf.sql));
+					TRACE("refresh lock failed: %s", sqlite3_errmsg(p->conf.sql));
 				}
 
 				webdav_lockdiscovery(srv, con, p->tmp_buf, "exclusive", "write", 0);
@@ -2408,7 +2454,7 @@ propmatch_cleanup:
 #endif
 	case HTTP_METHOD_UNLOCK:
 #ifdef USE_LOCKS
-		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, "Lock-Token"))) {
+		if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Lock-Token")))) {
 			buffer *locktoken = ds->value;
 			sqlite3_stmt *stmt = p->conf.stmt_remove_lock;
 

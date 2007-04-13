@@ -516,6 +516,8 @@ int network_init(server *srv) {
 
 			return -1;
 		}
+	} else {
+		TRACE("using default network-backend: %s", network_backends[0].name);
 	}
 
 #define SET_NETWORK_BACKEND(read, write) \

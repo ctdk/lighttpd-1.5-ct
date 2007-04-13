@@ -129,6 +129,7 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 
 			/* open a file in /dev/shm to write to */
 			if (c->file.mmap.start == MAP_FAILED) {
+#if defined(HAVE_MEM_MMAP_ZERO)
 				if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 					if (errno != EMFILE) {
 						TRACE("open(/dev/zero) returned: %d (%s)",
@@ -144,14 +145,29 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 					c->file.mmap.start = mmap(0, c->file.mmap.length,
 							PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 					if (c->file.mmap.start == MAP_FAILED) {
+						TRACE("mmap(/dev/zero) returned: %d (%s)",
+							errno, strerror(errno));
 						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					}
 	
 					close(mmap_fd);
 					mmap_fd = -1;
 				}
+#elif defined(HAVE_MEM_MMAP_ANON)
+				c->file.mmap.offset = 0;
+				c->file.mmap.length = toSend; /* align to page-size */
+				c->file.mmap.start = mmap(0, c->file.mmap.length,
+					PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+						
+				if (c->file.mmap.start == MAP_FAILED) {
+					TRACE("mmap(MAP_ANON) returned: %d (%s)",
+							errno, strerror(errno));
+					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
+				}
+#else
+#error hmm, does your system support mmap(/dev/zero) or mmap(MAP_ANON)
+#endif
 			}
-		
 			if (c->file.mmap.start != MAP_FAILED) {
 				timing_log(srv, con, TIME_SEND_ASYNC_READ_START);
 
@@ -252,6 +268,8 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 				c->async.ret_val = NETWORK_STATUS_UNSET;
 
+				ERROR("thread returned: %d", ret);
+
 				return ret;
 			}
 
@@ -316,6 +334,8 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 							c->file.mmap.start = mmap(0, c->file.mmap.length,
 									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
+								ERROR("mmap(%s) failed: %s (%d)", c->file.name->ptr, strerror(errno), errno);
+
 								return NETWORK_STATUS_FATAL_ERROR;
 							}
 				

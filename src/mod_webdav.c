@@ -451,9 +451,7 @@ static int mod_webdav_patch_connection(server *srv, connection *con, plugin_data
 URIHANDLER_FUNC(mod_webdav_uri_handler) {
 	plugin_data *p = p_d;
 
-	UNUSED(srv);
-
-	if (con->uri.path->used == 0) return HANDLER_GO_ON;
+	if (buffer_is_empty(con->uri.path)) return HANDLER_GO_ON;
 
 	mod_webdav_patch_connection(srv, con, p);
 
@@ -1090,7 +1088,6 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 		chunkqueue_remove_finished_chunks(cq);
 	}
 
-
 	switch ((err = xmlParseChunk(ctxt, 0, 0, 1))) {
 	case XML_ERR_DOCUMENT_END:
 	case XML_ERR_OK:
@@ -1239,8 +1236,6 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 	buffer *prop_404;
 	webdav_properties *req_props;
 	stat_cache_entry *sce = NULL;
-
-	UNUSED(srv);
 
 	if (con->conf.log_request_handling) {
 		TRACE("-- handling request in mod_webdav: %s", 
@@ -2517,6 +2512,24 @@ propmatch_cleanup:
 	return HANDLER_GO_ON;
 }
 
+/**
+ * calls the request-handler if we have received all the content
+ */
+CONNECTION_FUNC(mod_webdav_recv_request_content) {
+	chunkqueue *in = con->recv;
+	plugin_data *p = p_d;
+
+	/**
+	 * is the content for webdav
+	 */
+	if (!p->conf.enabled) return HANDLER_GO_ON;
+
+	if (!in->is_closed) return HANDLER_GO_ON;
+
+	/* we received all the content, let's call the webdav handler */
+
+	return mod_webdav_subrequest_handler(srv, con, p_d);
+}
 
 /* this function is called at dlopen() time and inits the callbacks */
 
@@ -2525,8 +2538,12 @@ int mod_webdav_plugin_init(plugin *p) {
 	p->name        = buffer_init_string("webdav");
 
 	p->init        = mod_webdav_init;
-	p->handle_uri_clean  = mod_webdav_uri_handler;
+	p->handle_uri_clean  = mod_webdav_uri_handler; /* check if we handle this URL */
+#if 0
+	/* will get called when the content is received */
 	p->handle_physical   = mod_webdav_subrequest_handler;
+#endif
+	p->handle_send_request_content = mod_webdav_recv_request_content; /* check if we received all the content */
 	p->set_defaults  = mod_webdav_set_defaults;
 	p->cleanup     = mod_webdav_free;
 

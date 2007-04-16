@@ -1614,9 +1614,6 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		switch (proxy_stream_encode_decode(srv, sess)) {
 		case HANDLER_FINISHED:
 		case HANDLER_GO_ON:
-			if (!sess->proxy_con->recv->is_closed && !sess->is_request_finished) {
-				return HANDLER_WAIT_FOR_EVENT;
-			}
 			break;
 		case HANDLER_ERROR:
 			/* error */
@@ -1627,6 +1624,10 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 		}
 
 		proxy_copy_response(srv, con, sess);
+
+		if (!sess->proxy_con->recv->is_closed && !sess->is_request_finished) {
+			return HANDLER_WAIT_FOR_EVENT;
+		}
 
 		if(sess->is_request_finished) {
 			sess->recv->is_closed = 1;

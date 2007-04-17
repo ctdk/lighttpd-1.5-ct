@@ -368,9 +368,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 				if (s->max_pool_size) {
 					backend->pool->max_size = s->max_pool_size;
 				}
-				backend->balancer = s->balancer;
-				backend->protocol = s->protocol;
-	
+
 				/* append backend to list of backends */
 				proxy_backends_add(s->backends, backend);
 
@@ -392,8 +390,6 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 						/* create new backend for address */
 						backend = proxy_backend_init();
 
-						backend->balancer = s->balancer;
-						backend->protocol = s->protocol;
 						/* set backend name to name of address */
 						buffer_copy_string_buffer(backend->name, address->name);
 
@@ -623,7 +619,12 @@ handler_t proxy_encode_request_headers(server *srv, proxy_session *sess, chunkqu
 		chunkqueue_reset(sess->proxy_con->recv);
 		return (protocol->proxy_encode_request_headers)(srv, sess, in);
 	}
-	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+
+	if (protocol == NULL) {
+		ERROR("protocol is not set: %s", "");
+	} else {
+		ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+	}
 	return HANDLER_ERROR;
 }
 
@@ -2068,8 +2069,8 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 	/* check if we have a matching conditional for this request */
 	mod_proxy_core_patch_connection(srv, con, p);
 
-	/* make sure we have a protocol. */
-	if (NULL == p->conf.protocol) return HANDLER_GO_ON;
+	/* no proxy backends to handle this request. */
+	if (p->conf.backends->used == 0) return HANDLER_GO_ON;
 
 	/* if check_local is enabled, then wait for file match. */
 	if (file_match != p->conf.check_local) return HANDLER_GO_ON;
@@ -2091,6 +2092,7 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 
 			backend->balancer = p->conf.balancer;
 			backend->protocol = p->conf.protocol;
+
 			buffer_copy_string_buffer(backend->name, sticky_session);
 			/* check if the new backend has a valid backend-address */
 			if (0 == proxy_address_pool_add_string(backend->address_pool, backend->name)) {
@@ -2115,8 +2117,16 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 		proxy_session_reset(sess);
 	}
 
-	/* no proxy backends to handle this request. */
-	if (p->conf.backends->used == 0) return HANDLER_GO_ON;
+	/* make sure we have a protocol. */
+	if (p->conf.protocol == NULL) {
+		con->http_status = 500; /* internal error */
+		con->send->is_closed = 1;
+
+		TRACE("proxy-core.backends is set, but proxy-core.protocol is not, can't handle '%s' for host '%s'", 
+				BUF_STR(con->uri.path), 
+				BUF_STR(con->uri.authority));
+		return HANDLER_FINISHED;
+	}
 
 	if (!sess) {
 		/* a session lives for a single request */
@@ -2269,6 +2279,10 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				 */
 				return HANDLER_WAIT_FOR_EVENT;
 			}
+
+			sess->proxy_backend->protocol = p->conf.protocol;
+			sess->proxy_backend->balancer = p->conf.balancer;
+			
 			if (p->conf.debug && sess->proxy_backend) {
 				TRACE("selected backend: %s, state: %d", BUF_STR(sess->proxy_backend->name), sess->proxy_backend->state);
 			}

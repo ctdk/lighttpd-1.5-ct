@@ -7,10 +7,14 @@ MACRO(ADD_AND_INSTALL_LIBRARY LIBNAME SRCFILES)
   ELSE(BUILD_STATIC)
     ADD_LIBRARY(${LIBNAME} SHARED ${SRCFILES})
     SET(L_INSTALL_TARGETS ${L_INSTALL_TARGETS} ${LIBNAME})
-    ## Windows likes to link it thisway back to app!
+    ## Windows likes to link it this way back to app!
     IF(WIN32)
         SET_TARGET_PROPERTIES(${LIBNAME} PROPERTIES LINK_FLAGS lighttpd.lib)
     ENDIF(WIN32)
+
+    IF(APPLE)
+        SET_TARGET_PROPERTIES(${LIBNAME} PROPERTIES LINK_FLAGS "-flat_namespace -undefined suppress")
+    ENDIF(APPLE)
   ENDIF(BUILD_STATIC)
 ENDMACRO(ADD_AND_INSTALL_LIBRARY)
 

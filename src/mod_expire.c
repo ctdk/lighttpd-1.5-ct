@@ -304,20 +304,26 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 			int ts;
 			time_t t;
 			size_t len;
-			stat_cache_entry *sce = NULL;
-
-			stat_cache_get_entry(srv, con, con->physical.path, &sce);
 
 			switch(mod_expire_get_offset(srv, p, ds->value, &ts)) {
 			case 0:
 				/* access */
 				t = (ts + srv->cur_ts);
 				break;
-			case 1:
+			case 1: {
 				/* modification */
+				stat_cache_entry *sce = NULL;
+
+				if (buffer_is_empty(con->physical.path)) return HANDLER_GO_ON;
+
+				if (HANDLER_GO_ON != stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+					/* it failed for some reason, just skip it */
+					return HANDLER_GO_ON;
+				}
 
 				t = (ts + sce->st.st_mtime);
-				break;
+
+				break; }
 			default:
 				/* -1 is handled at parse-time */
 				break;
@@ -329,7 +335,6 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 				/* could not set expire header, out of mem */
 
 				return HANDLER_GO_ON;
-
 			}
 
 			p->expire_tstmp->used = len + 1;

@@ -3,6 +3,14 @@
 NEWS
 ====
 
+- 1.5.0 - ...
+  * replaced mod_fastcgi, mod_scgi, mod_proxy with mod_proxy_core + backends
+  * enabled mod_uploadprogress again
+  * added threaded stat() 
+  * added threaded disk-read() support
+  * fixed the out-of-fd support 
+  * fixed crash in mod_expire if 'modification' is used and stat() failed (#1063)
+
 - 1.4.14 - ???
   * added mod_extforward module [1665]
   * added HTTPS=on to the environment of cgi scripts (#861)

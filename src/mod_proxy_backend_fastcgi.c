@@ -430,6 +430,24 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 
 	UNUSED(srv);
 
+	if (in->bytes_in == in->bytes_out && in->is_closed) {
+		/* everything got passed through,
+		 *
+		 * as we usually have a FIN packet we should expect to get a is_closed within the 
+		 * fcgi-stream. Looks like the remote side crashed
+		 *  */
+		out->is_closed = 1;
+
+		TRACE("%ld / %ld -> %d", 
+				in->bytes_in, in->bytes_out,
+				in->is_closed);
+
+
+		ERROR("looks like the fastcgi-backend terminated before it sent a FIN packet:%s", "");
+
+		return HANDLER_FINISHED;
+	}
+
 	/* no data ? */
 	if (!in->first) return HANDLER_GO_ON;
 

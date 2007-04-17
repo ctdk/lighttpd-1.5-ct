@@ -1792,5 +1792,9 @@ int main (int argc, char **argv, char **envp) {
 	log_free();
 	status_counter_free();
 
+#ifdef USE_GTHREAD
+	free(stat_cache_threads);
+#endif
+
 	return 0;
 }

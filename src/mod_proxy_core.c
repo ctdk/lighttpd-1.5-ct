@@ -996,9 +996,26 @@ static handler_t proxy_handle_fdevent_idle(void *s, void *ctx, int revents) {
 static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	server      *srv  = (server *)s;
 	proxy_session *sess = ctx;
-	proxy_connection *proxy_con = sess->proxy_con;
-	connection  *con  = sess->remote_con;
+	proxy_connection *proxy_con;
+	connection  *con;
 	int call_append = 1;
+
+	/**
+	 * we might receive a event for a connection that should be closed already 
+	 */
+
+	if (sess == NULL) {
+		/**
+		 * race
+		 * the other fd of the connection might have been closed already
+		 * mod_proxy_connection_close_callback() frees the 
+		 */
+
+		ERROR("the session ctx is NULL: %p, expect a crash", sess);
+	}
+
+	proxy_con = sess->proxy_con;
+	con       = sess->remote_con;
 
 	if (revents & FDEVENT_IN) {
 		chunkqueue_remove_finished_chunks(proxy_con->recv);
@@ -1182,7 +1199,12 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 	return HANDLER_GO_ON;
 }
 
-void mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+/**
+ * push the session into the backlog
+ *
+ * @returns HANDLER_ERROR in case we reach the max-connect-retry limit
+ */
+handler_t mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	proxy_request *req;
 
 	/* connection pool is full, queue the request for now */
@@ -1194,6 +1216,12 @@ void mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data
 
 	COUNTER_INC(p->conf.backlog_size);
 	sess->sent_to_backlog++;
+
+	if (sess->sent_to_backlog > 4) {
+		return HANDLER_ERROR;
+	}
+
+	return HANDLER_GO_ON;
 }
 
 /**
@@ -1354,6 +1382,18 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			sess->state = PROXY_STATE_CONNECTING;
 			sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTING;
+			/**
+			 * if we are in 
+			 *
+			 * connect(...) = -1 EINPROGRESS
+			 *
+			 * it might take ages until we get a response
+			 */
+			sess->proxy_con->state_ts = srv->cur_ts;
+			sess->proxy_con->proxy_sess = sess;
+
+			/* if the client connection closes its end get notified */
+			fdevent_event_add(srv->ev, con->sock, FDEVENT_HUP);
 
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_GO_ON:
@@ -1403,51 +1443,76 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			fdevent_event_del(srv->ev, sess->proxy_con->sock);
 
-			if (0 != getsockopt(sess->proxy_con->sock->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
-				ERROR("getsockopt failed:", strerror(errno));
-
-				return HANDLER_ERROR;
-			}
-			if (socket_error != 0) {
-				switch (socket_error) {
-				case ECONNREFUSED:
-					/* there is no-one on the other side */
-					sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
-
-					TRACE("address %s refused us, disabling for 2 sec", sess->proxy_con->address->name->ptr);
-					COUNTER_INC(sess->proxy_backend->requests_failed);
-
-					break;
-				case EHOSTUNREACH:
-					/* there is no-one on the other side */
-					sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
-
-					TRACE("host %s is unreachable, disabling for 60 sec", sess->proxy_con->address->name->ptr);
-					break;
-				default:
-					sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
-
-					TRACE("connected finally failed: %s (%d)", strerror(socket_error), socket_error);
-
-					TRACE("connect to address %s failed and I don't know why, disabling for 10 sec", sess->proxy_con->address->name->ptr);
-
-					break;
+			switch (sess->proxy_con->state) {
+			case PROXY_CONNECTION_STATE_CONNECTING:
+				if (0 != getsockopt(sess->proxy_con->sock->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
+					ERROR("getsockopt failed:", strerror(errno));
+	
+					return HANDLER_ERROR;
 				}
+				if (socket_error != 0) {
+					switch (socket_error) {
+					case ECONNREFUSED:
+						/* there is no-one on the other side */
+						sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
+	
+						TRACE("address %s refused us, disabling for 2 sec", sess->proxy_con->address->name->ptr);
+						COUNTER_INC(sess->proxy_backend->requests_failed);
+	
+						break;
+					case EHOSTUNREACH:
+						/* there is no-one on the other side */
+						sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+	
+						TRACE("host %s is unreachable, disabling for 60 sec", sess->proxy_con->address->name->ptr);
+						break;
+					default:
+						sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+	
+						TRACE("connected finally failed: %s (%d)", strerror(socket_error), socket_error);
+	
+						TRACE("connect to address %s failed and I don't know why, disabling for 10 sec", sess->proxy_con->address->name->ptr);
+	
+						break;
+					}
+	
+					sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
+					sess->proxy_backend->disabled_addresses++;
+					/* if all addresses in address_pool are disabled, then disable this backend. */
+					if (sess->proxy_backend->disabled_addresses == sess->proxy_backend->address_pool->used) {
+						sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED;
+					}
+					return HANDLER_COMEBACK;
+				}
+	
+				sess->state = PROXY_STATE_CONNECTED;
+				sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
+	
+				/* initialize stream. */
+				proxy_stream_init(srv, sess);
 
+				break;
+			case PROXY_CONNECTION_STATE_CLOSED:
+				/* looks like the connect() timed out */
+				sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
 				sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
-				sess->proxy_backend->disabled_addresses++;
+
+				/* the connection */
+				sess->proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
+
 				/* if all addresses in address_pool are disabled, then disable this backend. */
+				sess->proxy_backend->disabled_addresses++;
+
 				if (sess->proxy_backend->disabled_addresses == sess->proxy_backend->address_pool->used) {
 					sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED;
 				}
+				TRACE("connect(%s) to failed: trying another backed", 
+						BUF_STR(sess->proxy_con->address->name));
 				return HANDLER_COMEBACK;
+			default:
+				ERROR("invalid connection-state: %d", sess->proxy_con->state);
+				break;
 			}
-
-			sess->state = PROXY_STATE_CONNECTED;
-			sess->proxy_con->state = PROXY_CONNECTION_STATE_CONNECTED;
-
-			/* initialize stream. */
-			proxy_stream_init(srv, sess);
 		}
 
 		/* fall through */
@@ -2185,9 +2250,17 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			 * for that address
 			 */
 			if (NULL == (sess->proxy_backend = proxy_backend_balancer(srv, con, sess))) {
-				if (p->conf.debug) TRACE("backlog: all backends are full or down, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
+				if (p->conf.debug) TRACE("backlog: all backends are full or down, putting %s (%d) into the backlog, retry = %d", 
+						BUF_STR(con->uri.path), con->sock->fd, sess->sent_to_backlog + 1);
+
 				/* no backends available right now. */
-				mod_proxy_core_backlog_connection(srv, con, p, sess);
+				if (HANDLER_ERROR == mod_proxy_core_backlog_connection(srv, con, p, sess)) {
+					con->http_status = 504; /* gateway timeout */
+					con->send->is_closed = 1;
+
+					TRACE("connecting backends timed out, retry limit reached: %d", sess->sent_to_backlog);
+					return HANDLER_FINISHED;
+				}
 
 				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
@@ -2208,14 +2281,23 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			if (NULL == (address = proxy_address_balancer(srv, con, sess))) {
 				/* no addresses available for this backend right now. */
 				sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED; /* disable backend */
-				TRACE("backlog: all addresses are down, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
-				mod_proxy_core_backlog_connection(srv, con, p, sess);
+				TRACE("backlog: all addresses are down, putting %s (%d) into the backlog, retry = %d", 
+						BUF_STR(con->uri.path), con->sock->fd, sess->sent_to_backlog + 1);
+
+				if (HANDLER_ERROR == mod_proxy_core_backlog_connection(srv, con, p, sess)) {
+					con->http_status = 504; /* gateway timeout */
+					con->send->is_closed = 1;
+
+					TRACE("connecting backends timed out, retry limit reached: %d", sess->sent_to_backlog);
+					return HANDLER_FINISHED;
+				}
 
 				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
 				 */
+
 				return HANDLER_WAIT_FOR_EVENT;
 			}
 
@@ -2225,7 +2307,13 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				sess->proxy_backend->state = PROXY_BACKEND_STATE_FULL;
 
 				if (p->conf.debug) TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
-				mod_proxy_core_backlog_connection(srv, con, p, sess);
+				if (HANDLER_ERROR == mod_proxy_core_backlog_connection(srv, con, p, sess)) {
+					con->http_status = 504; /* gateway timeout */
+					con->send->is_closed = 1;
+
+					TRACE("connecting backends timed out, retry limit reached: %d", sess->sent_to_backlog);
+					return HANDLER_FINISHED;
+				}
 
 				/* no, not really a event,
 				 * we just want to block the outer loop from stepping forward
@@ -2263,7 +2351,10 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		case HANDLER_WAIT_FOR_EVENT:
 			return HANDLER_WAIT_FOR_EVENT;
 		case HANDLER_COMEBACK:
+#if 0
+			TRACE("%s", "setting PROXY_STATE_FINISHED");
 			sess->state = PROXY_STATE_FINISHED;
+#endif
 			/* request finished do redirect. */
 			if (sess->do_internal_redirect) {
 				/* recycle proxy connection. */
@@ -2320,6 +2411,7 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_conf
 		proxy_connection_pool *pool = backend->pool;
 		proxy_address_pool *address_pool = backend->address_pool;
 		unsigned int conns_available = 0, addrs_disabled = 0;
+		proxy_session *sess = NULL;
 
 		conns_available = (pool->max_size - pool->used);
 		for (j = 0; j < pool->used; ) {
@@ -2338,6 +2430,34 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_conf
 				proxy_connection_free(proxy_con);
 
 				conns_available++;
+				break;
+			case PROXY_CONNECTION_STATE_CONNECTING:
+				/* how long are we in this state already ?
+				 * 
+				 * if the connect() failed with EINPROGRESS we have to wait until we get a POLLOUT
+				 * if for some reason we don't get that in 4-5 seconds we have to kill the attempt
+				 *
+				 *  */
+
+				if (srv->cur_ts - proxy_con->state_ts < 5) {
+					j++;
+					break;
+				}
+
+				TRACE("connect(%s) timed out, closing backend connection",
+						BUF_STR(proxy_con->address->name));
+
+				/** timed out
+				 *
+				 * we have to tell the proxy connection to try to connect another backend
+				 */
+
+				proxy_con->state = PROXY_CONNECTION_STATE_CLOSED;
+
+				sess = proxy_con->proxy_sess;
+				joblist_append(srv, sess->remote_con);
+
+				j++;
 				break;
 			case PROXY_CONNECTION_STATE_IDLE:
 				conns_available++;
@@ -2399,6 +2519,11 @@ TRIGGER_FUNC(mod_proxy_trigger) {
 	plugin_data *p = p_d;
 	size_t i;
 
+	/**
+	 * walk through all the different address pools and check if they are still alive
+	 *
+	 * in case of connect() = -1 -> EINPROGRESS we might have trigger the state-engine
+	 */
 	for (i = 0; i < srv->config_context->used; i++) {
 		mod_proxy_wakeup_connections(srv, p, p->config_storage[i]);
 	}

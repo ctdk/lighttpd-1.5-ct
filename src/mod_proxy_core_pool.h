@@ -41,6 +41,9 @@ typedef struct {
 	chunkqueue *recv; /* encoded stream data received form the backend that needs to be decoded. */
 
 	proxy_connection_state_t state;
+	time_t state_ts;
+
+	void *proxy_sess; /** we are used by this proxy session right now */
 } proxy_connection;
 
 ARRAY_STATIC_DEF(proxy_connection_pool, proxy_connection, size_t max_size;);

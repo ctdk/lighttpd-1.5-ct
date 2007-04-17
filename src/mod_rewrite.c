@@ -72,6 +72,9 @@ FREE_FUNC(mod_rewrite_free) {
 		size_t i;
 		for (i = 0; i < srv->config_context->used; i++) {
 			plugin_config *s = p->config_storage[i];
+
+			if (!s) continue;
+			
 			pcre_keyvalue_buffer_free(s->rewrite);
 			buffer_free(s->once);
 
@@ -85,7 +88,7 @@ FREE_FUNC(mod_rewrite_free) {
 	return HANDLER_GO_ON;
 }
 
-static int parse_config_entry(server *srv, plugin_config *s, array *ca, const char *option, size_t option_len, int once) {
+static handler_t parse_config_entry(server *UNUSED_PARAM(srv), plugin_config *s, array *ca, const char *option, size_t option_len, int once) {
 	data_unset *du;
 
 	if (NULL != (du = array_get_element(ca, option, option_len))) {
@@ -93,8 +96,8 @@ static int parse_config_entry(server *srv, plugin_config *s, array *ca, const ch
 		size_t j;
 
 		if (du->type != TYPE_ARRAY) {
-			log_error_write(srv, __FILE__, __LINE__, "sss",
-					"unexpected type for key: ", option, "array of strings");
+			ERROR("unexpected type (%d) for key %s, expected 'array of strings'", 
+					du->type, option);
 
 			return HANDLER_ERROR;
 		}
@@ -103,10 +106,9 @@ static int parse_config_entry(server *srv, plugin_config *s, array *ca, const ch
 
 		for (j = 0; j < da->value->used; j++) {
 			if (da->value->data[j]->type != TYPE_STRING) {
-				log_error_write(srv, __FILE__, __LINE__, "sssbs",
-						"unexpected type for key: ",
-						option,
-						"[", da->value->data[j]->key, "](string)");
+				ERROR("unexpected type (%d) for value of %s[%s], expected 'string'", 
+					da->value->data[j]->type, option, 
+					BUF_STR(da->value->data[j]->key));
 
 				return HANDLER_ERROR;
 			}
@@ -115,11 +117,9 @@ static int parse_config_entry(server *srv, plugin_config *s, array *ca, const ch
 							    ((data_string *)(da->value->data[j]))->key->ptr,
 							    ((data_string *)(da->value->data[j]))->value->ptr)) {
 #ifdef HAVE_PCRE_H
-				log_error_write(srv, __FILE__, __LINE__, "sb",
-						"pcre-compile failed for", da->value->data[j]->key);
+				ERROR("pcre-compile failed for: %s", BUF_STR(da->value->data[j]->key));
 #else
-				log_error_write(srv, __FILE__, __LINE__, "s",
-						"pcre support is missing, please install libpcre and the headers");
+				ERROR("pcre support is missing, please install libpcre and the headers%s", "");
 #endif
 			}
 
@@ -131,7 +131,7 @@ static int parse_config_entry(server *srv, plugin_config *s, array *ca, const ch
 		}
 	}
 
-	return 0;
+	return HANDLER_GO_ON;
 }
 
 SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
@@ -173,10 +173,10 @@ SETDEFAULTS_FUNC(mod_rewrite_set_defaults) {
 			return HANDLER_ERROR;
 		}
 
-		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-once"),   1);
-		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-final"),  1);
-		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite"),        1);
-		parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-repeat"), 0);
+		if (HANDLER_GO_ON != parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-once"),   1)) return HANDLER_ERROR;
+		if (HANDLER_GO_ON != parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-final"),  1)) return HANDLER_ERROR;
+		if (HANDLER_GO_ON != parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite"),        1)) return HANDLER_ERROR;
+		if (HANDLER_GO_ON != parse_config_entry(srv, s, ca, CONST_STR_LEN("url.rewrite-repeat"), 0)) return HANDLER_ERROR;
 	}
 
 	return HANDLER_GO_ON;
@@ -242,7 +242,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 #ifdef HAVE_PCRE_H
 	plugin_data *p = p_d;
 	int i;
-	handler_ctx *hctx;
+	handler_ctx *hctx = NULL;
 
 	/*
 	 * REWRITE URL
@@ -255,7 +255,8 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 		hctx = con->plugin_ctx[p->id];
 
 		if (hctx->loops++ > 100) {
-			ERROR("ENDLESS LOOP IN rewrite-rule DETECTED ... aborting request after %d loops at %s", hctx->loops, BUF_STR(con->request.uri));
+			ERROR("ENDLESS LOOP IN rewrite-rule DETECTED ... aborting request after %d loops at %s", 
+					hctx->loops, BUF_STR(con->request.uri));
 
 			con->http_status = 500;
 
@@ -273,9 +274,11 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 	i = config_exec_pcre_keyvalue_buffer(con, p->conf.rewrite, p->conf.context, p->match_buf, con->request.uri);
 
 	if (i >= 0) {
-		hctx = handler_ctx_init();
+		if (!hctx) {
+			hctx = handler_ctx_init();
 
-		con->plugin_ctx[p->id] = hctx;
+			con->plugin_ctx[p->id] = hctx;
+		}
 
 		if (p->conf.once->ptr[i] == '1')
 			hctx->state = REWRITE_STATE_FINISHED;
@@ -296,10 +299,12 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 		}
 
 		return HANDLER_COMEBACK;
-	}
-	else if (i != PCRE_ERROR_NOMATCH) {
-		log_error_write(srv, __FILE__, __LINE__, "s",
-				"execution error while matching", i);
+	} else if (i != PCRE_ERROR_NOMATCH) {
+		ERROR("execution error while matching '%s' against '%s': %d", 
+				BUF_STR(p->match_buf), BUF_STR(con->request.uri), i);
+		con->http_status = 500;
+
+		return HANDLER_FINISHED;
 	}
 #undef N
 

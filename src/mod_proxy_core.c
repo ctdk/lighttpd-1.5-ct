@@ -265,7 +265,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		{ CONFIG_PROXY_CORE_ALLOW_X_SENDFILE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },   /* 6 */
 		{ CONFIG_PROXY_CORE_ALLOW_X_REWRITE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 7 */
 		{ CONFIG_PROXY_CORE_MAX_POOL_SIZE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },        /* 8 */
-		{ CONFIG_PROXY_CORE_CHECK_LOCAL, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
+		{ CONFIG_PROXY_CORE_CHECK_LOCAL, NULL, T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
 		{ CONFIG_PROXY_CORE_MAX_KEEP_ALIVE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },       /* 10 */
 		{ CONFIG_PROXY_CORE_SPLIT_HOSTNAMES, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 11 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
@@ -2071,12 +2071,14 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 
 	/* no proxy backends to handle this request. */
 	if (p->conf.backends->used == 0) return HANDLER_GO_ON;
-
+#if 0
 	/* if check_local is enabled, then wait for file match. */
 	if (file_match != p->conf.check_local) return HANDLER_GO_ON;
+#endif
 	path = file_match ? con->physical.path : con->uri.path;
+#if 0
 	if (buffer_is_empty(path)) return HANDLER_GO_ON;
-
+#endif
 	if (sess && sess->do_x_rewrite_backend) {
 		proxy_backend *backend;
 		buffer *sticky_session = sess->sticky_session;

@@ -547,7 +547,10 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 				in->bytes_out += we_have;
 				we_need -= we_have;
 			}
-			TRACE("(fastcgi-stderr) %s", BUF_STR(b));
+			TRACE("(stderr from %s for %s) %s", 
+					BUF_STR(proxy_con->address->name),
+					BUF_STR(sess->remote_con->uri.path),
+					BUF_STR(b));
 			buffer_free(b);
 		}
 		rc = HANDLER_GO_ON;

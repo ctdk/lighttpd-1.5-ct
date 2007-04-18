@@ -160,13 +160,13 @@ int config_insert_values_internal(server *srv, array *ca, const config_values_t 
 		case T_CONFIG_UNSET:
 			break;
 		case T_CONFIG_UNSUPPORTED:
-			log_error_write(srv, __FILE__, __LINE__, "ssss", "ERROR: found unsupported key:", cv[i].key, "-", (char *)(cv[i].destination));
+			ERROR("found unsupported key in '%s' = '%s'", cv[i].key, (char *)(cv[i].destination));
 
 			srv->config_unsupported = 1;
 
 			break;
 		case T_CONFIG_DEPRECATED:
-			log_error_write(srv, __FILE__, __LINE__, "ssss", "ERROR: found deprecated key:", cv[i].key, "-", (char *)(cv[i].destination));
+			ERROR("found deprecated key in '%s' = '%s'", cv[i].key, (char *)(cv[i].destination));
 
 			srv->config_deprecated = 1;
 
@@ -234,6 +234,12 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 		if (COND_RESULT_FALSE == con->cond_cache[dc->context_ndx].result) {
 			return COND_RESULT_FALSE;
 		}
+	}
+
+	if (!con->conditional_is_valid[dc->comp]) {
+		TRACE("cond[%d] is valid: %d", dc->comp, con->conditional_is_valid[dc->comp]);
+
+		return COND_RESULT_UNSET;
 	}
 
 	/* pass the rules */
@@ -402,10 +408,9 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 
 		break;
 	}
-	case COMP_PHYSICAL_PATH: {
+	case COMP_PHYSICAL_PATH: 
 		l = con->physical.path;
 		break;
-	}
 	default:
 		return COND_RESULT_FALSE;
 	}
@@ -419,9 +424,12 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 	}
 
 	if (con->conf.log_condition_handling) {
-		log_error_write(srv, __FILE__, __LINE__,  "bsbsb", dc->comp_key,
-				"(", l, ") compare to", dc->string);
+		TRACE("'%s': '%s' is matched against '%s'", 
+				BUF_STR(dc->comp_key),
+				BUF_STR(l),
+				BUF_STR(dc->string));
 	}
+
 	switch(dc->cond) {
 	case CONFIG_COND_NE:
 	case CONFIG_COND_EQ:
@@ -467,14 +475,13 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 
 	if (COND_RESULT_UNSET == caches[dc->context_ndx].result) {
 		if (con->conf.log_condition_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "sds",  "=== start of", dc->context_ndx, "condition block ===");
+			TRACE("=== start of %d condition block ===", dc->context_ndx);
 		}
 		if (COND_RESULT_TRUE == (caches[dc->context_ndx].result = config_check_cond_nocache(srv, con, dc))) {
 			if (dc->next) {
 				data_config *c;
 				if (con->conf.log_condition_handling) {
-					log_error_write(srv, __FILE__, __LINE__, "s",
-							"setting remains of chaining to false");
+					TRACE("setting remains of chaining to %s", "false");
 				}
 				for (c = dc->next; c; c = c->next) {
 					caches[c->context_ndx].result = COND_RESULT_FALSE;
@@ -482,14 +489,14 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 			}
 		}
 		if (con->conf.log_condition_handling) {
-			log_error_write(srv, __FILE__, __LINE__, "dss", dc->context_ndx,
-					"result:",
+			TRACE("[%d] result: %s",
+					dc->context_ndx,
 					caches[dc->context_ndx].result == COND_RESULT_TRUE ? "true" : "false");
 		}
 	} else {
 		if (con->conf.log_condition_cache_handling) {
-			log_error_write(srv, __FILE__, __LINE__, "dss", dc->context_ndx,
-					"(cached) result:",
+			TRACE("[%d] (cached) result: %s",
+					dc->context_ndx,
 					caches[dc->context_ndx].result == COND_RESULT_TRUE ? "true" : "false");
 		}
 	}
@@ -497,9 +504,9 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 }
 
 void config_cond_cache_reset(server *srv, connection *con) {
-#if COND_RESULT_UNSET
 	size_t i;
 
+#if COND_RESULT_UNSET
 	for (i = srv->config_context->used - 1; i >= 0; i --) {
 		con->cond_cache[i].result = COND_RESULT_UNSET;
 		con->cond_cache[i].patterncount = 0;
@@ -507,6 +514,9 @@ void config_cond_cache_reset(server *srv, connection *con) {
 #else
 	memset(con->cond_cache, 0, sizeof(cond_cache_t) * srv->config_context->used);
 #endif
+	for (i = 0; i < COMP_LAST_ELEMENT; i++) {
+		con->conditional_is_valid[i] = 0;
+	}
 }
 
 int config_check_cond(server *srv, connection *con, data_config *dc) {

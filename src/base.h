@@ -439,6 +439,8 @@ typedef struct {
 	/**/
 
 	GTimeVal timestamps[TIME_LAST_ELEMENT];
+
+	int conditional_is_valid[COMP_LAST_ELEMENT];
 } connection;
 
 typedef struct {

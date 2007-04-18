@@ -10,8 +10,15 @@
 
 #include "sys-strings.h"
 
+#define PLUGIN_NAME "access"
+
+#define CONFIG_URL_ACCESS_DENY "url.access-deny"
+#define CONFIG_ACCESS_DENY_ALL PLUGIN_NAME ".deny-all"
+
 typedef struct {
 	array *access_deny;
+
+	unsigned short deny_all;
 } plugin_config;
 
 typedef struct {
@@ -61,7 +68,8 @@ SETDEFAULTS_FUNC(mod_access_set_defaults) {
 	size_t i = 0;
 
 	config_values_t cv[] = {
-		{ "url.access-deny",             NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_URL_ACCESS_DENY,        NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
+		{ CONFIG_ACCESS_DENY_ALL,        NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },
 		{ NULL,                          NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -72,8 +80,10 @@ SETDEFAULTS_FUNC(mod_access_set_defaults) {
 
 		s = calloc(1, sizeof(plugin_config));
 		s->access_deny    = array_init();
+		s->deny_all       = 0;
 
 		cv[0].destination = s->access_deny;
+		cv[1].destination = &(s->deny_all);
 
 		p->config_storage[i] = s;
 
@@ -90,6 +100,7 @@ static int mod_access_patch_connection(server *srv, connection *con, plugin_data
 	plugin_config *s = p->config_storage[0];
 
 	PATCH_OPTION(access_deny);
+	PATCH_OPTION(deny_all);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -103,8 +114,10 @@ static int mod_access_patch_connection(server *srv, connection *con, plugin_data
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("url.access-deny"))) {
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_URL_ACCESS_DENY))) {
 				PATCH_OPTION(access_deny);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_ACCESS_DENY_ALL))) {
+				PATCH_OPTION(deny_all);
 			}
 		}
 	}
@@ -148,18 +161,47 @@ URIHANDLER_FUNC(mod_access_uri_handler) {
 		}
 	}
 
+	if (p->conf.deny_all) {
+		con->http_status = 403;
+
+		return HANDLER_FINISHED;
+	}
+
 	/* not found */
 	return HANDLER_GO_ON;
 }
 
+URIHANDLER_FUNC(mod_access_path_handler) {
+	plugin_data *p = p_d;
+
+	mod_access_patch_connection(srv, con, p);
+
+	if (con->conf.log_request_handling) {
+		TRACE("-- %s", "handling file in mod_access");
+	}
+
+	if (p->conf.deny_all) {
+		con->http_status = 403;
+
+		if (con->conf.log_request_handling) {
+			TRACE("access denied, sending %d", con->http_status);
+		}
+
+		return HANDLER_FINISHED;
+	}
+
+	/* not found */
+	return HANDLER_GO_ON;
+}
 
 LI_EXPORT int mod_access_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
-	p->name        = buffer_init_string("access");
+	p->name        = buffer_init_string(PLUGIN_NAME);
 
 	p->init        = mod_access_init;
 	p->set_defaults = mod_access_set_defaults;
-	p->handle_uri_clean  = mod_access_uri_handler;
+	p->handle_uri_clean      = mod_access_uri_handler;
+	p->handle_start_backend  = mod_access_path_handler;
 	p->cleanup     = mod_access_free;
 
 	p->data        = NULL;

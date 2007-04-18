@@ -113,7 +113,6 @@ NETWORK_BACKEND_READ(openssl) {
 NETWORK_BACKEND_WRITE(openssl) {
 	int ssl_r;
 	chunk *c;
-	size_t chunks_written = 0;
 
 	/* this is a 64k sendbuffer
 	 *
@@ -341,11 +340,8 @@ NETWORK_BACKEND_WRITE(openssl) {
 
 		if (!chunk_finished) {
 			/* not finished yet */
-
-			break;
+			return NETWORK_STATUS_WAIT_FOR_EVENT;
 		}
-
-		chunks_written++;
 	}
 
 	return NETWORK_STATUS_SUCCESS;

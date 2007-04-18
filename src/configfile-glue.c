@@ -237,7 +237,9 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 	}
 
 	if (!con->conditional_is_valid[dc->comp]) {
-		TRACE("cond[%d] is valid: %d", dc->comp, con->conditional_is_valid[dc->comp]);
+		if (con->conf.log_condition_handling) {
+			TRACE("cond[%d] is valid: %d", dc->comp, con->conditional_is_valid[dc->comp]);
+		}
 
 		return COND_RESULT_UNSET;
 	}

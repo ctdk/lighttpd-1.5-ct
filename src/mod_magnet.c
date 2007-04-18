@@ -24,8 +24,12 @@
 #include <lua.h>
 #include <lauxlib.h>
 
-#define MAGNET_CONFIG_RAW_URL       "magnet.attract-raw-url-to"
-#define MAGNET_CONFIG_PHYSICAL_PATH "magnet.attract-physical-path-to"
+#define PLUGIN_NAME "magnet"
+
+#define MAGNET_CONFIG_RAW_URL        PLUGIN_NAME ".attract-raw-url-to"
+#define MAGNET_CONFIG_PHYSICAL_PATH  PLUGIN_NAME ".attract-physical-path-to"
+#define MAGNET_CONFIG_FILTER_CONTENT PLUGIN_NAME ".attract-response-content-to"
+#define MAGNET_CONFIG_FILTER_HEADER  PLUGIN_NAME ".attract-response-header-to"
 #define MAGNET_RESTART_REQUEST      99
 
 /* plugin config for all request/connections */
@@ -35,6 +39,8 @@ static jmp_buf exceptionjmp;
 typedef struct {
 	array *url_raw;
 	array *physical_path;
+	array *filter_header;
+	array *filter_content;
 } plugin_config;
 
 typedef struct {
@@ -79,6 +85,8 @@ FREE_FUNC(mod_magnet_free) {
 
 			array_free(s->url_raw);
 			array_free(s->physical_path);
+			array_free(s->filter_header);
+			array_free(s->filter_content);
 
 			free(s);
 		}
@@ -102,6 +110,8 @@ SETDEFAULTS_FUNC(mod_magnet_set_defaults) {
 	config_values_t cv[] = {
 		{ MAGNET_CONFIG_RAW_URL,       NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
 		{ MAGNET_CONFIG_PHYSICAL_PATH, NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 1 */
+		{ MAGNET_CONFIG_FILTER_CONTENT, NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 1 */
+		{ MAGNET_CONFIG_FILTER_HEADER, NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 1 */
 		{ NULL,                           NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -115,9 +125,13 @@ SETDEFAULTS_FUNC(mod_magnet_set_defaults) {
 		s = calloc(1, sizeof(plugin_config));
 		s->url_raw  = array_init();
 		s->physical_path = array_init();
+		s->filter_content = array_init();
+		s->filter_header = array_init();
 
 		cv[0].destination = s->url_raw;
 		cv[1].destination = s->physical_path;
+		cv[2].destination = s->filter_content;
+		cv[3].destination = s->filter_header;
 
 		p->config_storage[i] = s;
 
@@ -137,6 +151,8 @@ static int mod_magnet_patch_connection(server *srv, connection *con, plugin_data
 
 	PATCH(url_raw);
 	PATCH(physical_path);
+	PATCH(filter_header);
+	PATCH(filter_content);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -154,6 +170,10 @@ static int mod_magnet_patch_connection(server *srv, connection *con, plugin_data
 				PATCH(url_raw);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(MAGNET_CONFIG_PHYSICAL_PATH))) {
 				PATCH(physical_path);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(MAGNET_CONFIG_FILTER_CONTENT))) {
+				PATCH(filter_content);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(MAGNET_CONFIG_FILTER_HEADER))) {
+				PATCH(filter_header);
 			}
 		}
 	}
@@ -831,18 +851,31 @@ URIHANDLER_FUNC(mod_magnet_physical) {
 	return magnet_attract_array(srv, con, p, p->conf.physical_path);
 }
 
+URIHANDLER_FUNC(mod_magnet_handle_response_header) {
+	plugin_data *p = p_d;
+
+	mod_magnet_patch_connection(srv, con, p);
+
+	return magnet_attract_array(srv, con, p, p->conf.filter_header);
+}
 
 /* this function is called at dlopen() time and inits the callbacks */
 
 int mod_magnet_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
-	p->name        = buffer_init_string("magnet");
+	p->name        = buffer_init_string(PLUGIN_NAME);
 
-	p->init        = mod_magnet_init;
-	p->handle_uri_clean  = mod_magnet_uri_handler;
-	p->handle_physical   = mod_magnet_physical;
-	p->set_defaults  = mod_magnet_set_defaults;
-	p->cleanup     = mod_magnet_free;
+	p->init                = mod_magnet_init;
+	p->set_defaults        = mod_magnet_set_defaults;
+	p->cleanup             = mod_magnet_free;
+
+	p->handle_uri_clean    = mod_magnet_uri_handler; /* match against the uri */
+	p->handle_physical     = mod_magnet_physical;    /* match against the filename */
+
+	p->handle_response_header	  = mod_magnet_handle_response_header;
+#if 0
+	p->handle_filter_response_content = mod_magnet_handle_filter_response_content;
+#endif
 
 	p->data        = NULL;
 

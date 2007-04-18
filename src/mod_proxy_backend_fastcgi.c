@@ -44,6 +44,7 @@ typedef struct {
 typedef struct {
 	buffer          *buf; /* holds raw header bytes or used to buffer STDERR */
 	fastcgi_packet  packet; /* parsed info about current packet. */
+	int             is_complete;
 } fcgi_state_data;
 
 fcgi_state_data *fcgi_state_data_init(void) {
@@ -67,6 +68,7 @@ void fcgi_state_data_reset(fcgi_state_data *data) {
 	data->packet.type = 0;
 	data->packet.padding = 0;
 	data->packet.request_id = 0;
+	data->is_complete = 0;
 }
 
 PROXY_CONNECTION_FUNC(proxy_fastcgi_init) {
@@ -451,13 +453,15 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 	/* no data ? */
 	if (!in->first) return HANDLER_GO_ON;
 
-	/* parse the packet header. */
-	if(data->packet.offset < FCGI_HEADER_LEN) {
+	/* a single network packet might contain multiple fcgi packets */
+	if(!data->is_complete) {
 		we_need = (FCGI_HEADER_LEN - data->packet.offset);
-		/* copy fastcgi header to buffer */
-		buffer_prepare_append(data->buf, we_need);
+
+		/**
+		 * a the fcgi header might spread over multiple network packets 
+		 */
 		for (c = in->first; c && we_need > 0; c = c->next) {
-			if(c->mem->used == 0) continue;
+			if (c->mem->used == 0) continue;
 
 			we_have = c->mem->used - c->offset - 1;
 			if (we_have == 0) continue;
@@ -475,6 +479,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 			/* we need more data to parse the header. */
 			return HANDLER_GO_ON;
 		}
+
 		/* parse raw header. */
 		header = (FCGI_Header *)(data->buf->ptr);
 
@@ -482,6 +487,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 		data->packet.request_id = (header->requestIdB0 | (header->requestIdB1 << 8));
 		data->packet.type = header->type;
 		data->packet.padding = header->paddingLength;
+		data->is_complete = 1;
 
 		/* Finished parsing raw header bytes. */
 		buffer_reset(data->buf);
@@ -489,6 +495,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 
 	/* proccess the packet's contents. */
 	we_need = data->packet.len - (data->packet.offset - FCGI_HEADER_LEN);
+	
 	switch (data->packet.type) {
 	case FCGI_STDOUT:
 		if (we_need > 0) {
@@ -503,10 +510,25 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 		}
 		/* parse response headers. */
 		if (!sess->have_response_headers) {
-			rc = proxy_fastcgi_http_response_headers(sess, out);
-			if (rc != HANDLER_FINISHED) return rc;
+			/* check if we have all the response headers */ 
+			switch (proxy_fastcgi_http_response_headers(sess, out)) {
+			case HANDLER_FINISHED:
+				/* the headers are complete */
+
+				rc = HANDLER_GO_ON;
+				break;
+			case HANDLER_GO_ON:
+				/* no finished yet */
+				rc = HANDLER_GO_ON;
+				break;
+			default:
+				/* something failed */
+				rc = HANDLER_ERROR;
+				break;
+			}
+		} else {
+			rc = HANDLER_GO_ON;
 		}
-		rc = HANDLER_GO_ON;
 		break;
 	case FCGI_STDERR:
 		if(we_need > 0) {

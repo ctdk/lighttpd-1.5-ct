@@ -422,7 +422,9 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 
 	if (HANDLER_ERROR != stat_cache_get_entry(srv, con, p->ofn, &compressed_sce)) {
 		/* file exists */
+		if (con->conf.log_request_handling) TRACE("file exists in the cache (%s), sending it", BUF_STR(p->ofn));
 
+		chunkqueue_reset(con->send);
 		chunkqueue_append_file(con->send, p->ofn, 0, compressed_sce->st.st_size);
 		con->send->is_closed = 1;
 
@@ -499,6 +501,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 
 	if (ret != 0) return -1;
 
+	chunkqueue_reset(con->send);
 	chunkqueue_append_file(con->send, p->ofn, 0, r);
 	con->send->is_closed = 1;
 
@@ -610,6 +613,20 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	size_t m;
 	off_t max_fsize;
 	stat_cache_entry *sce = NULL;
+	data_string *ds;
+	int accept_encoding = 0;
+	char *value;
+	int srv_encodings = 0;
+	int matched_encodings = 0;
+	const char *dflt_gzip = "gzip";
+	const char *dflt_deflate = "deflate";
+	const char *dflt_bzip2 = "bzip2";
+
+	const char *compression_name = NULL;
+	int compression_type = 0;
+	buffer *mtime;
+
+	if (con->conf.log_request_handling) TRACE("-- %s", "handling in mod_compress");
 
 	/* only GET and POST can get compressed */
 	if (con->request.http_method != HTTP_METHOD_GET &&
@@ -625,111 +642,145 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 
 	max_fsize = p->conf.compress_max_filesize;
 
-	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+	if (HANDLER_GO_ON != stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
+		if (con->conf.log_request_handling) TRACE("file '%s' not found", BUF_STR(con->physical.path));
 		return HANDLER_GO_ON;
 	}
 
 	/* don't compress files that are too large as we need to much time to handle them */
-	if (max_fsize && (sce->st.st_size >> 10) > max_fsize) return HANDLER_GO_ON;
+	if (max_fsize && (sce->st.st_size >> 10) > max_fsize) {
+		if (con->conf.log_request_handling) TRACE("file '%s' is too large: %lu", 
+				BUF_STR(con->physical.path), 
+				sce->st.st_size);
+
+		return HANDLER_GO_ON;
+	}
 
 	/* compressing the file might lead to larger files instead */
-	if (sce->st.st_size < 128) return HANDLER_GO_ON;
+	if (sce->st.st_size < 128) {
+		if (con->conf.log_request_handling) TRACE("file '%s' is too small: %lu", 
+				BUF_STR(con->physical.path), 
+				sce->st.st_size);
+
+		return HANDLER_GO_ON;
+	}
 
 	/* check if mimetype is in compress-config */
 	for (m = 0; m < p->conf.compress->used; m++) {
 		data_string *compress_ds = (data_string *)p->conf.compress->data[m];
 
 		if (!compress_ds) {
-			log_error_write(srv, __FILE__, __LINE__, "sbb", "evil", con->physical.path, con->uri.path);
+			ERROR("evil: %s .. %s", BUF_STR(con->physical.path), BUF_STR(con->uri.path));
 
 			return HANDLER_GO_ON;
 		}
 
 		if (buffer_is_equal(compress_ds->value, sce->content_type)) {
-			/* mimetype found */
-			data_string *ds;
+			break;
+		}
+	}
 
-			/* the response might change according to Accept-Encoding */
-			response_header_insert(srv, con, CONST_STR_LEN("Vary"), CONST_STR_LEN("Accept-Encoding"));
+	if (m == p->conf.compress->used) {
+		return HANDLER_GO_ON;
+	}
+	/* mimetype found */
 
-			if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Accept-Encoding")))) {
-				int accept_encoding = 0;
-				char *value = ds->value->ptr;
-				int srv_encodings = 0;
-				int matched_encodings = 0;
 
-				/* get client side support encodings */
-				if (NULL != strstr(value, "gzip")) accept_encoding |= HTTP_ACCEPT_ENCODING_GZIP;
-				if (NULL != strstr(value, "deflate")) accept_encoding |= HTTP_ACCEPT_ENCODING_DEFLATE;
-				if (NULL != strstr(value, "compress")) accept_encoding |= HTTP_ACCEPT_ENCODING_COMPRESS;
-				if (NULL != strstr(value, "bzip2")) accept_encoding |= HTTP_ACCEPT_ENCODING_BZIP2;
-				if (NULL != strstr(value, "identity")) accept_encoding |= HTTP_ACCEPT_ENCODING_IDENTITY;
+	if (con->send->is_closed == 0) {
+		if (con->conf.log_request_handling) TRACE("we can't compress streams: is_closed = %d", con->send->is_closed);
+		return HANDLER_GO_ON;
+	}
 
-				/* get server side supported ones */
+	if (con->send->first == NULL) {
+		if (con->conf.log_request_handling) TRACE("we can't compress streams: ->first = %p", con->send->first);
+		return HANDLER_GO_ON;
+	}
+
+	if (con->send->first->next != NULL) {
+		if (con->conf.log_request_handling) TRACE("we can't compress streams: ->first->next = %p", con->send->first->next);
+		return HANDLER_GO_ON;
+	}
+
+	if (con->send->first->type != FILE_CHUNK) {
+		if (con->conf.log_request_handling) TRACE("we can compress file-chunks: ->type = %d", con->send->first->type);
+		return HANDLER_GO_ON;
+	}
+
+	/* the response might change according to Accept-Encoding */
+	response_header_insert(srv, con, CONST_STR_LEN("Vary"), CONST_STR_LEN("Accept-Encoding"));
+
+	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Accept-Encoding")))) {
+		if (con->conf.log_request_handling) TRACE("couldn't find a Accept-Encoding header: %s", "");
+		return HANDLER_GO_ON;
+	}
+
+	value = ds->value->ptr;
+
+	/* get client side support encodings */
+	if (NULL != strstr(value, "gzip")) accept_encoding |= HTTP_ACCEPT_ENCODING_GZIP;
+	if (NULL != strstr(value, "deflate")) accept_encoding |= HTTP_ACCEPT_ENCODING_DEFLATE;
+	if (NULL != strstr(value, "compress")) accept_encoding |= HTTP_ACCEPT_ENCODING_COMPRESS;
+	if (NULL != strstr(value, "bzip2")) accept_encoding |= HTTP_ACCEPT_ENCODING_BZIP2;
+	if (NULL != strstr(value, "identity")) accept_encoding |= HTTP_ACCEPT_ENCODING_IDENTITY;
+
+	/* get server side supported ones */
 #ifdef USE_BZ2LIB
-				srv_encodings |= HTTP_ACCEPT_ENCODING_BZIP2;
+	srv_encodings |= HTTP_ACCEPT_ENCODING_BZIP2;
 #endif
 #ifdef USE_ZLIB
-				srv_encodings |= HTTP_ACCEPT_ENCODING_GZIP;
-				srv_encodings |= HTTP_ACCEPT_ENCODING_DEFLATE;
+	srv_encodings |= HTTP_ACCEPT_ENCODING_GZIP;
+	srv_encodings |= HTTP_ACCEPT_ENCODING_DEFLATE;
 #endif
 
-				/* find matching entries */
-				matched_encodings = accept_encoding & srv_encodings;
+	/* find matching entries */
+	if (0 == (matched_encodings = accept_encoding & srv_encodings)) {
+		if (con->conf.log_request_handling) TRACE("we don't support the requested encoding: %s", value);
+		return HANDLER_GO_ON;
+	}
 
-				if (matched_encodings) {
-					const char *dflt_gzip = "gzip";
-					const char *dflt_deflate = "deflate";
-					const char *dflt_bzip2 = "bzip2";
+	mtime = strftime_cache_get(srv, sce->st.st_mtime);
+	etag_mutate(con->physical.etag, sce->etag);
 
-					const char *compression_name = NULL;
-					int compression_type = 0;
-					buffer *mtime;
+	response_header_overwrite(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(mtime));
+	response_header_overwrite(srv, con, CONST_STR_LEN("ETag"), CONST_BUF_LEN(con->physical.etag));
 
-					mtime = strftime_cache_get(srv, sce->st.st_mtime);
-					etag_mutate(con->physical.etag, sce->etag);
+	/* perhaps we don't even have to compress the file as the browser still has the
+	 * current version */
+	if (HANDLER_FINISHED == http_response_handle_cachable(srv, con, mtime)) {
+		if (con->conf.log_request_handling) TRACE("%s is still the same, caching", BUF_STR(con->physical.path));
+		return HANDLER_FINISHED;
+	}
 
-					response_header_overwrite(srv, con, CONST_STR_LEN("Last-Modified"), CONST_BUF_LEN(mtime));
-					response_header_overwrite(srv, con, CONST_STR_LEN("ETag"), CONST_BUF_LEN(con->physical.etag));
+	/* select best matching encoding */
+	if (matched_encodings & HTTP_ACCEPT_ENCODING_BZIP2) {
+		compression_type = HTTP_ACCEPT_ENCODING_BZIP2;
+		compression_name = dflt_bzip2;
+	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_GZIP) {
+		compression_type = HTTP_ACCEPT_ENCODING_GZIP;
+		compression_name = dflt_gzip;
+	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_DEFLATE) {
+		compression_type = HTTP_ACCEPT_ENCODING_DEFLATE;
+		compression_name = dflt_deflate;
+	}
 
-					/* perhaps we don't even have to compress the file as the browser still has the
-					 * current version */
-					if (HANDLER_FINISHED == http_response_handle_cachable(srv, con, mtime)) {
-						return HANDLER_FINISHED;
-					}
+	if (con->conf.log_request_handling) TRACE("we are fine, let's compress: %s", "");
 
-					/* select best matching encoding */
-					if (matched_encodings & HTTP_ACCEPT_ENCODING_BZIP2) {
-						compression_type = HTTP_ACCEPT_ENCODING_BZIP2;
-						compression_name = dflt_bzip2;
-					} else if (matched_encodings & HTTP_ACCEPT_ENCODING_GZIP) {
-						compression_type = HTTP_ACCEPT_ENCODING_GZIP;
-						compression_name = dflt_gzip;
-					} else if (matched_encodings & HTTP_ACCEPT_ENCODING_DEFLATE) {
-						compression_type = HTTP_ACCEPT_ENCODING_DEFLATE;
-						compression_name = dflt_deflate;
-					}
+	/* deflate it to file (cached) or to memory */
+	if (0 == deflate_file_to_file(srv, con, p,
+			con->physical.path, sce, compression_type) ||
+	    0 == deflate_file_to_buffer(srv, con, p,
+			con->physical.path, sce, compression_type)) {
 
-					/* deflate it to file (cached) or to memory */
-					if (0 == deflate_file_to_file(srv, con, p,
-							con->physical.path, sce, compression_type) ||
-					    0 == deflate_file_to_buffer(srv, con, p,
-							con->physical.path, sce, compression_type)) {
+		response_header_overwrite(srv, con,
+				CONST_STR_LEN("Content-Encoding"),
+				compression_name, strlen(compression_name));
 
-						response_header_overwrite(srv, con,
-								CONST_STR_LEN("Content-Encoding"),
-								compression_name, strlen(compression_name));
+		response_header_overwrite(srv, con,
+				CONST_STR_LEN("Content-Type"),
+				CONST_BUF_LEN(sce->content_type));
 
-						response_header_overwrite(srv, con,
-								CONST_STR_LEN("Content-Type"),
-								CONST_BUF_LEN(sce->content_type));
-
-						return HANDLER_FINISHED;
-					}
-					break;
-				}
-			}
-		}
+		if (con->conf.log_request_handling) TRACE("looks like %s could be compressed", BUF_STR(con->physical.path));
+		return HANDLER_FINISHED;
 	}
 
 	return HANDLER_GO_ON;

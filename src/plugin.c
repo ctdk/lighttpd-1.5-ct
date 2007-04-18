@@ -126,6 +126,7 @@ PLUGIN_STATIC(mod_evasive);
 PLUGIN_STATIC(mod_evhost);
 PLUGIN_STATIC(mod_expire);
 PLUGIN_STATIC(mod_deflate);
+PLUGIN_STATIC(mod_compress);
 PLUGIN_STATIC(mod_flv_streaming);
 PLUGIN_STATIC(mod_chunked);
 PLUGIN_STATIC(mod_indexfile);
@@ -166,6 +167,7 @@ PLUGIN_STATIC(mod_evasive),
 PLUGIN_STATIC(mod_evhost),
 PLUGIN_STATIC(mod_expire),
 PLUGIN_STATIC(mod_deflate),
+PLUGIN_STATIC(mod_compress),
 PLUGIN_STATIC(mod_flv_streaming),
 PLUGIN_STATIC(mod_chunked),
 PLUGIN_STATIC(mod_indexfile),

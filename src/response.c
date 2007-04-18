@@ -162,7 +162,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		 *  */
 
 		if (con->conf.log_condition_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "run condition");
+			TRACE("run condition: %s", "");
 		}
 		config_patch_connection(srv, con, COMP_SERVER_SOCKET); /* SERVERsocket */
 
@@ -214,12 +214,12 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		}
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- splitting Request-URI");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Request-URI  : ", con->request.uri);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "URI-scheme   : ", con->uri.scheme);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "URI-authority: ", con->uri.authority);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "URI-path     : ", con->uri.path_raw);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "URI-query    : ", con->uri.query);
+			TRACE("-- %s", "splitting Request-URI");
+			TRACE("Request-URI  : %s", BUF_STR(con->request.uri));
+			TRACE("URI-scheme   : %s", BUF_STR(con->uri.scheme));
+			TRACE("URI-authority: %s", BUF_STR(con->uri.authority));
+			TRACE("URI-path     : %s", BUF_STR(con->uri.path_raw));
+			TRACE("URI-query    : %s", BUF_STR(con->uri.query));
 		}
 
 		/* disable keep-alive if requested */
@@ -250,7 +250,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		case HANDLER_ERROR:
 			return r;
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "sd", "handle_uri_raw: unknown return value", r);
+			ERROR("plugins_call_handle_uri_raw() returned unexpected: %d", r);
 			break;
 		}
 
@@ -273,8 +273,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		}
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- sanatising URI");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "URI-path     : ", con->uri.path);
+			TRACE("-- %s", "sanatising URI");
+			TRACE("URI-path     : %s", BUF_STR(con->uri.path));
 		}
 
 		/**
@@ -302,7 +302,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		case HANDLER_ERROR:
 			return r;
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "");
+			ERROR("plugins_call_handle_uri_clean() returned unexpected: %d", r);
 			break;
 		}
 
@@ -390,10 +390,10 @@ handler_t handle_get_backend(server *srv, connection *con) {
 #endif
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- before doc_root");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Doc-Root     :", con->physical.doc_root);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Rel-Path     :", con->physical.rel_path);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+			TRACE("-- %s", "before doc_root");
+			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
+			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
+			TRACE("Path         : %s", BUF_STR(con->physical.path));
 		}
 		/* the docroot plugin should set the doc_root and might also set the physical.path
 		 * for us (all vhost-plugins are supposed to set the doc_root)
@@ -407,7 +407,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		case HANDLER_ERROR:
 			return r;
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "");
+			ERROR("plugins_call_handle_docroot() returned unexpected: %d", r);
 			break;
 		}
 
@@ -446,10 +446,10 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		}
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- after doc_root");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Doc-Root     :", con->physical.doc_root);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Rel-Path     :", con->physical.rel_path);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+			TRACE("-- %s", "after doc_root");
+			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
+			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
+			TRACE("Path         : %s", BUF_STR(con->physical.path));
 		}
 
 		switch(r = plugins_call_handle_physical(srv, con)) {
@@ -461,15 +461,15 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		case HANDLER_ERROR:
 			return r;
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "");
+			ERROR("plugins_call_handle_physical() returned unexpected: %d", r);
 			break;
 		}
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- logical -> physical");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Doc-Root     :", con->physical.doc_root);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Rel-Path     :", con->physical.rel_path);
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+			TRACE("-- %s", "logical -> physical");
+			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
+			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
+			TRACE("Path         : %s", BUF_STR(con->physical.path));
 		}
 	}
 
@@ -487,17 +487,17 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		stat_cache_entry *sce = NULL;
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling physical path");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+			TRACE("-- %s", "handling physical path");
+			TRACE("Path         : %s", BUF_STR(con->physical.path));
 		}
 
-		switch (stat_cache_get_entry_async(srv, con, con->physical.path, &sce)) {
+		switch ((r = stat_cache_get_entry_async(srv, con, con->physical.path, &sce))) {
 		case HANDLER_GO_ON:
 			/* file exists */
 
 			if (con->conf.log_request_handling) {
-				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- file found");
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+				TRACE("-- %s", "file found");
+				TRACE("Path         : %s", BUF_STR(con->physical.path));
 			}
 
 #ifdef HAVE_LSTAT
@@ -505,8 +505,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				con->http_status = 403;
 
 				if (con->conf.log_request_handling) {
-					log_error_write(srv, __FILE__, __LINE__,  "s",  "-- access denied due symlink restriction");
-					log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+					TRACE("-- %s", "access denied due symlink restriction");
+					TRACE("Path         : %s", BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -540,8 +540,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				con->http_status = 403;
 
 				if (con->conf.log_request_handling) {
-					log_error_write(srv, __FILE__, __LINE__,  "s",  "-- access denied");
-					log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+					TRACE("-- %s", "access denied");
+					TRACE("Path         : %s", BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -550,8 +550,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				con->http_status = 404;
 
 				if (con->conf.log_request_handling) {
-					log_error_write(srv, __FILE__, __LINE__,  "s",  "-- file not found");
-					log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+					TRACE("-- %s", "file not found");
+					TRACE("Path         : %s", BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -612,9 +612,9 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				con->http_status = 404;
 
 				if (con->conf.log_file_not_found) {
-					log_error_write(srv, __FILE__, __LINE__, "sbsb",
-							"file not found:", con->uri.path,
-							"->", con->physical.path);
+					TRACE("file not found: %s -> %s", 
+							BUF_STR(con->uri.path),
+							BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -635,18 +635,22 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			}
 
 			if (con->conf.log_request_handling) {
-				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- after pathinfo check");
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
-				log_error_write(srv, __FILE__, __LINE__,  "sb", "Pathinfo     :", con->request.pathinfo);
+				TRACE("-- %s", "after pathinfo check");
+				TRACE("Path         : %s", BUF_STR(con->physical.path));
+				TRACE("URI          : %s", BUF_STR(con->uri.path));
+				TRACE("Pathinfo     : %s", BUF_STR(con->request.pathinfo));
 			}
+			break;
+		default:
+			ERROR("stat_cache_get_entry_async() returned unexpected: %d", r);
+			break;
 		}
 
 		config_patch_connection(srv, con, COMP_PHYSICAL_PATH);    /* physical-path  */
 
 		if (con->conf.log_request_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling subrequest");
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "Path         :", con->physical.path);
+			TRACE("-- %s", "handling subrequest");
+			TRACE("Path         : %s", BUF_STR(con->physical.path));
 		}
 
 		/* call the handlers */
@@ -657,7 +661,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		default:
 			if (con->conf.log_request_handling) {
-				log_error_write(srv, __FILE__, __LINE__,  "s",  "-- subrequest finished");
+				TRACE("-- %s", "subrequest finished");
 			}
 
 			/* something strange happened */

@@ -428,6 +428,8 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET stringop(C) RBRACKET cond(E) expressio
       { COMP_HTTP_QUERY_STRING,  CONST_STR_LEN("HTTP[\"query-string\"]") },
       { COMP_HTTP_REQUEST_METHOD, CONST_STR_LEN("HTTP[\"request-method\"]") },
       { COMP_PHYSICAL_PATH,      CONST_STR_LEN("PHYSICAL[\"path\"]") },
+      { COMP_PHYSICAL_PATH_EXISTS,CONST_STR_LEN("PHYSICAL[\"existing-path\"]") },
+
       { COMP_UNSET, NULL, 0 },
     };
     size_t i;

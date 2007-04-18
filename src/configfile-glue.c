@@ -408,6 +408,7 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 
 		break;
 	}
+	case COMP_PHYSICAL_PATH_EXISTS: 
 	case COMP_PHYSICAL_PATH: 
 		l = con->physical.path;
 		break;

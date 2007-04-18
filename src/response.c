@@ -465,6 +465,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			break;
 		}
 
+		config_patch_connection(srv, con, COMP_PHYSICAL_PATH);    /* physical-path  */
+
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "logical -> physical");
 			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
@@ -646,7 +648,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			break;
 		}
 
-		config_patch_connection(srv, con, COMP_PHYSICAL_PATH);    /* physical-path  */
+		config_patch_connection(srv, con, COMP_PHYSICAL_PATH_EXISTS);    /* physical-path  */
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "handling subrequest");

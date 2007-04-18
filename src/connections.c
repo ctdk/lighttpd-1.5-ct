@@ -1259,6 +1259,8 @@ int connection_state_machine(server *srv, connection *con) {
 		case CON_STATE_WRITE_RESPONSE_CONTENT:
 			fdevent_event_del(srv->ev, con->sock);
 
+			con->write_request_ts = srv->cur_ts;
+
 			/* looks like we shall read some content from the backend */
 			switch (plugins_call_handle_read_response_content(srv, con)) {
 			case HANDLER_WAIT_FOR_EVENT:

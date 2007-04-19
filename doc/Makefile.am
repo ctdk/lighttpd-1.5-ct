@@ -25,6 +25,7 @@ rrdtool.txt \
 alias.txt \
 userdir.txt \
 mysqlvhost.txt \
+postgresqlvhost.txt \
 access.txt \
 traffic-shaping.txt \
 setenv.txt \
@@ -61,6 +62,7 @@ HTMLDOCS=accesslog.html \
 	 alias.html \
 	 userdir.html \
 	 mysqlvhost.html \
+	 postgresvhost.html \
 	 access.html \
 	 traffic-shaping.html \
 	 setenv.html \

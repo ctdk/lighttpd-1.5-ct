@@ -56,7 +56,7 @@ AC_CHECK_HEADERS([arpa/inet.h fcntl.h netinet/in.h stdlib.h string.h \
 sys/socket.h sys/time.h unistd.h sys/sendfile.h sys/uio.h \
 getopt.h sys/epoll.h sys/select.h poll.h sys/poll.h sys/devpoll.h sys/filio.h \
 sys/mman.h sys/event.h sys/port.h pwd.h sys/syslimits.h \
-sys/resource.h sys/un.h syslog.h sys/prctl.h])
+sys/resource.h sys/un.h syslog.h sys/prctl.h pthread.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_CONST
@@ -129,6 +129,57 @@ fi
 
 AC_SUBST(MYSQL_LIBS)
 AC_SUBST(MYSQL_INCLUDE)
+
+POSTGRESQL_INCLUDE=""
+POSTGRESQL_LIBS=""
+
+AC_MSG_CHECKING(for PostgreSQL support)
+AC_ARG_WITH(postgresql,
+    AC_HELP_STRING([--with-postgresql@<:@=PATH@:>@],[Include PostgreSQL support. PATH is the path to 'pg_config']),
+    [WITH_POSTGRESQL=$withval],[WITH_POSTGRESQL=no])
+
+if test "$WITH_POSTGRESQL" != "no"; then
+  AC_MSG_RESULT($WITH_POSTGRESQL)
+  if test "$WITH_POSTGRESQL" = "yes"; then
+    AC_PATH_PROG(POSTGRESQL_CONFIG, pg_config)
+  else
+    POSTGRESQL_CONFIG=$WITH_POSTGRESQL
+  fi
+
+  if test "$POSTGRESQL_CONFIG" = ""; then
+    AC_MSG_ERROR(pg_config is not found)
+  fi
+  if test \! -x $POSTGRESQL_CONFIG; then
+    AC_MSG_ERROR($POSTGRESQL_CONFIG not exists or not executable, use --with-postgresql=path-to-pg_config)
+  fi
+
+  AC_MSG_CHECKING(for PostgreSQL includes at)
+  if $POSTGRESQL_CONFIG --help | grep -- '--includedir' > /dev/null ; then
+    POSTGRESQL_INCLUDE="-I`$POSTGRESQL_CONFIG --includedir | sed s/\'//g`"
+  else
+    POSTGRESQL_INCLUDE="`$POSTGRESQL_CONFIG --cflags | sed s/\'//g`"
+  fi
+  AC_MSG_RESULT($POSTGRESQL_INCLUDE)
+
+  AC_MSG_CHECKING(for PostgreSQL libraries at)
+  if test x"`$POSTGRESQL_CONFIG --libdir`" != "x"; then
+    POSTGRESQL_LIBS="-L`$POSTGRESQL_CONFIG --libdir`"
+  fi
+  POSTGRESQL_LIBS="$POSTGRESQL_LIBS -lpgport -lpq -lrt"
+  AC_MSG_RESULT($POSTGRESQL_LIBS)
+
+  old_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $POSTGRESQL_INCLUDE"
+  AC_CHECK_HEADERS(libpq-fe.h)
+  CPPFLAGS="$old_CPPFLAGS"
+
+  AC_DEFINE([HAVE_POSTGRESQL], [1], [postgresql support])
+else
+  AC_MSG_RESULT(no)
+fi
+
+AC_SUBST(POSTGRESQL_LIBS)
+AC_SUBST(POSTGRESQL_INCLUDE)
 
 dnl Check for LDAP
 AC_MSG_CHECKING(for LDAP support)
@@ -553,7 +604,39 @@ AC_CONFIG_FILES([Makefile src/Makefile doc/Makefile tests/Makefile \
 AC_OUTPUT
 
 
-do_build="mod_proxy_core mod_proxy_backend_http mod_proxy_backend_fastcgi mod_proxy_backend_scgi mod_proxy_backend_ajp13 mod_evhost mod_simple_vhost mod_access mod_alias mod_setenv mod_usertrack mod_auth mod_status mod_accesslog mod_rrdtool mod_secdownload mod_expire mod_compress mod_dirlisting mod_indexfiles mod_userdir mod_webdav mod_staticfile mod_deflate mod_chunked mod_flv_streaming" 
+do_build="\
+	mod_access \
+	mod_accesslog \
+	mod_alias \
+	mod_auth \
+	mod_cgi \
+	mod_chunked \
+	mod_compress \
+	mod_deflate \
+	mod_dirlisting \
+	mod_evhost \
+	mod_evasive \
+	mod_expire \
+	mod_flv_streaming\
+	mod_indexfiles \
+	mod_proxy_core \
+	mod_proxy_backend_http \
+	mod_proxy_backend_fastcgi \
+	mod_proxy_backend_scgi \
+	mod_proxy_backend_ajp13 \
+	mod_rrdtool \
+	mod_secdownload \
+	mod_setenv \
+	mod_simple_vhost \
+	mod_sql_vhost_core \
+	mod_ssi \
+	mod_staticfile \
+	mod_status \
+	mod_uploadprogress \
+	mod_userdir \
+	mod_usertrack \
+	mod_webdav \
+	" 
 
 plugins="mod_rewrite mod_redirect mod_ssi mod_trigger_b4_dl"
 features="regex-conditionals"
@@ -570,6 +653,13 @@ if test ! "x$MYSQL_LIBS" = x; then
 	do_build="$do_build $plugins"
 else
 	no_build="$no_build $plugins"
+fi
+
+plugins="mod_postgresql_vhost"
+if test ! "x$POSTGRESQL_LIBS" = x; then
+        do_build="$do_build $plugins"
+else
+        no_build="$no_build $plugins"
 fi
 
 plugins="mod_cml"

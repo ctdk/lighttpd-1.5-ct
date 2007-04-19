@@ -144,8 +144,8 @@ mod_mysql_vhost_la_CPPFLAGS = $(MYSQL_INCLUDE)
 lib_LTLIBRARIES += mod_postgresql_vhost.la
 mod_postgresql_vhost_la_SOURCES = mod_postgresql_vhost.c
 mod_postgresql_vhost_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_postgresql_vhost_la_LIBADD = $(PGSQL_LIBS) $(common_libadd)
-mod_postgresql_vhost_la_CPPFLAGS = $(PGSQL_INCLUDE)
+mod_postgresql_vhost_la_LIBADD = $(POSTGRESQL_LIBS) $(common_libadd)
+mod_postgresql_vhost_la_CPPFLAGS = $(POSTGRESQL_INCLUDE)
 
 
 lib_LTLIBRARIES += mod_sql_vhost_core.la

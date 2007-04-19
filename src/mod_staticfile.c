@@ -323,6 +323,11 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 	buffer *mtime;
 	data_string *ds;
 
+	if (con->conf.log_request_handling) {
+		TRACE("-- %s", "checking file for static file");
+	}
+
+
 	/* someone else has done a decision for us */
 	if (con->http_status != 0) return HANDLER_GO_ON;
 	if (con->uri.path->used == 0) return HANDLER_GO_ON;
@@ -343,6 +348,11 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 
 	mod_staticfile_patch_connection(srv, con, p);
 
+	if (con->conf.log_request_handling) {
+		TRACE("-- %s", "handling file as static file");
+	}
+
+
 	s_len = con->uri.path->used - 1;
 
 	/* ignore certain extensions */
@@ -352,16 +362,18 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 		if (ds->value->used == 0) continue;
 
 		if (buffer_is_equal_right_len(con->physical.path, ds->value, ds->value->used - 1)) {
+			if (con->conf.log_request_handling) {
+				TRACE("'%s' matched exclude(%s), sending 403", 
+						BUF_STR(con->physical.path), 
+						BUF_STR(ds->value));
+			}
+
 			con->http_status = 403;
 
 			return HANDLER_FINISHED;
 		}
 	}
 
-
-	if (con->conf.log_request_handling) {
-		log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling file as static file");
-	}
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
 		con->http_status = 403;

@@ -517,7 +517,10 @@ int network_init(server *srv) {
 			return -1;
 		}
 	} else {
+#if 0
+		/* FIXME: we have to find a useful way to export this to the user*/
 		TRACE("using default network-backend: %s", network_backends[0].name);
+#endif
 	}
 
 #define SET_NETWORK_BACKEND(read, write) \

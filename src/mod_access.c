@@ -134,6 +134,10 @@ URIHANDLER_FUNC(mod_access_uri_handler) {
 
 	mod_access_patch_connection(srv, con, p);
 
+	if (con->conf.log_request_handling) {
+		TRACE("-- %s", "handling file in mod_access");
+	}
+
 	s_len = con->uri.path->used - 1;
 
 	for (k = 0; k < p->conf.access_deny->used; k++) {
@@ -141,7 +145,6 @@ URIHANDLER_FUNC(mod_access_uri_handler) {
 		int ct_len = ds->value->used - 1;
 
 		if (ct_len > s_len) continue;
-
 		if (ds->value->used == 0) continue;
 
 		/* if we have a case-insensitive FS we have to lower-case the URI here too */
@@ -150,11 +153,23 @@ URIHANDLER_FUNC(mod_access_uri_handler) {
 			if (0 == strncasecmp(con->uri.path->ptr + s_len - ct_len, ds->value->ptr, ct_len)) {
 				con->http_status = 403;
 
+				if (con->conf.log_request_handling) {
+					TRACE("access denied, sending %d", con->http_status);
+				}
+
 				return HANDLER_FINISHED;
 			}
 		} else {
 			if (0 == strncmp(con->uri.path->ptr + s_len - ct_len, ds->value->ptr, ct_len)) {
 				con->http_status = 403;
+
+				if (con->conf.log_request_handling) {
+					TRACE("access denied for %s as %s matched %d chars, sending %d", 
+							BUF_STR(con->uri.path),
+							BUF_STR(ds->value),
+							ct_len,
+							con->http_status);
+				}
 
 				return HANDLER_FINISHED;
 			}
@@ -163,6 +178,10 @@ URIHANDLER_FUNC(mod_access_uri_handler) {
 
 	if (p->conf.deny_all) {
 		con->http_status = 403;
+
+		if (con->conf.log_request_handling) {
+			TRACE("access.deny-all triggered, sending %d", con->http_status);
+		}
 
 		return HANDLER_FINISHED;
 	}

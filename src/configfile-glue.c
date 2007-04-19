@@ -533,25 +533,17 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 	return caches[dc->context_ndx].result;
 }
 
-void config_cond_cache_reset(server *srv, connection *con) {
-	size_t i;
-
-	for (i = 0; i < srv->config_context->used - 1; i++) {
-		con->cond_cache[i].result = COND_RESULT_UNSET;
-		con->cond_cache[i].patterncount = 0;
-		con->cond_cache[i].comp_value = NULL;
-	}
-
-	for (i = 0; i < COMP_LAST_ELEMENT; i++) {
-		con->conditional_is_valid[i] = 0;
-	}
-}
-
+/**
+ * reset the config-cache for a named item
+ *
+ * if the item is COND_LAST_ELEMENT we reset all items
+ */
 void config_cond_cache_reset_item(server *srv, connection *con, comp_key_t item) {
 	size_t i;
 
 	for (i = 0; i < srv->config_context->used; i++) {
-		if (con->cond_cache[i].comp_type == item) {
+		if (item == COMP_LAST_ELEMENT || 
+		    con->cond_cache[i].comp_type == item) {
 			con->cond_cache[i].result = COND_RESULT_UNSET;
 			con->cond_cache[i].patterncount = 0;
 			con->cond_cache[i].comp_value = NULL;
@@ -559,6 +551,18 @@ void config_cond_cache_reset_item(server *srv, connection *con, comp_key_t item)
 	}
 }
 
+/**
+ * reset the config cache to its initial state at connection start
+ */
+void config_cond_cache_reset(server *srv, connection *con) {
+	size_t i;
+
+	config_cond_cache_reset_all_items(srv, con);
+
+	for (i = 0; i < COMP_LAST_ELEMENT; i++) {
+		con->conditional_is_valid[i] = 0;
+	}
+}
 
 int config_check_cond(server *srv, connection *con, data_config *dc) {
 	return (config_check_cond_cached(srv, con, dc) == COND_RESULT_TRUE);

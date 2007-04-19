@@ -834,9 +834,7 @@ static handler_t magnet_attract_array(server *srv, connection *con, plugin_data 
 	}
 
 	/* reset conditional cache. */
-	for (i = 0; i < COMP_LAST_ELEMENT; i++) {
-		config_cond_cache_reset_item(srv, con, i);
-	}
+	config_cond_cache_reset_all_items(srv, con);
 
 	return ret;
 }

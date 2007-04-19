@@ -24,4 +24,7 @@ LI_API data_unset * configparser_merge_data(data_unset *op1, const data_unset *o
 LI_API void config_cond_cache_reset(server *srv, connection *con);
 LI_API void config_cond_cache_reset_item(server *srv, connection *con, comp_key_t item);
 
+#define config_cond_cache_reset_all_items(srv, con) \
+	config_cond_cache_reset_item(srv, con, COMP_LAST_ELEMENT);
+
 #endif

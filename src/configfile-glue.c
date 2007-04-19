@@ -217,28 +217,45 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 	/* check parent first */
 	if (dc->parent && dc->parent->context_ndx) {
 		if (con->conf.log_condition_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "go parent", dc->parent->key);
+			TRACE("checking if the parent (%s) evaluates to 'true'", BUF_STR(dc->parent->key));
 		}
-		if (config_check_cond_cached(srv, con, dc->parent) == COND_RESULT_FALSE) {
+
+		switch (config_check_cond_cached(srv, con, dc->parent)) {
+		case COND_RESULT_FALSE:
 			return COND_RESULT_FALSE;
+		case COND_RESULT_UNSET:
+			return COND_RESULT_UNSET;
+		default:
+			break;
 		}
 	}
 
 	if (dc->prev) {
 		if (con->conf.log_condition_handling) {
-			log_error_write(srv, __FILE__, __LINE__,  "sb", "go prev", dc->prev->key);
+			TRACE("triggering eval of successors of (%s) [in else]", BUF_STR(dc->key));
 		}
+
 		/* make sure prev is checked first */
 		config_check_cond_cached(srv, con, dc->prev);
-		/* one of prev set me to FALSE */
-		if (COND_RESULT_FALSE == con->cond_cache[dc->context_ndx].result) {
-			return COND_RESULT_FALSE;
+
+		if (con->conf.log_condition_handling) {
+			TRACE("(%s) [in else] -> %s", BUF_STR(dc->key), con->cond_cache[dc->context_ndx].result == COND_RESULT_FALSE ? "false" : "we will see");
+		}
+
+		switch (con->cond_cache[dc->context_ndx].result) {
+		case COND_RESULT_FALSE: /* one of prev set me to FALSE */
+			return con->cond_cache[dc->context_ndx].result;
+		default:
+			break;
 		}
 	}
 
 	if (!con->conditional_is_valid[dc->comp]) {
 		if (con->conf.log_condition_handling) {
-			TRACE("cond[%d] is valid: %d", dc->comp, con->conditional_is_valid[dc->comp]);
+			TRACE("is condition [%d] (%s) already valid ? %s", 
+					dc->comp, 
+					BUF_STR(dc->key),
+					con->conditional_is_valid[dc->comp] ? "yeah" : "nej");
 		}
 
 		return COND_RESULT_UNSET;
@@ -481,6 +498,7 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 			TRACE("=== start of %d condition block ===", dc->context_ndx);
 		}
 		if (COND_RESULT_TRUE == (caches[dc->context_ndx].result = config_check_cond_nocache(srv, con, dc))) {
+			/* a node evaluted to true, all else nodes have to false */
 			if (dc->next) {
 				data_config *c;
 				if (con->conf.log_condition_handling) {
@@ -494,13 +512,17 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 		if (con->conf.log_condition_handling) {
 			TRACE("[%d] result: %s",
 					dc->context_ndx,
-					caches[dc->context_ndx].result == COND_RESULT_TRUE ? "true" : "false");
+					caches[dc->context_ndx].result == COND_RESULT_UNSET ? "unknown" : 
+						(caches[dc->context_ndx].result == COND_RESULT_TRUE ? "true" : "false")
+					);
 		}
 	} else {
 		if (con->conf.log_condition_cache_handling) {
 			TRACE("[%d] (cached) result: %s",
 					dc->context_ndx,
-					caches[dc->context_ndx].result == COND_RESULT_TRUE ? "true" : "false");
+					caches[dc->context_ndx].result == COND_RESULT_UNSET ? "unknown" : 
+						(caches[dc->context_ndx].result == COND_RESULT_TRUE ? "true" : "false")
+					);
 		}
 	}
 	return caches[dc->context_ndx].result;

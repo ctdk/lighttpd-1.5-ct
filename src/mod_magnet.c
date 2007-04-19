@@ -19,6 +19,7 @@
 #include "stat_cache.h"
 #include "status_counter.h"
 #include "etag.h"
+#include "configfile.h"
 
 #ifdef HAVE_LUA_H
 #include <lua.h>
@@ -58,6 +59,8 @@ typedef struct {
 /* init the plugin data */
 INIT_FUNC(mod_magnet_init) {
 	plugin_data *p;
+	
+	UNUSED(srv);
 
 	p = calloc(1, sizeof(*p));
 
@@ -829,8 +832,11 @@ static handler_t magnet_attract_array(server *srv, connection *con, plugin_data 
 
 		if (ret != HANDLER_GO_ON) break;
 	}
+
 	/* reset conditional cache. */
-	config_cond_cache_reset(srv, con);
+	for (i = 0; i < COMP_LAST_ELEMENT; i++) {
+		config_cond_cache_reset_item(srv, con, i);
+	}
 
 	return ret;
 }

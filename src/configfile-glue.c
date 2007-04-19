@@ -474,6 +474,8 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 		cache->patterncount = n;
 		if (n > 0) {
 			cache->comp_value = l;
+			cache->comp_type = dc->comp;
+
 			return (dc->cond == CONFIG_COND_MATCH) ? COND_RESULT_TRUE : COND_RESULT_FALSE;
 		} else {
 			/* cache is already cleared */
@@ -509,6 +511,8 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 				}
 			}
 		}
+		caches[dc->context_ndx].comp_type = dc->comp;
+
 		if (con->conf.log_condition_handling) {
 			TRACE("[%d] result: %s",
 					dc->context_ndx,
@@ -525,24 +529,36 @@ static cond_result_t config_check_cond_cached(server *srv, connection *con, data
 					);
 		}
 	}
+
 	return caches[dc->context_ndx].result;
 }
 
 void config_cond_cache_reset(server *srv, connection *con) {
 	size_t i;
 
-#if COND_RESULT_UNSET
-	for (i = srv->config_context->used - 1; i >= 0; i --) {
+	for (i = 0; i < srv->config_context->used - 1; i++) {
 		con->cond_cache[i].result = COND_RESULT_UNSET;
 		con->cond_cache[i].patterncount = 0;
+		con->cond_cache[i].comp_value = NULL;
 	}
-#else
-	memset(con->cond_cache, 0, sizeof(cond_cache_t) * srv->config_context->used);
-#endif
+
 	for (i = 0; i < COMP_LAST_ELEMENT; i++) {
 		con->conditional_is_valid[i] = 0;
 	}
 }
+
+void config_cond_cache_reset_item(server *srv, connection *con, comp_key_t item) {
+	size_t i;
+
+	for (i = 0; i < srv->config_context->used; i++) {
+		if (con->cond_cache[i].comp_type == item) {
+			con->cond_cache[i].result = COND_RESULT_UNSET;
+			con->cond_cache[i].patterncount = 0;
+			con->cond_cache[i].comp_value = NULL;
+		}
+	}
+}
+
 
 int config_check_cond(server *srv, connection *con, data_config *dc) {
 	return (config_check_cond_cached(srv, con, dc) == COND_RESULT_TRUE);

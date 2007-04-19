@@ -16,6 +16,8 @@
 
 #include "sys-strings.h"
 #include "sys-files.h"
+
+#include "configfile.h"
 /* plugin config for all request/connections */
 
 typedef struct {
@@ -163,10 +165,9 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 	}
 
 	if (con->conf.log_request_handling) {
-		log_error_write(srv, __FILE__, __LINE__,  "s",  "-- handling the request as Indexfile");
-		log_error_write(srv, __FILE__, __LINE__,  "sb", "URI          :", con->uri.path);
+		TRACE("-- %s", "handling the request as Indexfile");
+		TRACE("URI          : %s", BUF_STR(con->uri.path));
 	}
-
 
 	/* indexfile */
 	for (k = 0; k < p->conf.indexfiles->used; k++) {
@@ -217,10 +218,16 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 		buffer_append_string_buffer(con->uri.path, ds->value);
 		buffer_copy_string_buffer(con->physical.path, p->tmp_buf);
 
-		/* fce is already set up a few lines above */
+		if (con->conf.log_request_handling) {
+			TRACE("rewrite path to %s (%s)", 
+					BUF_STR(con->physical.path), 
+					BUF_STR(con->uri.path));
+		}
 
 		/* need to reset condition cache since uri.path changed. */
-		config_cond_cache_reset(srv, con);
+		config_cond_cache_reset_item(srv, con, COMP_PHYSICAL_PATH);
+		config_cond_cache_reset_item(srv, con, COMP_PHYSICAL_PATH_EXISTS);
+		config_cond_cache_reset_item(srv, con, COMP_HTTP_URL);
 
 		return HANDLER_GO_ON;
 	}

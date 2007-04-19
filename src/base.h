@@ -349,6 +349,8 @@ typedef struct {
 	int patterncount;
 	int matches[3 * 10];
 	buffer *comp_value; /* just a pointer */
+
+	comp_key_t comp_type;
 } cond_cache_t;
 
 typedef struct {

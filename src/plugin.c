@@ -140,7 +140,10 @@ PLUGIN_STATIC(mod_proxy_core);
 PLUGIN_STATIC(mod_redirect);
 PLUGIN_STATIC(mod_rewrite);
 PLUGIN_STATIC(mod_secdownload);
+PLUGIN_STATIC(mod_setenv);
+PLUGIN_STATIC(mod_simple_vhost);
 PLUGIN_STATIC(mod_sql_vhost_core);
+PLUGIN_STATIC(mod_ssi);
 PLUGIN_STATIC(mod_staticfile);
 PLUGIN_STATIC(mod_status);
 PLUGIN_STATIC(mod_trigger_b4_dl);
@@ -181,7 +184,10 @@ PLUGIN_STATIC(mod_proxy_core),
 PLUGIN_STATIC(mod_redirect),
 PLUGIN_STATIC(mod_rewrite),
 PLUGIN_STATIC(mod_secdownload),
+PLUGIN_STATIC(mod_setenv),
+PLUGIN_STATIC(mod_simple_vhost),
 PLUGIN_STATIC(mod_sql_vhost_core),
+PLUGIN_STATIC(mod_ssi),
 PLUGIN_STATIC(mod_staticfile),
 PLUGIN_STATIC(mod_status),
 PLUGIN_STATIC(mod_trigger_b4_dl),
@@ -355,9 +361,10 @@ int plugins_load(server *srv) {
 			case HANDLER_WAIT_FOR_EVENT:\
 			case HANDLER_WAIT_FOR_FD:\
 			case HANDLER_ERROR:\
+				if (con->conf.log_request_handling) TRACE("-- plugins_call_...: plugin '%s' returns %d", BUF_STR(p->name), r); \
 				return r;\
 			default:\
-				log_error_write(srv, __FILE__, __LINE__, "sbs", #x, p->name, "unknown state");\
+				ERROR("-- plugins_call_...: plugin '%s' returns %d (unexpected)", BUF_STR(p->name), r); \
 				return HANDLER_ERROR;\
 			}\
 		}\

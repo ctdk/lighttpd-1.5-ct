@@ -417,13 +417,19 @@ fi
   
 dnl Check for lua
 AC_MSG_CHECKING(for lua)
-AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[lua engine for mod_cml]),
+AC_ARG_WITH(lua, AC_HELP_STRING([--with-lua],[lua engine for mod_magnet]),
 [WITH_LUA=$withval],[WITH_LUA=no])
 
 AC_MSG_RESULT($WITH_LUA)
 if test "$WITH_LUA" != "no"; then
  # try pkgconfig
- PKG_CHECK_MODULES(LUA, lua >= 5.1, [
+ if test "$WITH_LUA" = "yes"; then
+    LUAPC=lua
+  else
+    LUAPC=$WITH_LUA
+  fi
+
+ PKG_CHECK_MODULES(LUA, $LUAPC >= 5.1, [
    AC_DEFINE([HAVE_LUA], [1], [liblua])
    AC_DEFINE([HAVE_LUA_H], [1], [lua.h])
  ])

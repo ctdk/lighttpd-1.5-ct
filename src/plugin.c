@@ -121,6 +121,7 @@ PLUGIN_STATIC(mod_access);
 PLUGIN_STATIC(mod_accesslog);
 PLUGIN_STATIC(mod_alias);
 PLUGIN_STATIC(mod_auth);
+PLUGIN_STATIC(mod_cgi);
 PLUGIN_STATIC(mod_dirlisting);
 PLUGIN_STATIC(mod_evasive);
 PLUGIN_STATIC(mod_evhost);
@@ -165,6 +166,7 @@ PLUGIN_STATIC(mod_access),
 PLUGIN_STATIC(mod_accesslog),
 PLUGIN_STATIC(mod_alias),
 PLUGIN_STATIC(mod_auth),
+PLUGIN_STATIC(mod_cgi),
 PLUGIN_STATIC(mod_dirlisting),
 PLUGIN_STATIC(mod_evasive),
 PLUGIN_STATIC(mod_evhost),

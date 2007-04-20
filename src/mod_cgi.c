@@ -50,6 +50,7 @@ typedef struct {
 
 typedef struct {
 	array *cgi;
+	unsigned short execute_all;
 } plugin_config;
 
 typedef struct {
@@ -155,13 +156,18 @@ FREE_FUNC(mod_cgi_free) {
 	return HANDLER_GO_ON;
 }
 
+#define PLUGIN_NAME "cgi"
+#define CONFIG_ASSIGN      PLUGIN_NAME ".assign"
+#define CONFIG_EXECUTE_ALL PLUGIN_NAME ".execute-all"
+
 SETDEFAULTS_FUNC(mod_fastcgi_set_defaults) {
 	plugin_data *p = p_d;
 	size_t i = 0;
 
 	config_values_t cv[] = {
-		{ "cgi.assign",                  NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
-		{ NULL,                          NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET}
+		{ CONFIG_ASSIGN,                 NULL, T_CONFIG_ARRAY,   T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ CONFIG_EXECUTE_ALL,            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },       /* 1 */
+		{ NULL,                          NULL, T_CONFIG_UNSET,   T_CONFIG_SCOPE_UNSET}
 	};
 
 	if (!p) return HANDLER_ERROR;
@@ -175,8 +181,10 @@ SETDEFAULTS_FUNC(mod_fastcgi_set_defaults) {
 		assert(s);
 
 		s->cgi    = array_init();
+		s->execute_all = 0;
 
 		cv[0].destination = s->cgi;
+		cv[1].destination = &(s->execute_all);
 
 		p->config_storage[i] = s;
 
@@ -585,7 +593,7 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 
 #ifndef _WIN32
 
-	if (cgi_handler->used > 1) {
+	if (cgi_handler && cgi_handler->used > 1) {
 		/* stat the exec file */
 		if (-1 == (stat(cgi_handler->ptr, &st))) {
 			log_error_write(srv, __FILE__, __LINE__, "sbss",
@@ -826,7 +834,7 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		args = malloc(sizeof(*args) * argc);
 		i = 0;
 
-		if (cgi_handler->used > 1) {
+		if (cgi_handler && cgi_handler->used > 1) {
 			args[i++] = cgi_handler->ptr;
 		}
 		args[i++] = con->physical.path->ptr;
@@ -914,6 +922,7 @@ static int mod_cgi_patch_connection(server *srv, connection *con, plugin_data *p
 	plugin_config *s = p->config_storage[0];
 
 	PATCH_OPTION(cgi);
+	PATCH_OPTION(execute_all);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -927,8 +936,10 @@ static int mod_cgi_patch_connection(server *srv, connection *con, plugin_data *p
 		for (j = 0; j < dc->value->used; j++) {
 			data_unset *du = dc->value->data[j];
 
-			if (buffer_is_equal_string(du->key, CONST_STR_LEN("cgi.assign"))) {
+			if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_ASSIGN))) {
 				PATCH_OPTION(cgi);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_EXECUTE_ALL))) {
+				PATCH_OPTION(execute_all);
 			}
 		}
 	}
@@ -940,6 +951,8 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 	size_t k, s_len;
 	plugin_data *p = p_d;
 	buffer *fn = con->physical.path;
+
+	TRACE("-- %s", "cgi");
 
 	if (fn->used == 0) return HANDLER_GO_ON;
 
@@ -963,6 +976,15 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 			}
 			/* one handler is enough for the request */
 			break;
+		}
+	}
+
+	if (p->conf.execute_all) {
+		if (cgi_create_env(srv, con, p, NULL)) {
+			con->http_status = 500;
+
+			buffer_reset(con->physical.path);
+			return HANDLER_FINISHED;
 		}
 	}
 

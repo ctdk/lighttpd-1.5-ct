@@ -137,4 +137,8 @@
 /* libcrypt */
 #cmakedefine  HAVE_LIBCRYPT
 
+/* fastcgi */
+#cmakedefine HAVE_FASTCGI_H
+#cmakedefine HAVE_FASTCGI_FASTCGI_H
+
 #cmakedefine LIGHTTPD_STATIC

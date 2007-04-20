@@ -304,6 +304,7 @@ static const char gzip_header[10] =
 static int stream_deflate_init(server *srv, connection *con, handler_ctx *hctx) {
 	plugin_data *p = hctx->plugin_data;
 	z_stream *z;
+	int r;
 
 	UNUSED(srv);
 	UNUSED(con);
@@ -331,12 +332,13 @@ static int stream_deflate_init(server *srv, connection *con, handler_ctx *hctx) 
 		log_error_write(srv, __FILE__, __LINE__, "sd", 
 			"work-block-size:", p->conf.work_block_size);
 	}
-	if (Z_OK != deflateInit2(z, 
+	if (Z_OK != (r = deflateInit2(z, 
 				 p->conf.compression_level,
 				 Z_DEFLATED, 
 				 p->conf.window_size,  /* supress zlib-header */
 				 p->conf.mem_level,
-				 Z_DEFAULT_STRATEGY)) {
+				 Z_DEFAULT_STRATEGY))) {
+		ERROR("deflateInit2() failed with %d", r);
 		return -1;
 	}
 	hctx->stream_open = 1;
@@ -777,8 +779,8 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 	char *start = NULL;
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
-		log_error_write(srv, __FILE__, __LINE__, "sb",
-				strerror(errno), c->file.name);
+		ERROR("stat_cache_get_entry(%s) failed: %s", 
+				BUF_STR(c->file.name), strerror(errno));
 		return -1;
 	}
 
@@ -1304,21 +1306,30 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 		compression_name = ENCODING_NAME_DEFLATE;
 		rc = stream_deflate_init(srv, con, hctx);
 #endif
-	}
-	if(rc == -1) {
-		log_error_write(srv, __FILE__, __LINE__, "s",
-				"Failed to initialize compression.");
-	}
-
-	if(p->conf.debug) {
-		log_error_write(srv, __FILE__, __LINE__, "sbss",
-				"enable compression for ", con->uri.path, ", type=", compression_name);
+	} else if (matched_encodings & HTTP_ACCEPT_ENCODING_IDENTITY) {
+		/* no compression */
+	} else {
+		ERROR("Failed to initialize compression for '%s' with compression = %s", 
+			BUF_STR(con->uri.path),
+			value);
 	}
 
-	if(rc < 0) {
+	if (rc == -1 && compression_name) {
+		ERROR("Failed to initialize compression for '%s' with compression = %s", 
+				BUF_STR(con->uri.path),
+				compression_name);
+	}
+
+	if (rc < 0) {
 		filter_chain_remove_filter(con->send_filters, hctx->fl);
 		handler_ctx_free(hctx);
 		return HANDLER_GO_ON;
+	}
+
+	if (p->conf.debug) {
+		TRACE("compressing '%s' with compression = %s", 
+				BUF_STR(con->uri.path),
+				compression_name);
 	}
 
 	/* setup output buffer. */

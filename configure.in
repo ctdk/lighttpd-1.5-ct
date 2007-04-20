@@ -377,8 +377,8 @@ if test "$WITH_WEBDAV_PROPS" != "no"; then
                  AC_DEFINE([HAVE_UUID], [1], [libuuid])
 		 AC_DEFINE([HAVE_UUID_H], [1], [uuid/uuid.h is available])
          ])
- ])
-
+   ])
+   AC_SUBST(UUID_LIB)
  fi
 fi
 

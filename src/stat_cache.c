@@ -337,9 +337,17 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 #endif
 	/*
 	 * O_NONBLOCK skips named pipes and locked files
+	 *
+	 * O_NOATIME leads to EPERM on SYMLINKS
 	 * */
 	if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
-		return HANDLER_ERROR;
+		if (srv->srvconf.use_noatime && errno == EPERM) {
+			if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY))) {
+				return HANDLER_ERROR;
+			}
+		} else {
+			return HANDLER_ERROR;
+		}
 	}
 
 	if (-1 == fstat(fd, &st)) {

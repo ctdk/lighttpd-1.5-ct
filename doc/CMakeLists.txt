@@ -1,3 +1,7 @@
+IF(NOT DOCDIR)
+    SET(DOCDIR "share/doc/lighttpd")
+ENDIF(NOT DOCDIR)
+
 SET(L_DOCS 
 	accesslog.txt
 	access.txt
@@ -38,4 +42,4 @@ SET(L_DOCS
 )
 
 INSTALL(FILES ${L_DOCS}
-	DESTINATION share)
+	DESTINATION ${DOCDIR})

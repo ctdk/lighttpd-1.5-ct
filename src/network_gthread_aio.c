@@ -319,6 +319,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 			
 					/* open a file in /dev/shm to write to */
 					if (c->file.mmap.start == MAP_FAILED) {
+#if defined(HAVE_MEM_MMAP_ZERO)
 						if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 							if (errno != EMFILE) {
 								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",
@@ -342,6 +343,21 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 							close(mmap_fd);
 							mmap_fd = -1;
 						}
+#elif defined(HAVE_MEM_MMAP_ANON)
+						c->file.mmap.offset = 0;
+						c->file.mmap.length = c->file.copy.length; /* align to page-size */
+						c->file.mmap.start = mmap(0, c->file.mmap.length,
+							PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+								
+						if (c->file.mmap.start == MAP_FAILED) {
+							TRACE("mmap(MAP_ANON) returned: %d (%s)",
+									errno, strerror(errno));
+							return NETWORK_STATUS_FATAL_ERROR;
+						}
+#else
+#error hmm, does your system support mmap(/dev/zero) or mmap(MAP_ANON)
+#endif
+
 					}
 					
 					if (c->file.mmap.start != MAP_FAILED) {

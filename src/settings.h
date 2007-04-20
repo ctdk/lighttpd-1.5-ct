@@ -87,21 +87,18 @@
 # ifndef MAP_FAILED
 #  define MAP_FAILED -1
 # endif
+
+#if defined(MAP_ANON)
+#define HAVE_MEM_MMAP_ANON
+#else
+/* let's try /dev/zero */
+#define HAVE_MEM_MMAP_ZERO
+#endif
+
 #endif
 
 #if defined HAVE_SYS_UIO_H && defined HAVE_WRITEV && defined HAVE_SEND_FILE && defined(__aix)
 # define USE_AIX_SENDFILE
-#endif
-
-/**
- * how to mmap() a piece of memory 
- */
-#if defined(__linux__)
-#define HAVE_MEM_MMAP_ZERO
-#endif
-
-#if defined(__APPLE__)
-#define HAVE_MEM_MMAP_ANON
 #endif
 
 

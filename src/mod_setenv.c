@@ -160,6 +160,14 @@ URIHANDLER_FUNC(mod_setenv_uri_handler) {
 	size_t k;
 	handler_ctx *hctx;
 
+	mod_setenv_patch_connection(srv, con, p);
+
+	if (p->conf.request_header->used == 0 &&
+	    p->conf.environment->used == 0 &&
+	    p->conf.response_header->used == 0) {
+		return HANDLER_GO_ON;
+	}
+
 	if (con->plugin_ctx[p->id]) {
 		hctx = con->plugin_ctx[p->id];
 	} else {
@@ -173,8 +181,6 @@ URIHANDLER_FUNC(mod_setenv_uri_handler) {
 	}
 
 	hctx->handled = 1;
-
-	mod_setenv_patch_connection(srv, con, p);
 
 	for (k = 0; k < p->conf.request_header->used; k++) {
 		data_string *ds = (data_string *)p->conf.request_header->data[k];
@@ -234,7 +240,8 @@ LI_EXPORT int mod_setenv_plugin_init(plugin *p) {
 	p->name        = buffer_init_string("setenv");
 
 	p->init        = mod_setenv_init;
-	p->handle_uri_clean  = mod_setenv_uri_handler;
+	p->handle_uri_clean      = mod_setenv_uri_handler;
+	p->handle_start_backend  = mod_setenv_uri_handler;
 	p->set_defaults  = mod_setenv_set_defaults;
 	p->cleanup     = mod_setenv_free;
 

@@ -265,7 +265,8 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		{ CONFIG_PROXY_CORE_ALLOW_X_SENDFILE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },   /* 6 */
 		{ CONFIG_PROXY_CORE_ALLOW_X_REWRITE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 7 */
 		{ CONFIG_PROXY_CORE_MAX_POOL_SIZE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },        /* 8 */
-		{ CONFIG_PROXY_CORE_CHECK_LOCAL, NULL, T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
+		{ CONFIG_PROXY_CORE_CHECK_LOCAL, "use $PHYSICAL[\"existing-path\"] =~ ... { ... } instead", 
+			T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
 		{ CONFIG_PROXY_CORE_MAX_KEEP_ALIVE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },       /* 10 */
 		{ CONFIG_PROXY_CORE_SPLIT_HOSTNAMES, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 11 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
@@ -303,7 +304,6 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		cv[6].destination = &(s->allow_x_sendfile);
 		cv[7].destination = &(s->allow_x_rewrite);
 		cv[8].destination = &(s->max_pool_size);
-		cv[9].destination = &(s->check_local);
 		cv[10].destination = &(s->max_keep_alive_requests);
 		cv[11].destination = &(s->split_hostnames);
 

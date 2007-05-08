@@ -24,7 +24,10 @@
 %type multiline { buffer * }
 %token_destructor { buffer_free($$); }
 
-/* GET ... HTTP/1.0 */
+/**
+* GET ... HTTP/1.0
+* Host: ...
+*/
 request_hdr ::= method(B) STRING(C) protocol(D) CRLF headers CRLF . {
     http_req *req = ctx->req;
     
@@ -34,7 +37,43 @@ request_hdr ::= method(B) STRING(C) protocol(D) CRLF headers CRLF . {
     buffer_pool_append(ctx->unused_buffers, C); 
 }
 
+/**
+* \r\n
+* GET ... HTTP/1.0\r\n
+* Host: ...\r\n
+* \r\n
+*/
+request_hdr ::= CRLF method(B) STRING(C) protocol(D) CRLF headers CRLF . {
+    http_req *req = ctx->req;
+    
+    req->method = B;
+    req->protocol = D;
+    buffer_copy_string_buffer(req->uri_raw, C);
+    buffer_pool_append(ctx->unused_buffers, C); 
+}
+
+
+/**
+* GET ... HTTP/1.0\r\n
+* \r\n
+*
+*/
 request_hdr ::= method(B) STRING(C) protocol(D) CRLF CRLF . {
+    http_req *req = ctx->req;
+    
+    req->method = B;
+    req->protocol = D;
+    buffer_copy_string_buffer(req->uri_raw, C);
+    buffer_pool_append(ctx->unused_buffers, C); 
+}
+
+/**
+* \r\n
+* GET ... HTTP/1.0\r\n
+* \r\n
+*
+*/
+request_hdr ::= CRLF method(B) STRING(C) protocol(D) CRLF CRLF . {
     http_req *req = ctx->req;
     
     req->method = B;

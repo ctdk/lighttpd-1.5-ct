@@ -118,6 +118,13 @@ mod_evasive_la_SOURCES = mod_evasive.c
 mod_evasive_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_evasive_la_LIBADD = $(common_libadd)
 
+## legacy code
+lib_LTLIBRARIES += mod_fastcgi.la
+mod_fastcgi_la_SOURCES = mod_fastcgi.c
+mod_fastcgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
+mod_fastcgi_la_LIBADD = $(common_libadd)
+
+
 lib_LTLIBRARIES += mod_webdav.la
 mod_webdav_la_SOURCES = mod_webdav.c
 mod_webdav_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) $(SQLITE_CFLAGS) 
@@ -334,7 +341,7 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       ajp13.h \
       mod_proxy_core_protocol.h \
       mod_magnet_cache.h \
-      timing.h
+      timing.h 
 
 DEFS= @DEFS@ -DLIBRARY_DIR="\"$(libdir)\""
 
@@ -367,3 +374,5 @@ EXTRA_DIST = mod_skeleton.c \
 	     http_resp_parser.y \
 	     http_req_parser.y \
 	     http_req_range_parser.y 
+
+SUBDIRS=valgrind

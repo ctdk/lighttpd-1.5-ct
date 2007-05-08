@@ -1315,8 +1315,6 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 			} else {
 				buffer_copy_string_buffer(sess->request_uri, p->replace_buf);
 			}
-
-			break;
 		} else if (buffer_is_equal_string(rw->header, CONST_STR_LEN("_docroot"))) {
 			int ret;
 
@@ -1336,6 +1334,22 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 				/* adjust SCRIPT_FILENAME */
 				buffer_copy_string_buffer(con->physical.path, p->replace_buf);
 				buffer_append_string_buffer(con->physical.path, con->physical.rel_path);
+			}
+		} else if (buffer_is_equal_string(rw->header, CONST_STR_LEN("_pathinfo"))) {
+			int ret;
+
+			if ((ret = pcre_replace(rw->regex, rw->replace, con->request.uri, p->replace_buf)) < 0) {
+				switch (ret) {
+				case PCRE_ERROR_NOMATCH:
+					/* hmm, ok. no problem */
+					break;
+				default:
+					TRACE("oops, pcre_replace failed with: %d", ret);
+					break;
+				}
+			} else {
+				/* we matched, cool. */
+				buffer_copy_string_buffer(con->request.pathinfo, p->replace_buf);
 			}
 		}
 	}

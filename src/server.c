@@ -1116,10 +1116,10 @@ int main (int argc, char **argv, char **envp) {
 		data_unset *dc = srv->config_context->data[0];
 		if (dc) {
 			dc->print(dc, 0);
-			fprintf(stderr, "\n");
+			fprintf(stdout, "\n");
 		} else {
 			/* shouldn't happend */
-			fprintf(stderr, "global config not found\n");
+			fprintf(stdout, "global config not found\n");
 		}
 	}
 

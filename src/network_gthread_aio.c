@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "network.h"
 #include "fdevent.h"

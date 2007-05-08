@@ -1,6 +1,18 @@
-/*
- * make sure _GNU_SOURCE is defined
+/**
+ * - pread() needs _XOPEN_SOURCE
+ * - MAP_ANON needs _BSD_SOURCE | _SVID_SOURCE
+ *
+ * a _GNU_SOURCE combines them all, set it externally and we are fine
  */
+#ifndef _GNU_SOURCE
+# ifndef _XOPEN_SOURCE
+#  define _XOPEN_SOURCE 500
+# endif
+# ifndef _BSD_SOURCE
+#  define _BSD_SOURCE 1
+# endif
+#endif
+
 #include "settings.h"
 #include "network_backends.h"
 #ifdef USE_GTHREAD_AIO
@@ -98,7 +110,6 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 			off_t offset;
 			size_t toSend;
 			chunk *c = wj->c;
-			int mmap_fd;
 			connection *con = wj->con;
 			off_t max_toSend = 64 kByte; /** should be larger than the send buffer */
 
@@ -130,6 +141,7 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 			/* open a file in /dev/shm to write to */
 			if (c->file.mmap.start == MAP_FAILED) {
 #if defined(HAVE_MEM_MMAP_ZERO)
+				int mmap_fd;
 				if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 					if (errno != EMFILE) {
 						TRACE("open(/dev/zero) returned: %d (%s)",
@@ -312,7 +324,6 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 				/* we small files don't take the overhead of a full async-loop */
 				if (toSend < 4 * 1024) {
-					int mmap_fd;
 			
 					c->file.copy.offset = 0;
 					c->file.copy.length = toSend;
@@ -320,6 +331,8 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 					/* open a file in /dev/shm to write to */
 					if (c->file.mmap.start == MAP_FAILED) {
 #if defined(HAVE_MEM_MMAP_ZERO)
+						int mmap_fd;
+
 						if (-1 == (mmap_fd = open("/dev/zero", O_RDWR))) {
 							if (errno != EMFILE) {
 								TRACE("open(/dev/zero) returned: %d (%s), open fds: %d",

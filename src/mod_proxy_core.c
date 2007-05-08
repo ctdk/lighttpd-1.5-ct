@@ -1338,7 +1338,7 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 		} else if (buffer_is_equal_string(rw->header, CONST_STR_LEN("_pathinfo"))) {
 			int ret;
 
-			if ((ret = pcre_replace(rw->regex, rw->replace, con->request.uri, p->replace_buf)) < 0) {
+			if ((ret = pcre_replace(rw->regex, rw->replace, con->uri.path, p->replace_buf)) < 0) {
 				switch (ret) {
 				case PCRE_ERROR_NOMATCH:
 					/* hmm, ok. no problem */
@@ -1351,6 +1351,23 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 				/* we matched, cool. */
 				buffer_copy_string_buffer(con->request.pathinfo, p->replace_buf);
 			}
+		} else if (buffer_is_equal_string(rw->header, CONST_STR_LEN("_scriptname"))) {
+			int ret;
+
+			if ((ret = pcre_replace(rw->regex, rw->replace, con->uri.path, p->replace_buf)) < 0) {
+				switch (ret) {
+				case PCRE_ERROR_NOMATCH:
+					/* hmm, ok. no problem */
+					break;
+				default:
+					TRACE("oops, pcre_replace failed with: %d", ret);
+					break;
+				}
+			} else {
+				/* we matched, cool. */
+				buffer_copy_string_buffer(con->uri.path, p->replace_buf);
+			}
+
 		}
 	}
 

@@ -408,8 +408,6 @@ int network_close(server *srv) {
 				fdevent_event_del(srv->ev, srv_socket->sock);
 				fdevent_unregister(srv->ev, srv_socket->sock);
 			}
-
-			closesocket(srv_socket->sock->fd);
 		}
 
 		if (srv_socket->is_ssl) {

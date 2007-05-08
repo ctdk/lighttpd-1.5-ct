@@ -160,7 +160,7 @@ FREE_FUNC(mod_cgi_free) {
 #define CONFIG_ASSIGN      PLUGIN_NAME ".assign"
 #define CONFIG_EXECUTE_ALL PLUGIN_NAME ".execute-all"
 
-SETDEFAULTS_FUNC(mod_fastcgi_set_defaults) {
+SETDEFAULTS_FUNC(mod_cgi_set_defaults) {
 	plugin_data *p = p_d;
 	size_t i = 0;
 
@@ -1174,7 +1174,7 @@ int mod_cgi_plugin_init(plugin *p) {
 	p->handle_trigger = cgi_trigger;
 	p->init           = mod_cgi_init;
 	p->cleanup        = mod_cgi_free;
-	p->set_defaults   = mod_fastcgi_set_defaults;
+	p->set_defaults   = mod_cgi_set_defaults;
 
 	p->data        = NULL;
 

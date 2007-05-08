@@ -1055,7 +1055,7 @@ int http_auth_digest_check(server *srv, connection *con, mod_auth_plugin_data *p
 		}
 	} else {
 		/* we already check that above */
-		SEGFAULT();
+		SEGFAULT("p->conf.auth_backend is %d", p->conf.auth_backend);
 	}
 
 	buffer_free(password);

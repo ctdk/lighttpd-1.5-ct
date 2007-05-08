@@ -22,8 +22,7 @@ static int fdevent_poll_event_del(fdevents *ev, iosocket *sock) {
 	if (sock->fde_ndx < 0) return -1;
 
 	if ((size_t)sock->fde_ndx >= ev->used) {
-		ERROR("(fdevent-poll-del) out of range %d %zd\n", sock->fde_ndx, ev->used);
-		SEGFAULT();
+		SEGFAULT("(fdevent-poll-del) out of range %d %zd", sock->fde_ndx, ev->used);
 	}
 
 	if (ev->pollfds[sock->fde_ndx].fd == sock->fd) {
@@ -43,8 +42,7 @@ static int fdevent_poll_event_del(fdevents *ev, iosocket *sock) {
 
 		ev->unused.ptr[ev->unused.used++] = k;
 	} else {
-		TRACE("(fdevent-poll-del) sock->fde_ndx: %d, sock->fd: %d -> stored fd: %d", sock->fde_ndx, sock->fd, ev->pollfds[sock->fde_ndx].fd);
-		SEGFAULT();
+		SEGFAULT("(fdevent-poll-del) sock->fde_ndx: %d, sock->fd: %d -> stored fd: %d", sock->fde_ndx, sock->fd, ev->pollfds[sock->fde_ndx].fd);
 	}
 
 	sock->fde_ndx = -1;
@@ -74,8 +72,7 @@ static int fdevent_poll_event_add(fdevents *ev, iosocket *sock, int events) {
 
 			return sock->fde_ndx;
 		}
-		ERROR("(fdevent-poll-add) (%d, %d)", sock->fde_ndx, ev->pollfds[sock->fde_ndx].fd);
-		SEGFAULT();
+		SEGFAULT("(fdevent-poll-add) (%d, %d)", sock->fde_ndx, ev->pollfds[sock->fde_ndx].fd);
 	}
 
 	if (ev->unused.used > 0) {
@@ -119,7 +116,7 @@ static int fdevent_poll_get_revents(fdevents *ev, size_t event_count, fdevent_re
 		if (ev->pollfds[ndx].revents) {
 			if (ev->pollfds[ndx].revents & POLLNVAL) {
 				/* should never happen */
-				SEGFAULT();
+				SEGFAULT("ev->pollfds[%d].revents has POLLNVAL", ndx);
 			}
 
 			fdevent_revents_add(revents, ev->pollfds[ndx].fd, ev->pollfds[ndx].revents);

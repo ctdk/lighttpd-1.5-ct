@@ -1,6 +1,7 @@
 #ifndef _LOG_H_
 #define _LOG_H_
 
+#include "valgrind/valgrind.h"
 #include "buffer.h"
 
 LI_API void log_init(void);
@@ -24,6 +25,11 @@ LI_API const char *remove_path(const char *path);
 #define TRACE(fmt, ...) \
 	log_trace("%s.%d: (trace) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__)
 
-#define SEGFAULT() do { ERROR("%s", "Ooh, Ooh, Ooh. Something is not good ... going down"); abort(); } while(0)
+#define SEGFAULT(fmt, ...) \
+	do { \
+		log_trace("%s.%d: (crashing) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__); \
+		VALGRIND_PRINTF_BACKTRACE(fmt, __VA_ARGS__);\
+		abort();\
+       	} while(0)
 LI_API int log_trace(const char *fmt, ...);
 #endif

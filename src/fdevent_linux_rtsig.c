@@ -34,8 +34,7 @@ static int fdevent_linux_rtsig_event_del(fdevents *ev, iosocket *sock) {
 	if (sock->fde_ndx < 0) return -1;
 
 	if ((size_t)sock->fde_ndx >= ev->used) {
-		TRACE("del! out of range %d %zu\n", sock->fde_ndx, ev->used);
-		SEGFAULT();
+		SEGFAULT("del! out of range %d %zu", sock->fde_ndx, ev->used);
 	}
 
 	if (ev->pollfds[sock->fde_ndx].fd == sock->fd) {
@@ -55,9 +54,7 @@ static int fdevent_linux_rtsig_event_del(fdevents *ev, iosocket *sock) {
 
 		ev->unused.ptr[ev->unused.used++] = k;
 	} else {
-		fprintf(stderr, "%s.%d: del! %d %d\n", __FILE__, __LINE__, ev->pollfds[sock->fde_ndx].fd, sock->fd);
-
-		SEGFAULT();
+		SEGFAULT("del! %d %d", ev->pollfds[sock->fde_ndx].fd, sock->fd);
 	}
 	sock->fde_ndx = -1;
 
@@ -88,8 +85,7 @@ static int fdevent_linux_rtsig_event_add(fdevents *ev, iosocket *sock, int event
 
 			return sock->fde_ndx;
 		}
-		fprintf(stderr, "%s.%d: add: (%d, %d)\n", __FILE__, __LINE__, sock->fde_ndx, ev->pollfds[sock->fde_ndx].fd);
-		SEGFAULT();
+		SEGFAULT("add: (%d, %d)", sock->fde_ndx, ev->pollfds[sock->fde_ndx].fd);
 	}
 
 	if (ev->unused.used > 0) {

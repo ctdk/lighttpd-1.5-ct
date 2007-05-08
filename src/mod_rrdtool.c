@@ -161,15 +161,14 @@ int mod_rrd_create_pipe(server *srv, plugin_data *p) {
 		/* exec the cgi */
 		execv(args[0], args);
 
-		log_error_write(srv, __FILE__, __LINE__, "sss", "spawing rrdtool failed: ", strerror(errno), args[0]);
-
 		/* */
-		SEGFAULT();
+		SEGFAULT("spawing '%s' failed: %s", args[0], strerror(errno));
+
 		break;
 	}
 	case -1:
 		/* error */
-		log_error_write(srv, __FILE__, __LINE__, "ss", "fork failed: ", strerror(errno));
+		ERROR("fork failed: %s", strerror(errno));
 		break;
 	default: {
 		/* father */

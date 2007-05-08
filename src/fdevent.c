@@ -176,8 +176,7 @@ size_t fdevent_find_free_slot(fdevents *ev, int fd) {
 		if ( ev->fdarray[i] == NULL )
 			return i;
 	}
-	fprintf(stderr, "no more free fdevent.fdarray slots\n");
-	SEGFAULT();
+	SEGFAULT("no more free fdevent.fdarray slots: %s", "");
 	return -1;
 }
 
@@ -242,14 +241,14 @@ int fdevent_event_add(fdevents *ev, iosocket *sock, int events) {
 }
 
 int fdevent_poll(fdevents *ev, int timeout_ms) {
-	if (ev->poll == NULL) SEGFAULT();
+	if (ev->poll == NULL) SEGFAULT("ev->poll is %p", ev->poll);
 	return ev->poll(ev, timeout_ms);
 }
 
 int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
 	size_t i;
 
-	if (ev->get_revents == NULL) SEGFAULT();
+	if (ev->get_revents == NULL) SEGFAULT("ev->get_revents is %p", ev->get_revents);
 
 	fdevent_revents_reset(revents);
 

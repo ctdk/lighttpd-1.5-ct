@@ -31,9 +31,7 @@ static int fdevent_linux_sysepoll_event_del(fdevents *ev, iosocket *sock) {
 	ep.data.ptr = NULL;
 
 	if (0 != epoll_ctl(ev->epoll_fd, EPOLL_CTL_DEL, sock->fd, &ep)) {
-		ERROR("epoll_ctl (del) failed on fd=%d: %s", sock->fd, strerror(errno));
-
-		SEGFAULT();
+		SEGFAULT("epoll_ctl (del) failed on fd=%d: %s", sock->fd, strerror(errno));
 
 		return 0;
 	}
@@ -71,9 +69,7 @@ static int fdevent_linux_sysepoll_event_add(fdevents *ev, iosocket *sock, int ev
 	ep.data.fd = sock->fd;
 
 	if (0 != epoll_ctl(ev->epoll_fd, add ? EPOLL_CTL_ADD : EPOLL_CTL_MOD, sock->fd, &ep)) {
-		ERROR("epoll_ctl (add/mod) failed on fd=%d: %s", sock->fd, strerror(errno));
-
-		SEGFAULT();
+		SEGFAULT("epoll_ctl (add/mod) failed on fd=%d: %s", sock->fd, strerror(errno));
 
 		return 0;
 	}

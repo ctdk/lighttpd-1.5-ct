@@ -45,7 +45,7 @@ void bitset_free(bitset *set) {
 
 void bitset_clear_bit(bitset *set, size_t pos) {
 	if (pos >= set->nbits) {
-	    SEGFAULT();
+		SEGFAULT("pos >= set->nbits: %zd >= %zd", pos, set->nbits);
 	}
 
 	BITSET_WORD(set, pos) &= ~BITSET_MASK(pos);
@@ -53,7 +53,7 @@ void bitset_clear_bit(bitset *set, size_t pos) {
 
 void bitset_set_bit(bitset *set, size_t pos) {
 	if (pos >= set->nbits) {
-	    SEGFAULT();
+		SEGFAULT("pos >= set->nbits: %zd >= %zd", pos, set->nbits);
 	}
 
 	BITSET_WORD(set, pos) |= BITSET_MASK(pos);
@@ -61,8 +61,9 @@ void bitset_set_bit(bitset *set, size_t pos) {
 
 int bitset_test_bit(bitset *set, size_t pos) {
 	if (pos >= set->nbits) {
-	    SEGFAULT();
+		SEGFAULT("pos >= set->nbits: %zd >= %zd", pos, set->nbits);
 	}
 
 	return (BITSET_WORD(set, pos) & BITSET_MASK(pos)) != 0;
 }
+

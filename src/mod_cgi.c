@@ -859,15 +859,13 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		/* exec the cgi */
 		execve(args[0], args, env.ptr);
 
-		log_error_write(srv, __FILE__, __LINE__, "sss", "CGI failed:", strerror(errno), args[0]);
-
 		/* */
-		SEGFAULT();
+		SEGFAULT("execve(%s) failed: %s", args[0], strerror(errno));
 		break;
 	}
 	case -1:
 		/* error */
-		log_error_write(srv, __FILE__, __LINE__, "ss", "fork failed:", strerror(errno));
+		ERROR("fork() failed: %s", strerror(errno));
 		break;
 	default: {
 		cgi_session *sess;

@@ -37,10 +37,6 @@
 #define STDERR_FILENO 2
 #endif
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
-#include <valgrind/valgrind.h>
-#endif
-
 #ifndef O_LARGEFILE
 # define O_LARGEFILE 0
 #endif
@@ -147,10 +143,8 @@ int log_error_open(buffer *file, int use_syslog) {
 
 	TRACE("%s", "server started");
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
 	/* don't close stderr for debugging purposes if run in valgrind */
 	if (RUNNING_ON_VALGRIND) close_stderr = 0;
-#endif
 	if (err->mode == ERRORLOG_STDERR) close_stderr = 0;
 
 	/* move stderr to /dev/null */

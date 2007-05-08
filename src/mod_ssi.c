@@ -709,10 +709,8 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 
 			execl("/bin/sh", "sh", "-c", cmd, NULL);
 
-			log_error_write(srv, __FILE__, __LINE__, "sss", "spawing exec failed:", strerror(errno), cmd);
-
 			/* */
-			SEGFAULT();
+			SEGFAULT("spawing '%s' failed: %s", cmd, strerror(errno));
 			break;
 		}
 		case -1:

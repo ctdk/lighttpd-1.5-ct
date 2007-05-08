@@ -163,7 +163,7 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 	}
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
-		SEGFAULT();
+		SEGFAULT("stat_cache_get_entry(%s) returned %d", BUF_STR(con->physical.path), HANDLER_ERROR);
 	}
 
 	con->response.content_length = 0;

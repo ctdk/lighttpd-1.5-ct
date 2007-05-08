@@ -11,10 +11,6 @@
 
 #include "sys-files.h"
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
-#include <valgrind/valgrind.h>
-#endif
-
 #ifndef _WIN32
 #include <dlfcn.h>
 #endif
@@ -67,15 +63,15 @@ static plugin *plugin_init(void) {
 }
 
 static void plugin_free(plugin *p) {
-#ifndef LIGHTTPD_STATIC
 	int use_dlclose = 1;
-#endif
+
 	if (p->name) buffer_free(p->name);
 
 	array_free(p->required_plugins);
-#ifdef HAVE_VALGRIND_VALGRIND_H
-	/*if (RUNNING_ON_VALGRIND) use_dlclose = 0;*/
-#endif
+
+	/* if we are running under valgrind, 
+	 * don't unload the plugins to keep the symbols intact */
+	if (RUNNING_ON_VALGRIND) use_dlclose = 0;
 
 #ifndef LIGHTTPD_STATIC
 	if (use_dlclose && p->lib) {

@@ -54,9 +54,7 @@
 #endif
 #endif
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
-#include <valgrind/valgrind.h>
-#endif
+#include "valgrind/valgrind.h"
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
@@ -949,10 +947,10 @@ int lighty_mainloop(server *srv) {
 					break;
 				case HANDLER_ERROR:
 					/* should never happen */
-					SEGFAULT();
+					SEGFAULT("got HANDLER_ERROR from a plugin: %s", "dieing");
 					break;
 				default:
-					log_error_write(srv, __FILE__, __LINE__, "d", r);
+					ERROR("got handler_t(%d) from a plugin: ignored", r);
 					break;
 				}
 			}
@@ -973,18 +971,16 @@ int lighty_mainloop(server *srv) {
 					break;
 				case HANDLER_ERROR:
 					/* should never happen */
-					SEGFAULT();
+					SEGFAULT("got HANDLER_ERROR from a plugin: %s", "dieing");
 					break;
 				default:
-					log_error_write(srv, __FILE__, __LINE__, "d", r);
+					ERROR("got handler_t(%d) from a plugin: ignored", r);
 					break;
 				}
 			}
 
 		} else if (n < 0 && poll_errno != EINTR) {
-			log_error_write(srv, __FILE__, __LINE__, "ss",
-					"fdevent_poll failed:",
-					strerror(poll_errno));
+			ERROR("fdevent_poll failed:", strerror(poll_errno));
 		}
 
 		/*
@@ -1009,7 +1005,7 @@ int lighty_mainloop(server *srv) {
 			case HANDLER_GO_ON:
 				break;
 			default:
-				log_error_write(srv, __FILE__, __LINE__, "d", r);
+				ERROR("got handler_t(%d) from a plugin: ignored", r);
 				break;
 			}
 		}
@@ -1237,9 +1233,8 @@ int main (int argc, char **argv, char **envp) {
 		struct passwd *pwd = NULL;
 		int use_rlimit = 1;
 
-#ifdef HAVE_VALGRIND_VALGRIND_H
+		/* valgrind only supports 1024 fds */
 		if (RUNNING_ON_VALGRIND) use_rlimit = 0;
-#endif
 
 #ifdef HAVE_GETRLIMIT
 		if (0 != getrlimit(RLIMIT_NOFILE, &rlim)) {

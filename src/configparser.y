@@ -153,9 +153,14 @@ varline ::= key(A) ASSIGN expression(B). {
     array_insert_unique(ctx->current->value, B);
     B = NULL;
   } else {
-    fprintf(stderr, "Duplicate config variable in conditional %d %s: %s\n", 
+    if (0 == strcmp(B->key->ptr, "var.PID") ||
+        0 == strcmp(B->key->ptr, "var.CWD")) {
+        fprintf(stderr, "var.PID and var.CWD are magic config vars and can't be set in the config file itself\n");
+    } else {
+        fprintf(stderr, "Duplicate config variable in conditional %d %s: %s\n", 
             ctx->current->context_ndx,
             ctx->current->key->ptr, B->key->ptr);
+    }
     ctx->ok = 0;
     B->free(B);
     B = NULL;
@@ -205,6 +210,7 @@ varline ::= key(A) APPEND expression(B). {
 
 key(A) ::= LKEY(B). {
   if (strchr(B->ptr, '.') == NULL) {
+    /* prepend the user-vars with var. */
     A = buffer_init_string("var.");
     buffer_append_string_buffer(A, B);
     buffer_free(B);

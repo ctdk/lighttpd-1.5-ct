@@ -110,8 +110,14 @@ static int http_req_lookup_next_char(http_req_tokenizer_t *t, unsigned char *c) 
 	return 0;
 }
 
+typedef enum {
+	PARSER_UNSET,
+	PARSER_OK,
+	PARSER_ERROR,
+	PARSER_EOF
+} http_req_parser_t;
 
-static int http_req_tokenizer(
+static http_req_parser_t http_req_tokenizer(
 	http_req_tokenizer_t *t,
 	int *token_id,
 	buffer *token
@@ -140,7 +146,7 @@ static int http_req_tokenizer(
 			/* ignore the rest of the WS-chars */
 			break;
 		case '\r':
-			if (0 != http_req_lookup_next_char(t, &c)) return -1;
+			if (0 != http_req_lookup_next_char(t, &c)) return PARSER_EOF;
 
 			if (c == '\n') {
 				tid = TK_CRLF;
@@ -151,8 +157,8 @@ static int http_req_tokenizer(
 				t->is_statusline = 0;
 				t->is_key = 1;
 			} else {
-				fprintf(stderr, "%s.%d: CR with out LF\r\n", __FILE__, __LINE__);
-				return -1;
+				ERROR("CR with out LF at pos: %d", t->offset);
+				return PARSER_ERROR;
 			}
 			break;
 		case '\n':
@@ -172,14 +178,14 @@ static int http_req_tokenizer(
 						if (c == ' ') break; /* no spaces in keys */
 					}
 				}
-				if (0 != http_req_lookup_next_char(t, &c)) return -1;
+				if (0 != http_req_lookup_next_char(t, &c)) return PARSER_EOF;
 			}
 
 			if (t->c == t->lookup_c &&
 				t->offset == t->lookup_offset + 1) {
 
-				fprintf(stderr, "%s.%d: invalid char in string\n", __FILE__, __LINE__);
-				return -1;
+				ERROR("invalid char (%d) at pos: %d", t->c, t->offset);
+				return PARSER_ERROR;
 			}
 
 			tid = TK_STRING;
@@ -213,10 +219,10 @@ static int http_req_tokenizer(
 	if (tid) {
 		*token_id = tid;
 
-		return 1;
+		return PARSER_OK;
 	}
 
-	return -1;
+	return PARSER_EOF;
 }
 
 parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
@@ -226,6 +232,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 	buffer *token = NULL;
 	http_req_ctx_t context;
 	parse_status_t ret = PARSE_UNSET;
+	http_req_parser_t parser_ret;
 
 	t.cq = cq;
 	t.c = cq->first;
@@ -244,11 +251,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 
 	array_reset(req->headers);
 
-#if 0
-	http_req_parserTrace(stderr, "http-request: ");
-#endif
-
-	while((1 == http_req_tokenizer(&t, &token_id, token)) && context.ok) {
+	while((PARSER_OK == (parser_ret = http_req_tokenizer(&t, &token_id, token))) && context.ok) {
 		http_req_parser(pParser, token_id, token, &context);
 
 		token = buffer_pool_get(context.unused_buffers);
@@ -267,7 +270,20 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 		if (!buffer_is_empty(context.errmsg)) {
 			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
 		} else {
-			TRACE("%s", "parsing failed ... (no error-msg)");
+			chunk *c;
+			buffer *hdr = buffer_init();
+			
+			for (c = cq->first; c; c = c->next) {
+				if (c == cq->first) {
+					buffer_append_string_len(hdr, c->mem->ptr + t.c->offset, c->mem->used - 1 - t.c->offset);
+				} else {
+					buffer_append_string_buffer(hdr, c->mem);
+				}
+			}
+
+			TRACE("parsing failed at token (%s [%d]), header: %s", BUF_STR(token), token_id, BUF_STR(hdr));
+
+			buffer_free(hdr);
 		}
 	}
 

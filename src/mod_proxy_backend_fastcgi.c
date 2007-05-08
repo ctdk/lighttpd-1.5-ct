@@ -506,8 +506,20 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 			in->bytes_out += we_have;
 			out->bytes_in += we_have;
 		} else {
+			/**
+			 * we might come here again if the padding is part of the next packet 
+			 * 
+			 * read(15, "\1\6\0\1\1D\4\0", 16384) = 8
+			 * read(15, "Status: 200 Ok\r\nCache-contro...
+			 * read(15, "\0\0\0\0\1\6\0\1\37\370\0\0", 16384) = 12
+			 *
+			 */
+#if 0
+			/* FIXME: for which case did we set this to 1 ? */
 			out->is_closed = 1;
+#endif
 		}
+		
 		/* parse response headers. */
 		if (!sess->have_response_headers) {
 			/* check if we have all the response headers */ 

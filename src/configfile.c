@@ -1004,6 +1004,11 @@ int config_read(server *srv, const char *fn) {
 	if (NULL != (modules = (data_array *)array_get_element(srv->config, CONST_STR_LEN("server.modules")))) {
 		data_string *ds;
 		data_array *prepends;
+		int prepend_mod_indexfile = 1;
+		int append_mod_dirlisting = 1;
+		int append_mod_staticfile = 1;
+		int append_mod_chunked    = 1;
+		size_t i;
 
 		if (modules->type != TYPE_ARRAY) {
 			fprintf(stderr, "server.modules must be an array");
@@ -1013,7 +1018,35 @@ int config_read(server *srv, const char *fn) {
 		prepends = data_array_init();
 
 		/* prepend default modules */
-		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_indexfile"))) {
+		for (i = 0; i < modules->value->used; i++) {
+			ds = (data_string *)modules->value->data[i];
+
+			if (buffer_is_equal_string(ds->value, CONST_STR_LEN("mod_indexfile"))) {
+				prepend_mod_indexfile = 0;
+			}
+
+			if (buffer_is_equal_string(ds->value, CONST_STR_LEN("mod_staticfile"))) {
+				append_mod_staticfile = 0;
+			}
+
+			if (buffer_is_equal_string(ds->value, CONST_STR_LEN("mod_dirlisting"))) {
+				append_mod_dirlisting = 0;
+			}
+
+			if (buffer_is_equal_string(ds->value, CONST_STR_LEN("mod_chunked"))) {
+				append_mod_chunked = 0;
+			}
+
+			if (0 == prepend_mod_indexfile &&
+			    0 == append_mod_dirlisting &&
+			    0 == append_mod_staticfile &&
+			    0 == append_mod_chunked) {
+
+				break;
+			}
+		}
+		
+		if (prepend_mod_indexfile) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_indexfile");
 			array_insert_unique(prepends->value, (data_unset *)ds);
@@ -1026,19 +1059,19 @@ int config_read(server *srv, const char *fn) {
 		modules = prepends;
 
 		/* append default modules */
-		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_dirlisting"))) {
+		if (append_mod_dirlisting) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_dirlisting");
 			array_insert_unique(modules->value, (data_unset *)ds);
 		}
 
-		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_staticfile"))) {
+		if (append_mod_staticfile) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_staticfile");
 			array_insert_unique(modules->value, (data_unset *)ds);
 		}
 
-		if (NULL == array_get_element(modules->value, CONST_STR_LEN("mod_chunked"))) {
+		if (append_mod_chunked) {
 			ds = data_string_init();
 			buffer_copy_string(ds->value, "mod_chunked");
 			array_insert_unique(modules->value, (data_unset *)ds);

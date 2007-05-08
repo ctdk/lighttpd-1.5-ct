@@ -432,7 +432,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 
 	UNUSED(srv);
 
-	if (in->bytes_in == in->bytes_out && in->is_closed) {
+	if ((in->bytes_in == in->bytes_out) && in->is_closed) {
 		/* everything got passed through,
 		 *
 		 * as we usually have a FIN packet we should expect to get a is_closed within the 
@@ -445,7 +445,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 				in->is_closed);
 
 
-		ERROR("looks like the fastcgi-backend terminated before it sent a FIN packet:%s", "");
+		ERROR("looks like the fastcgi-backend (%s) terminated before it sent a FIN packet", BUF_STR(sess->request_uri));
 
 		return HANDLER_FINISHED;
 	}

@@ -354,7 +354,14 @@ PROXY_STREAM_ENCODER_FUNC(proxy_fastcgi_encode_request_headers) {
 	beginRecord.body.roleB0 = FCGI_RESPONDER;
 	beginRecord.body.roleB1 = 0;
 #ifdef PROXY_FASTCGI_USE_KEEP_ALIVE
-	beginRecord.body.flags = FCGI_KEEP_CONN;
+	if (p->conf.max_keep_alive_requests && p->conf.max_pool_size) {
+		/**
+		 * only announce keep-alive if we really can handle it
+		 */
+		beginRecord.body.flags = FCGI_KEEP_CONN;
+	} else {
+		beginRecord.body.flags = 0;
+	}
 #else
 	beginRecord.body.flags = 0;
 #endif

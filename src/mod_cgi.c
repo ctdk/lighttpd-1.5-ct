@@ -950,11 +950,17 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 	plugin_data *p = p_d;
 	buffer *fn = con->physical.path;
 
-	TRACE("-- %s", "cgi");
-
 	if (fn->used == 0) return HANDLER_GO_ON;
-
+	
 	mod_cgi_patch_connection(srv, con, p);
+
+	if (p->conf.cgi->used == 0 && p->conf.execute_all == 0) {
+		return HANDLER_GO_ON;
+	}
+
+	if (con->conf.log_request_handling) {
+		TRACE("-- checking request in mod_%s", "cgi");
+	}
 
 	s_len = fn->used - 1;
 

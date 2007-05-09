@@ -328,7 +328,16 @@ static int connection_handle_response_header(server *srv, connection *con) {
 	case 205: /* class: header only */
 	case 304:
 	default:
-		no_response_body = 1;
+		if (con->mode == DIRECT) {
+			/* only if we have handled the request internally
+			 * we will see no response-content
+			 *
+			 * if it was a fastcgi request we will see a END_REQUEST packet
+			 * after the header was parsed. 
+			 *
+			 *  */
+			no_response_body = 1;
+		}
 		break;
 	}
 

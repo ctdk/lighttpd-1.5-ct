@@ -827,7 +827,8 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 			joblist_append(srv, con);
 			break;
 		default:
-			ERROR("%s", "I thought only WRITE_RESPONSE_* need fdevent-out");
+			TRACE("got FDEVENT_OUT for state %d, calling the job-handler, let's see what happens", con->state);
+			joblist_append(srv, con);
 			break;
 		}
 	}

@@ -38,6 +38,8 @@ fi
 if test x$ACLOCAL = x; then
   if test \! x`which aclocal-1.9 2> /dev/null` = x; then
     ACLOCAL=aclocal-1.9
+  elif test \! x`which aclocal19 2> /dev/null` = x; then
+    ACLOCAL=aclocal19
   elif test \! x`which aclocal 2> /dev/null` = x; then
     ACLOCAL=aclocal
   else 
@@ -48,6 +50,8 @@ fi
 if test x$AUTOMAKE = x; then
   if test \! x`which automake-1.9 2> /dev/null` = x; then
     AUTOMAKE=automake-1.9
+  elif test \! x`which automake19 2> /dev/null` = x; then
+    AUTOMAKE=automake19
   elif test \! x`which automake 2> /dev/null` = x; then
     AUTOMAKE=automake
   else 
@@ -60,6 +64,8 @@ fi
 if test x$AUTOCONF = x; then
   if test \! x`which autoconf-2.59 2> /dev/null` = x; then
     AUTOCONF=autoconf-2.59
+  elif test \! x`which autoconf259 2> /dev/null` = x; then
+    AUTOCONF=autoconf259
   elif test \! x`which autoconf 2> /dev/null` = x; then
     AUTOCONF=autoconf
   else 
@@ -70,6 +76,8 @@ fi
 if test x$AUTOHEADER = x; then
   if test \! x`which autoheader-2.59 2> /dev/null` = x; then
     AUTOHEADER=autoheader-2.59
+  elif test \! x`which autoheader259 2> /dev/null` = x; then
+    AUTOHEADER=autoheader259
   elif test \! x`which autoheader 2> /dev/null` = x; then
     AUTOHEADER=autoheader
   else 

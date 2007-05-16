@@ -1178,6 +1178,10 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 			/* fall-through for non-keep-alive or response parsing didn't finish */
 
 		case PROXY_CONNECTION_STATE_CLOSED:
+		/* user terminate connection and proxy connection is still in CONNECTING mode.
+		 * this happends frequently when backends are slow
+		 */
+		case PROXY_CONNECTION_STATE_CONNECTING: 
 			proxy_remove_backend_connection(srv, sess);
 		case PROXY_CONNECTION_STATE_IDLE:
 		default:

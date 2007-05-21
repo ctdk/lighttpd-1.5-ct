@@ -271,6 +271,31 @@ int proxy_fastcgi_get_env_request(server *srv, connection *con, plugin_data *p, 
 		array_set_key_value(sess->env_headers, CONST_BUF_LEN(p->tmp_buf), CONST_BUF_LEN(ds->value));
 	}
 
+	for (i = 0; i < con->environment->used; i++) {
+		data_string *ds;
+		size_t j;
+
+		ds = (data_string *)con->environment->data[i];
+
+		buffer_reset(p->tmp_buf);
+
+		buffer_prepare_append(p->tmp_buf, ds->key->used + 2);
+		for (j = 0; j < ds->key->used - 1; j++) {
+			char c = '_';
+			if (light_isalpha(ds->key->ptr[j])) {
+				/* upper-case */
+				c = ds->key->ptr[j] & ~32;
+			} else if (light_isdigit(ds->key->ptr[j])) {
+				/* copy */
+				c = ds->key->ptr[j];
+			}
+			p->tmp_buf->ptr[p->tmp_buf->used++] = c;
+		}
+		p->tmp_buf->ptr[p->tmp_buf->used++] = '\0';
+
+		array_set_key_value(sess->env_headers, CONST_BUF_LEN(p->tmp_buf), CONST_BUF_LEN(ds->value));
+	}
+
 	return 0;
 }
 

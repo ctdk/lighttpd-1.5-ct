@@ -322,7 +322,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, CONST_BUF_LEN(p->balance_buf)))) {
 				s->balancer = di->value;
 			} else {
-				ERROR("proxy.balance has to be on of 'round-robin', 'carp', 'sqf', 'static' got %s", BUF_STR(p->balance_buf));
+				ERROR("proxy.balance has to be one of 'round-robin', 'carp', 'sqf', 'static': got %s", BUF_STR(p->balance_buf));
 				return HANDLER_ERROR;
 			}
 		}
@@ -330,7 +330,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		if (!buffer_is_empty(p->protocol_buf)) {
 			proxy_protocol *protocol = NULL;
 			if (NULL == (protocol = proxy_get_protocol(p->protocol_buf))) {
-				ERROR("proxy.protocol has to be on of { %s } got %s, you might have to load 'mod_proxy_backend_%s'",
+				ERROR("proxy.protocol has to be one of { %s } got %s, you might have to load 'mod_proxy_backend_%s'",
 						proxy_available_protocols(),
 						BUF_STR(p->protocol_buf),
 						BUF_STR(p->protocol_buf)
@@ -1022,7 +1022,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 		chunkqueue_remove_finished_chunks(proxy_con->recv);
 		switch (srv->network_backend_read(srv, con, proxy_con->sock, proxy_con->recv)) {
 		case NETWORK_STATUS_CONNECTION_CLOSE:
-			/* a close here mean we can't read/write anymore data. */
+			/* a close here means we can't read/write any more data. */
 			sess->is_closed = 1;
 			proxy_con->send->is_closed = 1;
 			proxy_con->recv->is_closed = 1;
@@ -1076,7 +1076,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	}
 
 	/**
-	 * on NETWORK_STATUS_WAIT_FOR_AIO_EVENT we are no allowed to call the state-engine 
+	 * on NETWORK_STATUS_WAIT_FOR_AIO_EVENT we are not allowed to call the state-engine 
 	 * the connection has to sleep until our disk-read is finished 
 	 *
 	 * the joblist_append() will be called by the joblist_append_queue_handler in server.c
@@ -1104,7 +1104,7 @@ int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
 	COUNTER_DEC(sess->proxy_backend->load);
 
 	/* the backend might have been disabled by a full connection pool, re-enable
-	 * if there is atleast one active address.
+	 * if there is at least one active address.
 	 */
 	if (sess->proxy_backend->disabled_addresses <= sess->proxy_backend->address_pool->used) {
 		sess->proxy_backend->state = PROXY_BACKEND_STATE_ACTIVE;
@@ -1123,7 +1123,7 @@ int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
 }
 
 /**
- * Recycle packend proxy connection.
+ * Recycle backend proxy connection.
  * 
  * 1. close the connection if keep-alive is disable
  * 2. or set the connection idling and wake up a backlogged request.
@@ -1178,8 +1178,8 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
 			/* fall-through for non-keep-alive or response parsing didn't finish */
 
 		case PROXY_CONNECTION_STATE_CLOSED:
-		/* user terminate connection and proxy connection is still in CONNECTING mode.
-		 * this happends frequently when backends are slow
+		/* user terminated connection and proxy connection is still in CONNECTING mode.
+		 * this happens frequently when backends are slow
 		 */
 		case PROXY_CONNECTION_STATE_CONNECTING: 
 			proxy_remove_backend_connection(srv, sess);
@@ -2259,7 +2259,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 	case PROXY_STATE_FINISHED:
 		return HANDLER_GO_ON;
 	case PROXY_STATE_CONNECTING:
-		/* this connections is waited 10 seconds to connect to the backend
+		/* this connections has waited 10 seconds to connect to the backend
 		 * and didn't got a successful connection yet, sending timeout */
 		if (srv->cur_ts - sess->connect_start_ts > 10) {
 			con->http_status = 504; /* gateway timeout */
@@ -2309,7 +2309,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 					return HANDLER_FINISHED;
 				}
 
-				/* no, not really a event,
+				/* no, not really an event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
@@ -2343,7 +2343,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 					return HANDLER_FINISHED;
 				}
 
-				/* no, not really a event,
+				/* no, not really an event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game
@@ -2366,7 +2366,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 					return HANDLER_FINISHED;
 				}
 
-				/* no, not really a event,
+				/* no, not really an event,
 				 * we just want to block the outer loop from stepping forward
 				 *
 				 * the trigger will bring this connection back into the game

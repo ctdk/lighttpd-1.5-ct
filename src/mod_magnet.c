@@ -708,7 +708,7 @@ static handler_t magnet_attract(server *srv, connection *con, plugin_data *p, bu
 	/**
 	 * lighty.request[] has the HTTP-request headers
 	 * lighty.content[] is a table of string/file
-	 * lighty.header[] is a array to set response headers
+	 * lighty.header[] is an array to set response headers
 	 */
 
 	lua_newtable(L); /* lighty.*                                 (sp += 1) */

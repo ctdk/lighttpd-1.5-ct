@@ -1243,7 +1243,7 @@ int config_set_defaults(server *srv) {
 
 		if (FDEVENT_HANDLER_UNSET == srv->event_handler) {
 			log_error_write(srv, __FILE__, __LINE__, "sb",
-					"the selected event-handler in unknown or not supported:",
+					"the selected event-handler is unknown or not supported:",
 					srv->srvconf.event_handler );
 
 			return -1;

@@ -52,7 +52,7 @@
  *            - some unused structures removed.
  *
  * TODO:      - delay upstream read if write_queue is too large
- *              (to prevent memory eating, like in apache). Shoud be
+ *              (to prevent memory eating, like in apache). Should be
  *              configurable).
  *            - persistent connection with upstream servers
  *            - HTTP/1.1
@@ -941,7 +941,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 			return HANDLER_FINISHED;
 		case -1:
 			if (con->file_started == 0) {
-				/* nothing has been send out yet, send a 500 */
+				/* nothing has been sent out yet, send a 500 */
 				con->http_status = 500;
 				con->mode = DIRECT;
 			} else {

@@ -273,7 +273,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		}
 
 		if (con->conf.log_request_handling) {
-			TRACE("-- %s", "sanatising URI");
+			TRACE("-- %s", "sanitizing URI");
 			TRACE("URI-path     : %s", BUF_STR(con->uri.path));
 		}
 

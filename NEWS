@@ -4,6 +4,7 @@ NEWS
 ====
 
 - 1.5.0 - ...
+  * -F option added for spawm-fcgi
   * replaced mod_fastcgi, mod_scgi, mod_proxy with mod_proxy_core + backends
   * enabled mod_uploadprogress again
   * added threaded stat() 

@@ -25,7 +25,7 @@ int inet_aton(const char *cp, struct in_addr *inp) {
 
 #ifdef _WIN32
 
-#include <WinSock2.h>
+#include <winsock2.h>
 
 /* windows doesn't have inet_ntop */
 

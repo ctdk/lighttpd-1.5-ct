@@ -5,7 +5,7 @@
 #include <process.h>
 #define pid_t int
 /* win32 has no fork() */
-#define kill(x, y)
+#define kill(x, y) do { } while (0)
 #define getpid() 0
 
 #else

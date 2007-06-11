@@ -28,7 +28,9 @@
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
+#ifndef __MINGW32__
 #define ssize_t int
+#endif
 
 #define sockread( fd, buf, bytes ) recv( fd, buf, bytes, 0 )
 

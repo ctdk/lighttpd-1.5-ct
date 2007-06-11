@@ -340,6 +340,9 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 	 *
 	 * O_NOATIME leads to EPERM on SYMLINKS
 	 * */
+#ifndef O_NONBLOCK
+#define O_NONBLOCK 0
+#endif
 	if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 		if (srv->srvconf.use_noatime && errno == EPERM) {
 			if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY))) {

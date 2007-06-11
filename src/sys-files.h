@@ -20,6 +20,10 @@
 
 #define __S_ISTYPE(mode, mask)  (((mode) & _S_IFMT) == (mask))
 
+#undef S_ISDIR
+#undef S_ISCHR
+#undef S_ISBLK
+#undef S_ISREG
 #define S_ISDIR(mode)    __S_ISTYPE((mode), _S_IFDIR)
 #define S_ISCHR(mode)    __S_ISTYPE((mode), _S_IFCHR)
 #define S_ISBLK(mode)    __S_ISTYPE((mode), _S_IFBLK)

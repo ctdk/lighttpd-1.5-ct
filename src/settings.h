@@ -147,7 +147,7 @@ typedef enum { HANDLER_UNSET,
   #endif
 #endif
 
-#ifdef LI_DLL_EXPORTS
+#ifdef LI_DECLARE_EXPORTS
 #define LI_API LI_EXPORT
 #else
 #define LI_API LI_IMPORT

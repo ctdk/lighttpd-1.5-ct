@@ -27,6 +27,173 @@
 # include <openssl/rand.h>
 #endif
 
+#define BACKEND_HANDLERS(read, write) network_read_chunkqueue_##read, network_write_chunkqueue_##write
+static network_backend_info_t network_backends[] = {
+	/* lowest id wins */
+	{
+		NETWORK_BACKEND_LINUX_SENDFILE,
+		"linux-sendfile",
+		NULL,
+#if defined USE_WRITE && defined USE_LINUX_SENDFILE
+		BACKEND_HANDLERS(read, linuxsendfile)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_LINUX_AIO_SENDFILE,
+		"linux-aio-sendfile",
+		NULL,
+#if defined USE_WRITE && defined USE_LINUX_AIO_SENDFILE
+		BACKEND_HANDLERS(read, linuxaiosendfile)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_FREEBSD_SENDFILE,
+		"freebsd-sendfile",
+		NULL,
+#if defined USE_WRITE && defined USE_FREEBSD_SENDFILE
+		BACKEND_HANDLERS(read, freebsdsendfile)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_SOLARIS_SENDFILEV,
+		"solaris-sendfilev",
+		NULL,
+#if defined USE_WRITE && defined USE_SOLARIS_SENDFILEV
+		BACKEND_HANDLERS(read, solarissendfilev)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_POSIX_AIO,
+		"posix-aio",
+		NULL,
+#if defined USE_WRITE && defined USE_POSIX_AIO
+		BACKEND_HANDLERS(read, posixaio)
+#else
+		NULL, NULL
+#endif
+	},
+
+	{
+		NETWORK_BACKEND_GTHREAD_AIO,
+		"gthread-aio",
+		NULL,
+#if defined USE_WRITE && defined USE_GTHREAD_AIO
+		BACKEND_HANDLERS(read, gthreadaio)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_GTHREAD_SENDFILE,
+		"gthread-sendfile",
+		NULL,
+#if defined USE_WRITE && defined USE_GTHREAD_AIO && defined USE_GTHREAD_SENDFILE
+		BACKEND_HANDLERS(read, gthreadsendfile)
+#else
+		NULL, NULL
+#endif
+	},
+
+	{
+		NETWORK_BACKEND_WRITEV,
+		"writev",
+		NULL,
+#if defined USE_WRITE && defined USE_WRITEV
+		BACKEND_HANDLERS(read, writev)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_WRITE,
+		"write",
+		NULL,
+#if defined USE_WRITE
+		BACKEND_HANDLERS(read, write)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_WIN32_TRANSMITFILE,
+		"win32-transmitfile",
+		NULL,
+#if defined USE_WIN32_TRANSMITFILE
+		BACKEND_HANDLERS(win32recv, win32transmitfile)
+#else
+		NULL, NULL
+#endif
+	},
+	{
+		NETWORK_BACKEND_WIN32_SEND,
+		"win32-send",
+		NULL,
+#if defined USE_WIN32_SEND && defined USE_WIN32_SEND
+		BACKEND_HANDLERS(win32recv, win32send)
+#else
+		NULL, NULL
+#endif
+	},
+
+	{
+		NETWORK_BACKEND_UNSET,
+		NULL,
+		NULL,
+		NULL, NULL
+	}
+};
+
+const network_backend_info_t *network_get_backends() {
+	return network_backends;
+}
+
+const network_backend_info_t *network_get_defaultbackend() {
+	const network_backend_info_t *backend = network_get_backends();
+
+	while (backend->name) {
+		if (backend->write_handler) {
+			return backend;
+		}
+		backend ++;
+	}
+
+	return NULL;
+}
+
+const network_backend_info_t *network_get_backend_info_by_type(network_backend_t type) {
+	const network_backend_info_t *backend = network_get_backends();
+
+	while (backend->name) {
+		if (type == backend->type) {
+			return backend;
+		}
+		backend ++;
+	}
+
+	return NULL;
+}
+
+const network_backend_info_t *network_get_backend_info_by_name(const char *name) {
+	const network_backend_info_t *backend = network_get_backends();
+
+	while (backend->name) {
+		if (strcmp(name, backend->name) == 0) {
+			return backend;
+		}
+		backend ++;
+	}
+
+	return NULL;
+}
+
 handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 	server     *srv = (server *)s;
 	server_socket *srv_socket = (server_socket *)context;
@@ -434,49 +601,7 @@ int network_close(server *srv) {
 int network_init(server *srv) {
 	buffer *b;
 	size_t i;
-	network_backend_t backend;
-
-	struct nb_map {
-		network_backend_t nb;
-		const char *name;
-	} network_backends[] = {
-		/* lowest id wins */
-#if defined USE_LINUX_SENDFILE
-		{ NETWORK_BACKEND_LINUX_SENDFILE,       "linux-sendfile" },
-#endif
-#if defined USE_LINUX_AIO_SENDFILE
-		{ NETWORK_BACKEND_LINUX_AIO_SENDFILE,   "linux-aio-sendfile" },
-#endif
-#if defined USE_FREEBSD_SENDFILE
-		{ NETWORK_BACKEND_FREEBSD_SENDFILE,     "freebsd-sendfile" },
-#endif
-#if defined USE_SOLARIS_SENDFILEV
-		{ NETWORK_BACKEND_SOLARIS_SENDFILEV,	"solaris-sendfilev" },
-#endif
-#if defined USE_POSIX_AIO
-		{ NETWORK_BACKEND_POSIX_AIO,            "posix-aio" },
-#endif
-#if defined USE_GTHREAD_AIO
-		{ NETWORK_BACKEND_GTHREAD_AIO,          "gthread-aio" },
-#if defined USE_GTHREAD_SENDFILE
-		{ NETWORK_BACKEND_GTHREAD_SENDFILE,     "gthread-sendfile" },
-#endif
-#endif
-#if defined USE_WRITEV
-		{ NETWORK_BACKEND_WRITEV,		"writev" },
-#endif
-#if defined USE_WRITE
-		{ NETWORK_BACKEND_WRITE,		"write" },
-#endif
-#if defined USE_WIN32_TRANSMITFILE
-		{ NETWORK_BACKEND_WIN32_TRANSMITFILE,	"win32-transmitfile" },
-#endif
-#if defined USE_WIN32_SEND
-		{ NETWORK_BACKEND_WIN32_SEND,	    	"win32-send" },
-#endif
-
-		{ NETWORK_BACKEND_UNSET,        	NULL }
-	};
+	const network_backend_info_t *backend;
 
 	b = buffer_init();
 
@@ -493,110 +618,14 @@ int network_init(server *srv) {
 	srv->network_ssl_backend_write = network_write_chunkqueue_openssl;
 #endif
 
-	/* get a useful default */
-	backend = network_backends[0].nb;
-
-	/* match name against known types */
-	if (!buffer_is_empty(srv->srvconf.network_backend)) {
-		for (i = 0; network_backends[i].name; i++) {
-			/**/
-			if (buffer_is_equal_string(srv->srvconf.network_backend, network_backends[i].name, strlen(network_backends[i].name))) {
-				backend = network_backends[i].nb;
-				break;
-			}
-		}
-		if (NULL == network_backends[i].name) {
-			/* we don't know it */
-
-			log_error_write(srv, __FILE__, __LINE__, "sb",
-					"server.network-backend has a unknown value:",
-					srv->srvconf.network_backend);
-
-			return -1;
-		}
-	} else {
-#if 0
-		/* FIXME: we have to find a useful way to export this to the user*/
-		TRACE("using default network-backend: %s", network_backends[0].name);
-#endif
-	}
-
-#define SET_NETWORK_BACKEND(read, write) \
-    srv->network_backend_write = network_write_chunkqueue_##write;\
-    srv->network_backend_read = network_read_chunkqueue_##read
-
-#define SET_NETWORK_BACKEND_SSL(read, write) \
-    srv->network_ssl_backend_write = network_write_chunkqueue_##write;\
-    srv->network_ssl_backend_read = network_read_chunkqueue_##read
-
-	switch(backend) {
-
-#ifdef USE_WIN32_SEND
-	case NETWORK_BACKEND_WIN32_SEND:
-		SET_NETWORK_BACKEND(win32recv, win32send);
-		break;
-#ifdef USE_WIN32_TRANSMITFILE
-	case NETWORK_BACKEND_WIN32_TRANSMITFILE:
-		SET_NETWORK_BACKEND(win32recv, win32transmitfile);
-		break;
-#endif
-#endif
-
-#ifdef USE_WRITE
-	case NETWORK_BACKEND_WRITE:
-		SET_NETWORK_BACKEND(read, write);
-		break;
-
-#ifdef USE_WRITEV
-	case NETWORK_BACKEND_WRITEV:
-		SET_NETWORK_BACKEND(read, writev);
-		break;
-#endif
-#ifdef USE_LINUX_SENDFILE
-	case NETWORK_BACKEND_LINUX_SENDFILE:
-		SET_NETWORK_BACKEND(read, linuxsendfile);
-		break;
-#endif
-#ifdef USE_LINUX_AIO_SENDFILE
-	case NETWORK_BACKEND_LINUX_AIO_SENDFILE:
-		SET_NETWORK_BACKEND(read, linuxaiosendfile);
-		break;
-#endif
-#ifdef USE_POSIX_AIO
-	case NETWORK_BACKEND_POSIX_AIO:
-		SET_NETWORK_BACKEND(read, posixaio);
-		break;
-#endif
-#ifdef USE_GTHREAD_AIO
-	case NETWORK_BACKEND_GTHREAD_AIO:
-		SET_NETWORK_BACKEND(read, gthreadaio);
-		break;
-	
-#ifdef USE_GTHREAD_SENDFILE
-	case NETWORK_BACKEND_GTHREAD_SENDFILE:
-		SET_NETWORK_BACKEND(read, gthreadsendfile);
-		break;
-#endif
-#endif
-#ifdef USE_FREEBSD_SENDFILE
-	case NETWORK_BACKEND_FREEBSD_SENDFILE:
-		SET_NETWORK_BACKEND(read, freebsdsendfile);
-		break;
-#endif
-#ifdef USE_SOLARIS_SENDFILEV
-	case NETWORK_BACKEND_SOLARIS_SENDFILEV:
-		SET_NETWORK_BACKEND(read, solarissendfilev);
-		break;
-#endif
-#endif
-	default:
-		return -1;
-	}
-
-	srv->network_backend = backend;
+	backend = network_get_backend_info_by_type(srv->network_backend);
+	assert(backend && backend->read_handler);
+	srv->network_backend_read  = backend->read_handler;
+	srv->network_backend_write = backend->write_handler;
 
 #ifdef USE_OPENSSL
-        SET_NETWORK_BACKEND_SSL(openssl, openssl);
+	srv->network_ssl_backend_write = network_write_chunkqueue_openssl;
+	srv->network_ssl_backend_read  = network_read_chunkqueue_openssl;
 #endif
 
 	/* check for $SERVER["socket"] */

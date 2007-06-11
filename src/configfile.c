@@ -15,6 +15,8 @@
 #include "configparser.h"
 #include "configfile.h"
 #include "proc_open.h"
+#include "fdevent.h"
+#include "network_backends.h"
 
 #include "sys-files.h"
 #include "sys-process.h"
@@ -1112,38 +1114,10 @@ int config_read(server *srv, const char *fn) {
 
 
 int config_set_defaults(server *srv) {
-	size_t i;
 	specific_config *s = srv->config_storage[0];
+	const fdevent_handler_info_t *handler;
+	const network_backend_info_t *backend;
 	struct stat st1, st2;
-
-	struct ev_map { fdevent_handler_t et; const char *name; } event_handlers[] =
-	{
-		/* - poll is most reliable
-		 * - select works everywhere
-		 * - linux-* are experimental
-		 */
-#ifdef USE_POLL
-		{ FDEVENT_HANDLER_POLL,           "poll" },
-#endif
-#ifdef USE_SELECT
-		{ FDEVENT_HANDLER_SELECT,         "select" },
-#endif
-#ifdef USE_LINUX_EPOLL
-		{ FDEVENT_HANDLER_LINUX_SYSEPOLL, "linux-sysepoll" },
-#endif
-#ifdef USE_LINUX_SIGIO
-		{ FDEVENT_HANDLER_LINUX_RTSIG,    "linux-rtsig" },
-#endif
-#ifdef USE_SOLARIS_DEVPOLL
-		{ FDEVENT_HANDLER_SOLARIS_DEVPOLL,"solaris-devpoll" },
-#endif
-#ifdef USE_FREEBSD_KQUEUE
-		{ FDEVENT_HANDLER_FREEBSD_KQUEUE, "freebsd-kqueue" },
-		{ FDEVENT_HANDLER_FREEBSD_KQUEUE, "kqueue" },
-#endif
-		{ FDEVENT_HANDLER_UNSET,          NULL }
-	};
-
 
 	if (buffer_is_empty(s->document_root)) {
 		log_error_write(srv, __FILE__, __LINE__, "s",
@@ -1216,14 +1190,9 @@ int config_set_defaults(server *srv) {
 	}
 
 	if (srv->srvconf.event_handler->used == 0) {
-		/* choose a good default
-		 *
-		 * the event_handler list is sorted by 'goodness'
-		 * taking the first available should be the best solution
-		 */
-		srv->event_handler = event_handlers[0].et;
-
-		if (FDEVENT_HANDLER_UNSET == srv->event_handler) {
+		/* get a useful default */
+		handler = fdevent_get_defaulthandler();
+		if (!handler) {
 			log_error_write(srv, __FILE__, __LINE__, "s",
 					"sorry, there is no event handler for this system");
 
@@ -1234,21 +1203,61 @@ int config_set_defaults(server *srv) {
 		 * User override
 		 */
 
-		for (i = 0; event_handlers[i].name; i++) {
-			if (0 == strcmp(event_handlers[i].name, srv->srvconf.event_handler->ptr)) {
-				srv->event_handler = event_handlers[i].et;
-				break;
-			}
+		handler = fdevent_get_handler_info_by_name(srv->srvconf.event_handler->ptr);
+		if (!handler) {
+			log_error_write(srv, __FILE__, __LINE__, "sb",
+					"the selected event-handler is unknown:",
+					srv->srvconf.event_handler );
+
+			return -1;
 		}
 
-		if (FDEVENT_HANDLER_UNSET == srv->event_handler) {
+		if (!handler->init) {
 			log_error_write(srv, __FILE__, __LINE__, "sb",
-					"the selected event-handler is unknown or not supported:",
+					"the selected event-handler is known but not supported:",
 					srv->srvconf.event_handler );
 
 			return -1;
 		}
 	}
+	srv->event_handler = handler->type;
+
+	if (buffer_is_empty(srv->srvconf.network_backend)) {
+		/* get a useful default */
+		backend = network_get_defaultbackend();
+		if (!backend) {
+			log_error_write(srv, __FILE__, __LINE__, "s",
+					"sorry, there is no network backend for this system");
+
+			return -1;
+		}
+	} else {
+		/*
+		 * User override
+		 */
+
+		backend = network_get_backend_info_by_name(srv->srvconf.network_backend->ptr);
+		if (!backend) {
+			/* we don't know it */
+
+			log_error_write(srv, __FILE__, __LINE__, "sb",
+					"server.network-backend has a unknown value:",
+					srv->srvconf.network_backend);
+
+			return -1;
+		}
+
+		if (backend->write_handler == NULL) {
+			/* we know it but not supported */
+
+			log_error_write(srv, __FILE__, __LINE__, "sb",
+					"server.network-backend not supported:",
+					srv->srvconf.network_backend);
+
+			return -1;
+		}
+	}
+	srv->network_backend = backend->type;
 
 	if (s->is_ssl) {
 		if (buffer_is_empty(s->ssl_pemfile)) {

@@ -42,4 +42,17 @@ LI_API NETWORK_BACKEND_WRITE(openssl);
 LI_API NETWORK_BACKEND_READ(openssl);
 #endif
 
+typedef struct {
+	network_backend_t type;
+	const char *name;
+	const char *description;
+	network_status_t (*read_handler)(server *srv, connection *con, iosocket *sock, chunkqueue *cq);
+	network_status_t (*write_handler)(server *srv, connection *con, iosocket *sock, chunkqueue *cq);
+} network_backend_info_t;
+
+LI_API const network_backend_info_t *network_get_backends();
+LI_API const network_backend_info_t *network_get_defaultbackend();
+LI_API const network_backend_info_t *network_get_backend_info_by_type(network_backend_t type);
+LI_API const network_backend_info_t *network_get_backend_info_by_name(const char *name);
+
 #endif

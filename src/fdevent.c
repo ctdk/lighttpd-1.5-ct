@@ -15,6 +15,133 @@
 
 #include "sys-socket.h"
 
+static fdevent_handler_info_t fdevent_handlers[] = {
+	/* - poll is most reliable
+	 * - select works everywhere
+	 * - linux-* are experimental
+	 */
+	{
+		FDEVENT_HANDLER_POLL,
+		"poll",
+		"poll (Unix)",
+#ifdef USE_POLL
+		fdevent_poll_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_SELECT,
+		"select",
+		"select (generic)",
+#ifdef USE_SELECT
+		fdevent_select_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_LINUX_SYSEPOLL,
+		"linux-sysepoll",
+		"epoll (Linux 2.6)",
+#ifdef USE_LINUX_EPOLL
+		fdevent_linux_sysepoll_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_LINUX_RTSIG,
+		"linux-rtsig",
+		"rt-signals (Linux 2.4+)",
+#ifdef USE_LINUX_SIGIO
+		fdevent_linux_rtsig_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_SOLARIS_DEVPOLL,"solaris-devpoll",
+		"/dev/poll (Solaris)",
+#ifdef USE_SOLARIS_DEVPOLL
+		fdevent_solaris_devpoll_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_FREEBSD_KQUEUE,
+		"freebsd-kqueue",
+		"kqueue (FreeBSD)",
+#ifdef USE_FREEBSD_KQUEUE
+		fdevent_freebsd_kqueue_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_FREEBSD_KQUEUE,
+		"kqueue",
+		"kqueue (FreeBSD)",
+#ifdef USE_FREEBSD_KQUEUE
+		fdevent_freebsd_kqueue_init
+#else
+		NULL
+#endif
+	},
+	{
+		FDEVENT_HANDLER_UNSET,
+		NULL,
+		NULL,
+		NULL
+	}
+};
+
+
+
+const fdevent_handler_info_t *fdevent_get_handlers() {
+	return fdevent_handlers;
+}
+
+const fdevent_handler_info_t *fdevent_get_defaulthandler() {
+	const fdevent_handler_info_t *handler = fdevent_get_handlers();
+
+	while (handler->name) {
+		if (handler->init) {
+			return handler;
+		}
+		handler ++;
+	}
+
+	return NULL;
+}
+
+const fdevent_handler_info_t *fdevent_get_handler_info_by_type(fdevent_handler_t type) {
+	const fdevent_handler_info_t *handler = fdevent_get_handlers();
+
+	while (handler->name) {
+		if (type == handler->type) {
+			return handler;
+		}
+		handler ++;
+	}
+
+	return NULL;
+}
+
+const fdevent_handler_info_t *fdevent_get_handler_info_by_name(const char *name) {
+	const fdevent_handler_info_t *handler = fdevent_get_handlers();
+
+	while (handler->name) {
+		if (strcmp(name, handler->name) == 0) {
+			return handler;
+		}
+		handler ++;
+	}
+
+	return NULL;
+}
+
 fdevent_revent *fdevent_revent_init(void) {
 	STRUCT_INIT(fdevent_revent, revent);
 
@@ -70,58 +197,30 @@ void fdevent_revents_free(fdevent_revents *revents) {
 
 fdevents *fdevent_init(size_t maxfds, fdevent_handler_t type) {
 	fdevents *ev;
+	const fdevent_handler_info_t *handler = fdevent_get_handler_info_by_type(type);
 
 	ev = calloc(1, sizeof(*ev));
 	ev->fdarray = calloc(maxfds, sizeof(*ev->fdarray));
 	ev->maxfds = maxfds;
 
-	switch(type) {
-	case FDEVENT_HANDLER_POLL:
-		if (0 != fdevent_poll_init(ev)) {
+	assert(handler && handler->init);
+	if (0 != handler->init(ev)) {
+		switch(type) {
+		case FDEVENT_HANDLER_POLL:
 			ERROR("event-handler poll failed %s", "");
-
 			return NULL;
-		}
-		break;
-	case FDEVENT_HANDLER_SELECT:
-		if (0 != fdevent_select_init(ev)) {
+
+		case FDEVENT_HANDLER_SELECT:
 			ERROR("event-handler select failed %s", "");
-
 			return NULL;
-		}
-		break;
-	case FDEVENT_HANDLER_LINUX_RTSIG:
-		if (0 != fdevent_linux_rtsig_init(ev)) {
-			ERROR("event-handler '%s' failed, use 'poll' or 'select' instead", "linux-rtsig");
 
-			return NULL;
-		}
-		break;
-	case FDEVENT_HANDLER_LINUX_SYSEPOLL:
-		if (0 != fdevent_linux_sysepoll_init(ev)) {
-			ERROR("event-handler '%s' failed, use 'poll' or 'select' instead", "linux-sysepoll");
+		default:
+			if (0 != fdevent_linux_rtsig_init(ev)) {
+				ERROR("event-handler '%s' failed, use 'poll' or 'select' instead", handler->name);
 
-			return NULL;
+				return NULL;
+			}
 		}
-		break;
-	case FDEVENT_HANDLER_SOLARIS_DEVPOLL:
-		if (0 != fdevent_solaris_devpoll_init(ev)) {
-			ERROR("event-handler '%s' failed, use 'poll' or 'select' instead", "solaris-devpoll");
-
-			return NULL;
-		}
-		break;
-	case FDEVENT_HANDLER_FREEBSD_KQUEUE:
-		if (0 != fdevent_freebsd_kqueue_init(ev)) {
-			ERROR("event-handler '%s' failed, use 'poll' or 'select' instead", "kqueue");
-
-			return NULL;
-		}
-		break;
-	default:
-		ERROR("event-handler is unknown, use 'poll' or 'select' instead %s", "");
-
-		return NULL;
 	}
 
 	return ev;

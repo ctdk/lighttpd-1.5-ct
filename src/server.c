@@ -24,6 +24,7 @@
 #include "server.h"
 #include "buffer.h"
 #include "network.h"
+#include "network_backends.h"
 #include "log.h"
 #include "keyvalue.h"
 #include "response.h"
@@ -348,53 +349,10 @@ static void show_version (void) {
 }
 
 static void show_features (void) {
-  const char *s = ""
-#ifdef USE_SELECT
-      "\t+ select (generic)\n"
-#else
-      "\t- select (generic)\n"
-#endif
-#ifdef USE_POLL
-      "\t+ poll (Unix)\n"
-#else
-      "\t- poll (Unix)\n"
-#endif
-#ifdef USE_LINUX_SIGIO
-      "\t+ rt-signals (Linux 2.4+)\n"
-#else
-      "\t- rt-signals (Linux 2.4+)\n"
-#endif
-#ifdef USE_LINUX_EPOLL
-      "\t+ epoll (Linux 2.6)\n"
-#else
-      "\t- epoll (Linux 2.6)\n"
-#endif
-#ifdef USE_SOLARIS_DEVPOLL
-      "\t+ /dev/poll (Solaris)\n"
-#else
-      "\t- /dev/poll (Solaris)\n"
-#endif
-#ifdef USE_FREEBSD_KQUEUE
-      "\t+ kqueue (FreeBSD)\n"
-#else
-      "\t- kqueue (FreeBSD)\n"
-#endif
-      "\nNetwork handler:\n\n"
-#if defined(USE_LINUX_SENDFILE) || defined(USE_FREEBSD_SENDFILE) || defined(USE_SOLARIS_SENDFILEV) || defined(USE_AIX_SENDFILE)
-      "\t+ sendfile\n"
-#else
-  #ifdef USE_WRITEV
-      "\t+ writev\n"
-  #else
-      "\t+ write\n"
-  #endif
-  #ifdef USE_MMAP
-      "\t+ mmap support\n"
-  #else
-      "\t- mmap support\n"
-  #endif
-#endif
-      "\nFeatures:\n\n"
+	const fdevent_handler_info_t *handler;
+	const network_backend_info_t *backend;
+
+	const char *features = 
 #ifdef HAVE_IPV6
       "\t+ IPv6 support\n"
 #else
@@ -465,11 +423,38 @@ static void show_features (void) {
 #else
       "\t- GDBM support\n"
 #endif
-      "\n";
+      ;
 
 	show_version();
 
-	printf("\nEvent Handlers:\n\n%s", s);
+	printf("\nEvent Handlers:\n\n");
+	for (handler = fdevent_get_handlers(); handler->name; handler++) {
+		printf("\t%c %s", handler->init ? '+' : '-', handler->name);
+		if (handler->description) {
+			printf(": %s\n", handler->description);
+		}
+		else {
+			printf("\n");
+		}
+	}
+
+	printf("\nNetwork Backends:\n\n");
+	for (backend = network_get_backends(); backend->name; backend++) {
+		printf("\t%c %s", backend->write_handler ? '+' : '-', backend->name);
+		if (backend->description) {
+			printf(": %s\n", backend->description);
+		}
+		else {
+			printf("\n");
+		}
+	}
+
+#ifdef USE_MMAP
+	printf("\t+ (mmap) support\n");
+#else
+	printf("\t- (mmap) support\n");
+#endif
+	printf("\nFeatures:\n\n%s", features);
 }
 
 static void show_help (void) {

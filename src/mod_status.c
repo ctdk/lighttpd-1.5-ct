@@ -19,6 +19,7 @@
 #include "connections.h"
 #include "log.h"
 #include "status_counter.h"
+#include "network_backends.h"
 
 #include "plugin.h"
 
@@ -50,7 +51,7 @@ typedef struct {
 
 	double bytes_written;
 
-	buffer *module_list;
+	buffer *tmp_buf;
 
 	plugin_config **config_storage;
 
@@ -69,7 +70,7 @@ INIT_FUNC(mod_status_init) {
 	p->rel_traffic_out = p->rel_requests = 0;
 	p->abs_traffic_out = p->abs_requests = 0;
 	p->bytes_written = 0;
-	p->module_list = buffer_init();
+	p->tmp_buf = buffer_init();
 
 	for (i = 0; i < 5; i++) {
 		p->mod_5s_traffic_out[i] = p->mod_5s_requests[i] = 0;
@@ -85,7 +86,7 @@ FREE_FUNC(mod_status_free) {
 
 	if (!p) return HANDLER_GO_ON;
 
-	buffer_free(p->module_list);
+	buffer_free(p->tmp_buf);
 
 	if (p->config_storage) {
 		size_t i;
@@ -670,35 +671,10 @@ static handler_t mod_status_handle_server_status(server *srv, connection *con, v
 
 static handler_t mod_status_handle_server_config(server *srv, connection *con, void *p_d) {
 	plugin_data *p = p_d;
-	buffer *b, *m = p->module_list;
+	buffer *b, *tmp_buf = p->tmp_buf;
 	size_t i;
-
-	struct ev_map { fdevent_handler_t et; const char *name; } event_handlers[] =
-	{
-		/* - poll is most reliable
-		 * - select works everywhere
-		 * - linux-* are experimental
-		 */
-#ifdef USE_POLL
-		{ FDEVENT_HANDLER_POLL,           "poll" },
-#endif
-#ifdef USE_SELECT
-		{ FDEVENT_HANDLER_SELECT,         "select" },
-#endif
-#ifdef USE_LINUX_EPOLL
-		{ FDEVENT_HANDLER_LINUX_SYSEPOLL, "linux-sysepoll" },
-#endif
-#ifdef USE_LINUX_SIGIO
-		{ FDEVENT_HANDLER_LINUX_RTSIG,    "linux-rtsig" },
-#endif
-#ifdef USE_SOLARIS_DEVPOLL
-		{ FDEVENT_HANDLER_SOLARIS_DEVPOLL,"solaris-devpoll" },
-#endif
-#ifdef USE_FREEBSD_KQUEUE
-		{ FDEVENT_HANDLER_FREEBSD_KQUEUE, "freebsd-kqueue" },
-#endif
-		{ FDEVENT_HANDLER_UNSET,          NULL }
-	};
+	const fdevent_handler_info_t *handler;
+	const network_backend_info_t *backend;
 
 	b = chunkqueue_get_append_buffer(con->send);
 
@@ -722,29 +698,56 @@ static handler_t mod_status_handle_server_config(server *srv, connection *con, v
 #endif
 	mod_status_header_append(b, "Network Engine");
 
-	for (i = 0; event_handlers[i].name; i++) {
-		if (event_handlers[i].et == srv->event_handler) {
-			mod_status_row_append(b, "fd-Event-Handler", event_handlers[i].name);
-			break;
+	mod_status_row_append(b, "fd-Event-Handler", fdevent_get_handler_info_by_type(srv->event_handler)->name);
+	buffer_reset(tmp_buf);
+	for (handler = fdevent_get_handlers(); handler->name; handler++) {
+		if (handler->init) {
+			BUFFER_APPEND_STRING_CONST(tmp_buf, "+ ");
+		} else {
+			BUFFER_APPEND_STRING_CONST(tmp_buf, "- ");
 		}
+
+		buffer_append_string(tmp_buf, handler->name);
+		BUFFER_APPEND_STRING_CONST(tmp_buf, "<br />");
 	}
+	mod_status_row_append(b, "Supported fd-Event-Handlers", tmp_buf->ptr);
+
+	mod_status_row_append(b, "Network-Backend", network_get_backend_info_by_type(srv->network_backend)->name);
+	buffer_reset(tmp_buf);
+	for (backend = network_get_backends(); backend->name; backend++) {
+		if (backend->write_handler) {
+			BUFFER_APPEND_STRING_CONST(tmp_buf, "+ ");
+		} else {
+			BUFFER_APPEND_STRING_CONST(tmp_buf, "- ");
+		}
+
+		buffer_append_string(tmp_buf, backend->name);
+		BUFFER_APPEND_STRING_CONST(tmp_buf, "<br />");
+	}
+#ifdef USE_MMAP
+	BUFFER_APPEND_STRING_CONST(tmp_buf, "+ (mmap)<br />");
+#else
+	BUFFER_APPEND_STRING_CONST(tmp_buf, "- (mmap)<br />");
+#endif
+	mod_status_row_append(b, "Supported Network-Backends", tmp_buf->ptr);
 
 	mod_status_header_append(b, "Config-File-Settings");
 
+	buffer_reset(tmp_buf);
 	for (i = 0; i < srv->plugins.used; i++) {
 		plugin **ps = srv->plugins.ptr;
 
 		plugin *pl = ps[i];
 
 		if (i == 0) {
-			buffer_copy_string_buffer(m, pl->name);
+			buffer_copy_string_buffer(tmp_buf, pl->name);
 		} else {
-			BUFFER_APPEND_STRING_CONST(m, "<br />");
-			buffer_append_string_buffer(m, pl->name);
+			BUFFER_APPEND_STRING_CONST(tmp_buf, "<br />");
+			buffer_append_string_buffer(tmp_buf, pl->name);
 		}
 	}
 
-	mod_status_row_append(b, "Loaded Modules", m->ptr);
+	mod_status_row_append(b, "Loaded Modules", tmp_buf->ptr);
 
 	BUFFER_APPEND_STRING_CONST(b, "  </table>\n");
 

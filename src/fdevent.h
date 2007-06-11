@@ -213,6 +213,18 @@ typedef struct fdevents {
 	int (*fcntl_set)(struct fdevents *ev, int fd);
 } fdevents;
 
+typedef struct {
+	fdevent_handler_t type;
+	const char *name;
+	const char *description;
+	int (*init)(fdevents *ev);
+} fdevent_handler_info_t;
+
+LI_API const fdevent_handler_info_t *fdevent_get_handlers();
+LI_API const fdevent_handler_info_t *fdevent_get_defaulthandler();
+LI_API const fdevent_handler_info_t *fdevent_get_handler_info_by_type(fdevent_handler_t type);
+LI_API const fdevent_handler_info_t *fdevent_get_handler_info_by_name(const char *name);
+
 LI_API fdevents* fdevent_init(size_t maxfds, fdevent_handler_t type);
 LI_API int fdevent_reset(fdevents *ev);
 LI_API void fdevent_free(fdevents *ev);

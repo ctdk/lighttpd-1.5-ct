@@ -49,9 +49,6 @@ typedef struct {
 	chunk *first;
 	chunk *last;
 
-	chunk *unused;
-	size_t unused_chunks;
-
 	array *tempdirs;
 
 	int is_closed;   /* the input to this CQ is closed */
@@ -71,9 +68,9 @@ LI_API buffer * chunkqueue_get_prepend_buffer(chunkqueue *c);
 LI_API chunk * chunkqueue_get_append_tempfile(chunkqueue *cq);
 LI_API int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in);
 LI_API int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c);
-LI_API int chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, size_t max_len);
+LI_API off_t chunkqueue_steal_chunks_len(chunkqueue *cq, chunk *c, off_t max_len);
 LI_API off_t chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in);
-LI_API int chunkqueue_skip(chunkqueue *cq, off_t skip);
+LI_API off_t chunkqueue_skip(chunkqueue *cq, off_t skip);
 LI_API void chunkqueue_remove_empty_last_chunk(chunkqueue *cq);
 
 LI_API int chunkqueue_remove_finished_chunks(chunkqueue *cq);

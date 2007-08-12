@@ -1013,8 +1013,8 @@ int main (int argc, char **argv, char **envp) {
 	int num_childs = 0;
 	int pid_fd = -1, fd;
 	size_t i;
-	int need_joblist_queue_thread = 0;
 #ifdef USE_GTHREAD
+	int need_joblist_queue_thread = 0;
 	GThread **stat_cache_threads;
 	GThread **aio_write_threads = NULL;
 	GThread *linux_aio_read_thread_id = NULL;
@@ -1593,7 +1593,6 @@ int main (int argc, char **argv, char **envp) {
 	joblist_queue_mutex = g_mutex_new();
 	joblist_queue_cond = g_cond_new();
 	g_mutex_lock(joblist_queue_mutex);
-#endif
 
 	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
 
@@ -1662,7 +1661,7 @@ int main (int argc, char **argv, char **envp) {
 	default:
 		break;
 	}
-#endif
+#endif /* ifndef _WIN32 */
 
 	/* check if we really need this thread
 	 *
@@ -1678,6 +1677,7 @@ int main (int argc, char **argv, char **envp) {
 			return -1;
 		}
 	}
+#endif /* USE_GTHREAD */
 
 	for (i = 0; i < srv->srv_sockets.used; i++) {
 		server_socket *srv_socket = srv->srv_sockets.ptr[i];

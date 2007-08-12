@@ -26,7 +26,9 @@
  */
 #define MAX_HTTP_REQUEST_HEADER  (32 * 1024)
 
+#ifdef HAVE_GLIB_H
 #include <glib.h>
+#endif
 
 /**
  * if glib supports threads we will use it for async file-io

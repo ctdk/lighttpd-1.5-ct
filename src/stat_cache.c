@@ -15,8 +15,6 @@
 #include <fcntl.h>
 #include <assert.h>
 
-#include <glib.h>
-
 #include "log.h"
 #include "stat_cache.h"
 #include "fdevent.h"
@@ -137,6 +135,8 @@ gpointer stat_cache_thread(gpointer _srv) {
 	return NULL;
 }
 #endif
+
+#ifdef HAVE_GLIB_H
 guint sc_key_hash(gconstpointer v) {
 	buffer *b = (buffer *)v;
 
@@ -149,6 +149,7 @@ gboolean sc_key_equal(gconstpointer v1, gconstpointer v2) {
 
 	return buffer_is_equal(b1, b2);
 }
+#endif
 
 stat_cache *stat_cache_init(void) {
 	stat_cache *fc = NULL;
@@ -161,8 +162,9 @@ stat_cache *stat_cache_init(void) {
 #if defined(HAVE_SYS_INOTIFY_H)
 	fc->sock = iosocket_init();
 #endif
-
+#ifdef HAVE_GLIB_H
 	fc->files = g_hash_table_new(sc_key_hash, sc_key_equal);
+#endif
 
 	return fc;
 }
@@ -190,6 +192,7 @@ static void stat_cache_entry_free(void *data) {
 	free(sce);
 }
 
+#ifdef HAVE_GLIB_H
 gboolean stat_cache_free_hrfunc(gpointer _key, gpointer _value, gpointer _user_data) {
 	stat_cache_entry *sce = _value;
 	buffer *b = _key;
@@ -199,10 +202,13 @@ gboolean stat_cache_free_hrfunc(gpointer _key, gpointer _value, gpointer _user_d
 
 	return TRUE;
 }
+#endif
 
 void stat_cache_free(stat_cache *sc) {
+#ifdef HAVE_GLIB_H
 	g_hash_table_foreach_remove(sc->files, stat_cache_free_hrfunc, NULL);
 	g_hash_table_destroy(sc->files);
+#endif
 
 	buffer_free(sc->dir_name);
 	buffer_free(sc->hash_key);
@@ -255,7 +261,7 @@ static int stat_cache_lstat(server *srv, buffer *dname, struct stat *lst) {
 }
 #endif
 
-int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
+static int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
 	return 1;
 }
 
@@ -266,6 +272,9 @@ int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
  * returns:
  *  - HANDLER_FINISHED on cache-miss (don't forget to reopen the file)
  *  - HANDLER_ERROR on stat() failed -> see errno for problem
+ *
+ *
+ * glib: if glib is not available, we don't cache
  */
 
 static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buffer *name, stat_cache_entry **ret_sce, int async) {
@@ -287,6 +296,7 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 	buffer_copy_string_buffer(sc->hash_key, name);
 	buffer_append_long(sc->hash_key, con->conf.follow_symlink);
 
+#ifdef HAVE_GLIB_H
 	if ((sce = (stat_cache_entry *)g_hash_table_lookup(sc->files, sc->hash_key))) {
 		/* know this entry already */
 
@@ -307,6 +317,14 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 
 		g_hash_table_insert(sc->files, buffer_init_string(BUF_STR(sc->hash_key)), sce);
 	}
+#else
+	/**
+	 * we don't have glib, but we still have to store the sce somewhere to not loose it
+	 */
+	sce = stat_cache_entry_init();
+
+	buffer_copy_string_buffer(sce->name, name);
+#endif
 
 	/*
 	 * *lol*
@@ -478,6 +496,7 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
  * and remove them in a second loop
  */
 
+#ifdef HAVE_GLIB_H
 gboolean stat_cache_remove_old_entry(gpointer _key, gpointer _value, gpointer user_data) {
 	server *srv = user_data;
 	buffer *key = _key;
@@ -493,15 +512,18 @@ gboolean stat_cache_remove_old_entry(gpointer _key, gpointer _value, gpointer us
 
 	return FALSE;
 }
+#endif
 
 int stat_cache_trigger_cleanup(server *srv) {
 	stat_cache *sc;
 
 	sc = srv->stat_cache;
 
+#ifdef HAVE_GLIB_H
 	if (!sc->files) return 0;
 
 	g_hash_table_foreach_remove(sc->files, stat_cache_remove_old_entry, srv);
+#endif
 
 	return 0;
 }

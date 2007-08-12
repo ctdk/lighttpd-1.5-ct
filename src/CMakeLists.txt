@@ -24,6 +24,7 @@ OPTION(WITH_LDAP "with LDAP-support for the mod_auth [default: off]")
 OPTION(WITH_LIBAIO "with libaio for the linux [default: off]")
 OPTION(WITH_LIBFCGI "with libfcgi for fcgi-stat-accel [default: off]")
 OPTION(WITH_LUA "with lua 5.1 for mod_magnet [default: off]")
+OPTION(WITH_GLIB "with glib support for internal caches [default: on]")
 OPTION(BUILD_STATIC "build a static lighttpd with all modules added")
 IF(BUILD_STATIC)
   SET(LIGHTTPD_STATIC 1)
@@ -57,9 +58,11 @@ CHECK_INCLUDE_FILES(time.h HAVE_TIME_H)
 CHECK_INCLUDE_FILES(unistd.h HAVE_UNISTD_H)
 CHECK_INCLUDE_FILES(pthread.h HAVE_PTHREAD_H)
 
-PKGCONFIG(gthread-2.0 GTHREAD_INCDIR GTHREAD_LIBDIR GTHREAD_LDFLAGS GTHREAD_CFLAGS)
+IF(WITH_GLIB)
+  PKGCONFIG(gthread-2.0 GTHREAD_INCDIR GTHREAD_LIBDIR GTHREAD_LDFLAGS GTHREAD_CFLAGS)
+  MESSAGE(STATUS "found gthread-2.0 at: INCDIR: ${GTHREAD_INCDIR} LIBDIR: ${GTHREAD_LIBDIR} LDFLAGS: ${GTHREAD_LDFLAGS} CFLAGS: ${GTHREAD_CFLAGS}")
+ENDIF(WITH_GLIB)
 
-MESSAGE(STATUS "found gthread-2.0 at: INCDIR: ${GTHREAD_INCDIR} LIBDIR: ${GTHREAD_LIBDIR} LDFLAGS: ${GTHREAD_LDFLAGS} CFLAGS: ${GTHREAD_CFLAGS}")
 
 ## refactor me
 MACRO(XCONFIG _package _include_DIR _link_DIR _link_FLAGS _cflags)
@@ -591,7 +594,10 @@ IF(WIN32)
   TARGET_LINK_LIBRARIES(mod_proxy_backend_scgi ws2_32)
   TARGET_LINK_LIBRARIES(mod_ssi ws2_32)
   # required for mingw gcc/ld
-  TARGET_LINK_LIBRARIES(lighttpd glib-2.0 gthread-2.0)
+  IF(WITH_GLIB)
+    TARGET_LINK_LIBRARIES(lighttpd glib-2.0 gthread-2.0)
+  ENDIF(WITH_GLIB)
+
   SET(LINK_FLAGS "${GTHREAD_LDFLAGS}")
   IF(MINGW)
     TARGET_LINK_LIBRARIES(lighttpd msvcr70)

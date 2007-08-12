@@ -18,9 +18,11 @@
 
 #include "settings.h"
 
+#ifdef HAVE_GLIB_H
 /* include glib.h before our buffer.h and array.h to make sure their parameter-names
  * don't clash with our type-names */
 #include <glib.h>
+#endif
 
 #include "buffer.h"
 #include "array.h"
@@ -250,8 +252,10 @@ typedef struct {
 } stat_cache_entry;
 
 typedef struct {
+#ifdef HAVE_GLIB_H
 	GHashTable *files; /* a HashTable of stat_cache_entries for the files */
 	GHashTable *dirs;  /* a HashTable of stat_cache_entries for the dirs */
+#endif
 
 	buffer *dir_name;  /* for building the dirname from the filename */
 	buffer *hash_key;  /* tmp-buf for building the hash-key */
@@ -438,9 +442,9 @@ typedef struct {
 
 	void *srv_socket;   /* reference to the server-socket (typecast to server_socket) */
 
-	/**/
-
-	GTimeVal timestamps[TIME_LAST_ELEMENT];
+#ifdef HAVE_GLIB_H
+	GTimeVal timestamps[TIME_LAST_ELEMENT]; /**< used by timing.h */
+#endif
 
 	int conditional_is_valid[COMP_LAST_ELEMENT];
 } connection;

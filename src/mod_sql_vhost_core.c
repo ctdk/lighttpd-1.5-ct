@@ -61,8 +61,9 @@ SERVER_FUNC(mod_sql_vhost_core_cleanup) {
 			buffer_free(s->backend);
 			buffer_free(s->hostname);
 			buffer_free(s->select_vhost);
-
+#ifdef HAVE_GLIB_H
 			g_hash_table_destroy(s->vhost_table);
+#endif
 
 			free(s);
 		}
@@ -76,6 +77,7 @@ SERVER_FUNC(mod_sql_vhost_core_cleanup) {
 	return HANDLER_GO_ON;
 }
 
+#ifdef HAVE_GLIB_H
 cached_vhost *cached_vhost_init(void) {
 	cached_vhost *vhost;
 
@@ -114,6 +116,7 @@ void buffer_hash_free(gpointer d) {
 
 	buffer_free(b);
 }
+#endif
 
 #define CONFIG_CACHE_TTL "sql-vhost.cache-ttl"
 #define CONFIG_DEBUG     "sql-vhost.debug"
@@ -164,7 +167,9 @@ SERVER_FUNC(mod_sql_vhost_core_set_defaults) {
 		s->port   = 0;               /* default port for mysql */
 		s->select_vhost = buffer_init();
 		s->backend_data = NULL;
+#ifdef HAVE_GLIB_H
 		s->vhost_table = g_hash_table_new_full(buffer_hash, buffer_hash_equal, buffer_hash_free, cached_vhost_free_hash);
+#endif
 		s->cache_ttl = 60;
 		s->debug = 0;
 
@@ -207,7 +212,9 @@ static int mod_sql_vhost_core_patch_connection(server *srv, connection *con, plu
 
 	PATCH_OPTION(backend_data);
 	PATCH_OPTION(get_vhost);
+#ifdef HAVE_GLIB_H
 	PATCH_OPTION(vhost_table);
+#endif
 	PATCH_OPTION(cache_ttl);
 	PATCH_OPTION(debug);
 
@@ -222,7 +229,9 @@ static int mod_sql_vhost_core_patch_connection(server *srv, connection *con, plu
 		if (s->backend_data) {
 			PATCH_OPTION(backend_data);
 			PATCH_OPTION(get_vhost);
+#ifdef HAVE_GLIB_H
 			PATCH_OPTION(vhost_table);
+#endif
 		}
 
 		for (j = 0; j < dc->value->used; j++) {
@@ -239,11 +248,17 @@ static int mod_sql_vhost_core_patch_connection(server *srv, connection *con, plu
 	return 0;
 }
 
-/* handle document root request */
+/* handle document root request
+ *
+ * glib: if available we cache the entries
+ *
+ *  */
 CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	plugin_data *p = p_d;
 	stat_cache_entry *sce;
+#ifdef HAVE_GLIB_H
 	cached_vhost *vhost = NULL;
+#endif
 
 	/* no host specified? */
 	if (!con->uri.authority->used) return HANDLER_GO_ON;
@@ -253,9 +268,11 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	/* do we have backend ? */
 	if (!p->conf.get_vhost) return HANDLER_GO_ON;
 
+#ifdef HAVE_GLIB_H
 	if (p->conf.cache_ttl == 0 ||                                                         /* 1. we don't cache */
 	    NULL == (vhost = g_hash_table_lookup(p->conf.vhost_table, con->uri.authority)) || /* 2. check if the host is already known */
-	    srv->cur_ts - vhost->added_ts >= p->conf.cache_ttl) {                             /* 3. the cache value is old */
+	    srv->cur_ts - vhost->added_ts >= p->conf.cache_ttl
+	    ) {                             /* 3. the cache value is old */
 		/* ask the backend for the data */
 		if (p->conf.debug) TRACE("cache-miss for %s", BUF_STR(con->uri.authority));
 
@@ -291,6 +308,11 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 		
 		buffer_copy_string_buffer(p->docroot, vhost->docroot);
 	}
+#else
+	if (HANDLER_GO_ON != p->conf.get_vhost(srv, con, p->conf.backend_data, p->docroot, p->host)) {
+		return HANDLER_GO_ON;
+	}
+#endif
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, p->docroot, &sce)) {
 		ERROR("stat_cache_get_entry(%s) failed: %s", BUF_STR(p->docroot), strerror(errno));
@@ -309,6 +331,7 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	return HANDLER_GO_ON;
 }
 
+#ifdef HAVE_GLIB_H
 static gboolean cached_vhost_remove_expired(gpointer _key, gpointer _val, gpointer data) {
 	buffer *key       = _key;
 	cached_vhost *val = _val;
@@ -316,6 +339,7 @@ static gboolean cached_vhost_remove_expired(gpointer _key, gpointer _val, gpoint
 
 	return (srv->cur_ts - val->added_ts > val->ttl);
 }
+#endif
 
 TRIGGER_FUNC(mod_sql_vhost_core_trigger) {
 	plugin_data *p = p_d;
@@ -324,6 +348,7 @@ TRIGGER_FUNC(mod_sql_vhost_core_trigger) {
 	/* test once every 10 seconds */
 	if (srv->cur_ts % 10 != 0) return HANDLER_GO_ON;
 
+#ifdef HAVE_GLIB_H
 	/* cleanup all caches */
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s = p->config_storage[i];
@@ -332,6 +357,7 @@ TRIGGER_FUNC(mod_sql_vhost_core_trigger) {
 			g_hash_table_foreach_remove(s->vhost_table, cached_vhost_remove_expired, srv);
 		}
 	}
+#endif
 
 	return HANDLER_GO_ON;
 }

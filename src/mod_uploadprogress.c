@@ -18,17 +18,18 @@
 /**
  * uploadprogress for lighttpd
  *
- * no author and contact infos yet? Shamelessly adding...
- *
  * Initial: Jan Kneschke <jan@kneschke.de>
  * Timeout+Status addon: Bjoern Kalkbrenner <terminar@cyberphoria.org> [20070112]
  *
+ * the timeout is used to keep in the status information intact even if the parent 
+ * connection is gone already
  */
 
 typedef struct {
-	buffer     *con_id;
+	buffer     *tracking_id;
 	connection *con;
-	int timeout;
+
+	time_t timeout;
 	int status;
 } connection_map_entry;
 
@@ -52,6 +53,8 @@ typedef struct {
 
 	connection_map *con_map;
 
+	buffer *tmp_buf; /** used as temporary buffer for extracting the tracking id */
+
 	plugin_config **config_storage;
 
 	plugin_config conf;
@@ -64,7 +67,7 @@ typedef struct {
  */
 
 /* init the plugin data */
-connection_map *connection_map_init() {
+static connection_map *connection_map_init() {
 	connection_map *cm;
 
 	cm = calloc(1, sizeof(*cm));
@@ -72,15 +75,15 @@ connection_map *connection_map_init() {
 	return cm;
 }
 
-void connection_map_free(connection_map *cm) {
+static void connection_map_free(connection_map *cm) {
 	size_t i;
 	for (i = 0; i < cm->size; i++) {
 		connection_map_entry *cme = cm->ptr[i];
 
 		if (!cme) break;
 
-		if (cme->con_id) {
-			buffer_free(cme->con_id);
+		if (cme->tracking_id) {
+			buffer_free(cme->tracking_id);
 		}
 		free(cme);
 	}
@@ -88,7 +91,7 @@ void connection_map_free(connection_map *cm) {
 	free(cm);
 }
 
-connection_map_entry *connection_map_insert(connection_map *cm, connection *con, buffer *con_id) {
+static connection_map_entry *connection_map_insert(connection_map *cm, buffer *tracking_id, connection *con) {
 	connection_map_entry *cme;
 	size_t i;
 
@@ -111,11 +114,11 @@ connection_map_entry *connection_map_insert(connection_map *cm, connection *con,
 		cme = cm->ptr[cm->used];
 	} else {
 		cme = malloc(sizeof(*cme));
+		cme->tracking_id = buffer_init();
 	}
 	cme->timeout = 0;
 	cme->status = 0;
-	cme->con_id = buffer_init();
-	buffer_copy_string_buffer(cme->con_id, con_id);
+	buffer_copy_string_buffer(cme->tracking_id, tracking_id);
 	cme->con = con;
 
 	cm->ptr[cm->used++] = cme;
@@ -123,13 +126,13 @@ connection_map_entry *connection_map_insert(connection_map *cm, connection *con,
 	return cme;
 }
 
-connection_map_entry *connection_map_get_connection_entry(connection_map *cm, buffer *con_id) {
+static connection_map_entry *connection_map_get_connection_entry(connection_map *cm, buffer *tracking_id) {
 	size_t i;
 
 	for (i = 0; i < cm->used; i++) {
 		connection_map_entry *cme = cm->ptr[i];
 
-		if (buffer_is_equal(cme->con_id, con_id)) {
+		if (buffer_is_equal(cme->tracking_id, tracking_id)) {
 			/* found connection */
 			return cme;
 		}
@@ -137,7 +140,7 @@ connection_map_entry *connection_map_get_connection_entry(connection_map *cm, bu
 	return NULL;
 }
 
-int connection_map_remove_connection(connection_map *cm, connection_map_entry *entry) {
+static int connection_map_remove_connection(connection_map *cm, connection_map_entry *entry) {
 	size_t i;
 
 	for (i = 0; i < cm->used; i++) {
@@ -145,10 +148,9 @@ int connection_map_remove_connection(connection_map *cm, connection_map_entry *e
 
 		if (cme == entry) {
 			/* found connection */
-			buffer_reset(cme->con_id);
+			buffer_reset(cme->tracking_id);
 			cme->timeout=0;
 			cme->status=0;
-			cme->con = NULL;
 
 			cm->used--;
 
@@ -165,43 +167,35 @@ int connection_map_remove_connection(connection_map *cm, connection_map_entry *e
 	return 0;
 }
 
-int connection_map_set_timeout(plugin_data *p, connection *con) {
+/**
+ * remove dead tracking IDs 
+ *
+ * uploadprogress.remove-timeout sets a grace-period in which the 
+ * connection status is still known even of the connection is already 
+ * being removed
+ *
+ */
+static void connection_map_clear_timeout_connections(connection_map *cm) {
 	size_t i;
-
-	if(p->conf.debug) TRACE("set_timeout for connection=%p",con);
-	for (i = 0; i < p->con_map->used; i++) {
-		connection_map_entry *cme = p->con_map->ptr[i];
-
-		if (cme->con == con) {
-			cme->con = NULL;
-			
-			/* found connection */
-			cme->timeout = time(NULL) + p->conf.remove_timeout;
-			if(p->conf.debug) TRACE("set_timeout for connection=%p, timeout=%d",con, cme->timeout);
-
-			return 1;
-		}
-	}
-
-	return 0;
-}
-
-
-void connection_map_clear_timeout_connections(connection_map *cm) {
-	size_t i;
-	int now_t = time(NULL);
+	time_t now_t = time(NULL);
 
 	for (i = 0; i < cm->used; i++) {
 		connection_map_entry *cme = cm->ptr[i];
 
 		if (cme->timeout != 0 && cme->timeout < now_t) {
 			/* found connection */
-			connection_map_remove_connection(cm,cme);
+			connection_map_remove_connection(cm, cme);
 		}
 	}
 }
 
-buffer *get_tracking_id(plugin_data *p, connection *con) {
+/** 
+ * extract the tracking-id from the parameters 
+ *
+ * for POST requests it is part of the request headers
+ * for GET requests ... too
+ */
+static buffer *get_tracking_id(plugin_data *p, connection *con) {
 	data_string *ds;
 	buffer *b = NULL;
 	char *qstr=NULL;
@@ -209,6 +203,8 @@ buffer *get_tracking_id(plugin_data *p, connection *con) {
 
 	/* the request has to contain a 32byte ID */
 	if (NULL == (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("X-Progress-ID")))) {
+		char *amp = NULL;
+
 		/* perhaps the POST request is using the querystring to pass the X-Progress-ID */
 		if (buffer_is_empty(con->uri.query)) {
 			/*
@@ -217,14 +213,48 @@ buffer *get_tracking_id(plugin_data *p, connection *con) {
 			if (NULL != (qstr = strchr(con->request.uri->ptr, '?'))) {
 				/** extract query string from request.uri */
 				buffer_copy_string(con->uri.query, qstr + 1);
-				b = con->uri.query;
 			} else {
 				return NULL;
 			}
-		} else {
-			b = con->uri.query;
 		}
+
+		/** split the query-string and extract the X-Progress-ID */
+		do {
+			char *eq = NULL;
+			char *start = amp ? amp + 1 : con->uri.query->ptr;
+
+			amp = strchr(start, '&');
+
+			/* check the string between start and amp for = */
+
+			if (amp) {
+				buffer_copy_string_len(p->tmp_buf, start, amp - start);
+			} else {
+				buffer_copy_string(p->tmp_buf, start);
+			}
+
+			eq = strchr(p->tmp_buf->ptr, '=');
+			
+			if (eq) {
+				*eq = '\0';
+
+				if (0 == strcmp(p->tmp_buf->ptr, "X-Progress-ID")) {
+					size_t key_len = sizeof("X-Progress-ID") - 1;
+					size_t var_len = p->tmp_buf->used - 1;
+					/* found */
+
+					buffer_copy_string_len(p->tmp_buf, start + key_len + 1, var_len - key_len - 1);
+		
+					b = p->tmp_buf;
+
+					break;
+				} 
+			}
+		} while (amp);
+
+		if (!b) return NULL;
 	} else {
+		/* request header was found, use it */
 		b = ds->value;
 	}
 
@@ -254,6 +284,7 @@ INIT_FUNC(mod_uploadprogress_init) {
 	p = calloc(1, sizeof(*p));
 
 	p->con_map = connection_map_init();
+	p->tmp_buf = buffer_init();
 
 	return p;
 }
@@ -261,8 +292,6 @@ INIT_FUNC(mod_uploadprogress_init) {
 /* detroy the plugin data */
 FREE_FUNC(mod_uploadprogress_free) {
 	plugin_data *p = p_d;
-
-	UNUSED(srv);
 
 	if (!p) return HANDLER_GO_ON;
 
@@ -280,6 +309,7 @@ FREE_FUNC(mod_uploadprogress_free) {
 	}
 
 	connection_map_free(p->con_map);
+	buffer_free(p->tmp_buf);
 
 	free(p);
 
@@ -307,7 +337,7 @@ SETDEFAULTS_FUNC(mod_uploadprogress_set_defaults) {
 		plugin_config *s;
 
 		s = calloc(1, sizeof(plugin_config));
-		s->progress_url    = buffer_init_string("/progress");
+		s->progress_url    = buffer_init();
 		s->remove_timeout  = 60;
 		s->debug  = 0;
 
@@ -383,30 +413,42 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 	connection_map_entry *post_con_entry = NULL;
 	connection_map_entry *map_con_entry = NULL;
 
-	UNUSED(srv);
-
-	if (con->uri.path->used == 0) return HANDLER_GO_ON;
+	if (buffer_is_empty(con->uri.path)) return HANDLER_GO_ON;
 
 	mod_uploadprogress_patch_connection(srv, con, p);
 
+	/* no progress URL set, ignore request */	
+	if (buffer_is_empty(p->conf.progress_url)) return HANDLER_GO_ON;
+
 	switch(con->request.http_method) {
 	case HTTP_METHOD_POST:
-		/* get the tracker id */
+		/**
+		 * a POST request is the UPLOAD itself
+		 *
+		 * get the unique tracker id 
+		 */
 		if (NULL == (tracking_id = get_tracking_id(p, con))) {
 			return HANDLER_GO_ON;
 		}
 
-		if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map,tracking_id))) {
-			connection_map_insert(p->con_map, con, tracking_id);
+		if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map, tracking_id))) {
+			connection_map_insert(p->con_map, tracking_id, con);
+		
+			if (p->conf.debug) TRACE("POST: connection is new, registered: %s", BUF_STR(tracking_id));
 		} else {
 			map_con_entry->timeout = 0;
 			map_con_entry->status = 0;
-			map_con_entry->con = con;
-			buffer_copy_string_buffer(map_con_entry->con_id,tracking_id);
+			
+			if (p->conf.debug) TRACE("POST: connection is known, id: %s", BUF_STR(tracking_id));
 		}
 
 		return HANDLER_GO_ON;
 	case HTTP_METHOD_GET:
+		/**
+		 * the status request for the current connection
+		 */
+		if (p->conf.debug) TRACE("(uploadprogress) urls %s == %s", BUF_STR(con->uri.path), BUF_STR(p->conf.progress_url));
+
 		if (!buffer_is_equal(con->uri.path, p->conf.progress_url)) {
 			return HANDLER_GO_ON;
 		}
@@ -436,28 +478,34 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 
 		/* get the connection */
 		if (NULL == (post_con_entry = connection_map_get_connection_entry(p->con_map, tracking_id))) {
+			/**
+			 * looks like we don't know the tracking id yet, GET and POST out of sync ? */
 			BUFFER_APPEND_STRING_CONST(b, "new Object({ 'state' : 'starting' })\r\n");
 			
+			if (p->conf.debug) TRACE("connection unknown: %s, sending: %s", BUF_STR(tracking_id), BUF_STR(b));
+
 			return HANDLER_FINISHED;
-		} else {
-			if(p->conf.debug) TRACE("connection found: con=%p id=%s",post_con_entry->con,tracking_id->ptr);
 		}
 
-		/* prepare XML */
 		BUFFER_COPY_STRING_CONST(b, "new Object({ 'state' : ");
-		
+	
 		if (post_con_entry->status == 413) {
+			/* the upload was too large */	
 			BUFFER_APPEND_STRING_CONST(b, "'error', 'status' : 413");
-		} else if (post_con_entry->timeout > 0) {
+		} else if (post_con_entry->con == NULL) {
+			/* the connection is already gone */
 			buffer_append_string(b, "'done'");
 		} else {
+			/* the upload is already done, but the connection might be still open */
 			buffer_append_string(b, post_con_entry->con->recv->is_closed ? "'done'" : "'uploading'");
-			BUFFER_APPEND_STRING_CONST(b, ", 'size' : ");
-			buffer_append_off_t(b, post_con_entry->con->request.content_length == -1 ? 0 : post_con_entry->con->request.content_length);
 			BUFFER_APPEND_STRING_CONST(b, ", 'received' : ");
 			buffer_append_off_t(b, post_con_entry->con->recv->bytes_in);
+			BUFFER_APPEND_STRING_CONST(b, ", 'size' : ");
+			buffer_append_off_t(b, post_con_entry->con->request.content_length == -1 ? 0 : post_con_entry->con->request.content_length);
 		}
 		BUFFER_APPEND_STRING_CONST(b, "})\r\n");
+
+		if (p->conf.debug) TRACE("connection is known: %s, sending: %s", BUF_STR(tracking_id), BUF_STR(b));
 
 		return HANDLER_FINISHED;
 	default:
@@ -467,34 +515,10 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 	return HANDLER_GO_ON;
 }
 
-REQUESTDONE_FUNC(mod_uploadprogress_request_done) {
-	plugin_data *p = p_d;
-
-	UNUSED(srv);
-
-	if (con->uri.path->used == 0) return HANDLER_GO_ON;
-	
-	/*
-	 * only need to handle the upload request.
-	 */
-	if (con->request.http_method != HTTP_METHOD_POST) {
-		return HANDLER_GO_ON;
-	}
-
-	if(p->conf.debug) TRACE("request_done: con=%p, http_method=%d, http_status=%d",con,
-			con->request.http_method, con->http_status);
-	/*
-	 * set timeout on the upload's connection_map_entry.
-	 */
-	if (!connection_map_set_timeout(p, con)) {
-		if(p->conf.debug) TRACE("connection not found??? %p",con);
-	}
-
-	return HANDLER_GO_ON;
-}
-
-URIHANDLER_FUNC(mod_uploadprogress_response_header)
-{
+/**
+ * check if request parser sent 413 for our POST request
+ */
+URIHANDLER_FUNC(mod_uploadprogress_response_header) {
 	plugin_data *p = p_d;
 
 	buffer *tracking_id;
@@ -509,43 +533,93 @@ URIHANDLER_FUNC(mod_uploadprogress_response_header)
 		return HANDLER_GO_ON;
 	}
 
-	if(p->conf.debug) TRACE("response_header: con=%p, http_method=%d, http_status=%d",con,
+	if (p->conf.debug) {
+		TRACE("response_header: con=%p, http_method=%d, http_status=%d",con,
 			con->request.http_method, con->http_status);
+	}
 
 	/* get the tracker id */
 	if (NULL == (tracking_id = get_tracking_id(p, con))) {
 		return HANDLER_GO_ON;
 	}
 
-	if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map,tracking_id))) {
-		/* add entry if it doesn't exists */
-		if (NULL == (map_con_entry = connection_map_insert(p->con_map, con, tracking_id))) {
+	if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map, tracking_id))) {
+		/**
+		 * in case the request parser meant the request was too large the URI handler won't 
+		 * get called. Insert the connection mapping here
+		 */
+		if (NULL == (map_con_entry = connection_map_insert(p->con_map, tracking_id, con))) {
 			return HANDLER_GO_ON;
 		}
-	} else {
-		map_con_entry->con = con;
-		buffer_copy_string_buffer(map_con_entry->con_id,tracking_id);
 	}
 
-	//ok, found our entries, setting 413 here for status
-	map_con_entry->timeout = time(NULL) + p->conf.remove_timeout;
+	/* ok, found our entries, setting 413 here for status */
 	map_con_entry->status = 413;
 	
 	return HANDLER_GO_ON;
 }
 
-TRIGGER_FUNC(mod_uploadprogress_trigger)
-{
+/**
+ * remove the parent connection from the connection mapping
+ * when it got closed
+ *
+ * keep the mapping active for a while to send a valid final status
+ */
+REQUESTDONE_FUNC(mod_uploadprogress_request_done) {
 	plugin_data *p = p_d;
+	buffer *tracking_id;
+	connection_map_entry *cm = NULL;
 
 	UNUSED(srv);
 
-	if ((srv->cur_ts % 60) != 0) return HANDLER_GO_ON;
+	if (buffer_is_empty(con->uri.path)) return HANDLER_GO_ON;
+	
+	/*
+	 * only need to handle the upload request.
+	 */
+	if (con->request.http_method != HTTP_METHOD_POST) {
+		return HANDLER_GO_ON;
+	}
+
+	if (NULL == (tracking_id = get_tracking_id(p, con))) {
+		return HANDLER_GO_ON;
+	}
+
+	if (p->conf.debug) {
+		TRACE("upload is done, moving tracking-id to backlog: tracking-id=%s, http_status=%d",
+				BUF_STR(tracking_id),
+				con->http_status);
+	}
+
+	/*
+	 * set timeout on the upload's connection_map_entry.
+	 */
+	if (NULL == (cm = connection_map_get_connection_entry(p->con_map, tracking_id))) {
+		if (p->conf.debug) {
+			TRACE("tracking ID %s not found, can't set timeout", BUF_STR(tracking_id));
+		}
+		return HANDLER_GO_ON;
+	}
+
+	cm->timeout = time(NULL) + p->conf.remove_timeout;
+	cm->con     = NULL; /* con becomes invalid very soon */
+
+	return HANDLER_GO_ON;
+}
+
+/**
+ * remove dead connections once in while 
+ */
+TRIGGER_FUNC(mod_uploadprogress_trigger) {
+	plugin_data *p = p_d;
+
+	if ((srv->cur_ts % 10) != 0) return HANDLER_GO_ON;
 
 	connection_map_clear_timeout_connections(p->con_map);
 
 	return HANDLER_GO_ON;
 }
+
 
 /* this function is called at dlopen() time and inits the callbacks */
 

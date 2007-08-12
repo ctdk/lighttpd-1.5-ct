@@ -4,9 +4,9 @@ NEWS
 ====
 
 - 1.5.0 - ...
-  * -F option added for spawm-fcgi
+  * -F option added for spawn-fcgi
   * replaced mod_fastcgi, mod_scgi, mod_proxy with mod_proxy_core + backends
-  * enabled mod_uploadprogress again
+  * added query-string parsing for mod_uploadprogress
   * added threaded stat() 
   * added threaded disk-read() support
   * fixed the out-of-fd support 

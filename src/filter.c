@@ -11,6 +11,12 @@
 
 #include "filter.h"
 
+/**
+ * create the filter 
+ *
+ * each filter has a chunkqueue with content and 
+ * a prev and a next pointer
+ */
 filter *filter_init(void) {
 	filter *fl;
 
@@ -24,15 +30,21 @@ filter *filter_init(void) {
 	return fl;
 }
 
+/**
+ * free the filter  
+ */
 void filter_free(filter *fl) {
 	filter *next, *prev;
+
 	/* free chunkqueue */
 	if(fl->cq) {
 		chunkqueue_free(fl->cq);
 	}
+	
 	/* remove this filter from chain. */
 	next = fl->next;
 	prev = fl->prev;
+
 	if(next) {
 		next->prev = prev;
 	}
@@ -43,6 +55,9 @@ void filter_free(filter *fl) {
 	free(fl);
 }
 
+/**
+ * reset the filter  
+ */
 void filter_reset(filter *fl) {
 	/* reset chunkqueue */
 	if(fl->cq) {
@@ -52,6 +67,9 @@ void filter_reset(filter *fl) {
 	}
 }
 
+/**
+ * create a filter chain
+ */
 filter_chain *filter_chain_init(void) {
 	filter_chain *chain;
 
@@ -138,20 +156,27 @@ void filter_chain_remove_filter(filter_chain *chain, filter *fl) {
 	filter_free(fl);
 }
 
-int filter_chain_copy_output(filter_chain *chain, chunkqueue *out) {
-	int total;
+/**
+ * move all the content of the last filter to the chunk queue 
+ */
+off_t filter_chain_copy_output(filter_chain *chain, chunkqueue *out) {
+	off_t total;
 	chunkqueue *in;
 
 	if (!chain || !out) return 0;
 	if (out->is_closed) return 0;
+
 	in = chain->last->cq;
 	total = chunkqueue_steal_all_chunks(out, in);
 	in->bytes_out += total;
 	out->bytes_in += total;
 
+	chunkqueue_remove_finished_chunks(in);
+
 	if (in->is_closed) {
 		out->is_closed = 1;
 	}
+
 	return total;
 }
 

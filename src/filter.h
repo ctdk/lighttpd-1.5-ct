@@ -37,6 +37,6 @@ LI_API filter * filter_chain_create_filter(filter_chain *chain, int id);
 LI_API filter * filter_chain_get_filter(filter_chain *chain, int id);
 LI_API void filter_chain_remove_filter(filter_chain *chain, filter *fl);
 
-LI_API int filter_chain_copy_output(filter_chain *chain, chunkqueue *out);
+LI_API off_t filter_chain_copy_output(filter_chain *chain, chunkqueue *out);
 
 #endif

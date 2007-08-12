@@ -937,6 +937,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 
 int connection_state_machine(server *srv, connection *con) {
 	int done = 0, r;
+	off_t bytes_moved = 0;
 #ifdef USE_OPENSSL
 	server_socket *srv_sock = con->srv_socket;
 #endif
@@ -1310,16 +1311,39 @@ int connection_state_machine(server *srv, connection *con) {
 			}
 
 			/* copy output from filters into send_raw. */
-			r = filter_chain_copy_output(con->send_filters, con->send_raw);
+			bytes_moved = filter_chain_copy_output(con->send_filters, con->send_raw);
+
+			/**
+			 * check that all previous filters have cleaned there chunkqueue
+			 */
+			if (con->send_raw->is_closed) {
+				filter *f;
+
+				for (f = con->send_filters->first;
+				     f;
+				     f = f->next) {
+					off_t cq_len;
+					
+					cq_len = chunkqueue_length(f->cq);
+					
+					if (cq_len > 0) {
+						TRACE("filter[%d] is not empty: %lld (report me)", f->id);
+					}
+				}
+			}
+
 
 			/* limit download speed. */
 			if (con->traffic_limit_reached) {
 				return HANDLER_WAIT_FOR_EVENT;
 			}
+
 			/* no response data available to send right now.  wait for more. */
-			if (!con->send_raw->is_closed && con->send_raw->bytes_in == con->send_raw->bytes_out) {
+			if (!con->send_raw->is_closed && 
+			    con->send_raw->bytes_in == con->send_raw->bytes_out) {
 				return HANDLER_WAIT_FOR_EVENT;
 			}
+
 			switch(network_write_chunkqueue(srv, con, con->send_raw)) {
 			case NETWORK_STATUS_SUCCESS:
 				/* we send everything from the chunkqueue and the chunkqueue-sender signaled it is finished */

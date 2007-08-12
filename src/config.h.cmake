@@ -90,6 +90,10 @@
 #cmakedefine  HAVE_ZLIB_H
 #cmakedefine  HAVE_LIBZ
 
+/* GLIB */
+#cmakedefine  HAVE_GLIB_H
+#cmakedefine  HAVE_GLIB
+
 /* lua */
 #cmakedefine  HAVE_LUA_H
 #cmakedefine  HAVE_LIBLUA

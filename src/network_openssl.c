@@ -188,7 +188,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 						/* no, but we have errno */
 						switch(errno) {
 						case EPIPE:
-							return -2;
+							return NETWORK_STATUS_CONNECTION_CLOSE;
 						default:
 							log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:",
 									ssl_r, r, errno,
@@ -202,11 +202,11 @@ NETWORK_BACKEND_WRITE(openssl) {
 								strerror(errno));
 					}
 
-					return  -1;
+					return  NETWORK_STATUS_FATAL_ERROR;
 				case SSL_ERROR_ZERO_RETURN:
 					/* clean shutdown on the remote side */
 
-					if (r == 0) return -2;
+					if (r == 0) return NETWORK_STATUS_CONNECTION_CLOSE;
 
 					/* fall through */
 				default:
@@ -216,7 +216,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 								ERR_error_string(err, NULL));
 					}
 
-					return  -1;
+					return  NETWORK_STATUS_FATAL_ERROR;
 				}
 			} else {
 				c->offset += r;
@@ -237,9 +237,9 @@ NETWORK_BACKEND_WRITE(openssl) {
 			int write_wait = 0;
 
 			if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
-				log_error_write(srv, __FILE__, __LINE__, "sb",
-						strerror(errno), c->file.name);
-				return -1;
+				ERROR("stat_cache_get_entry(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+
+				return NETWORK_STATUS_FATAL_ERROR;
 			}
 
 			if (NULL == local_send_buffer) {
@@ -253,18 +253,20 @@ NETWORK_BACKEND_WRITE(openssl) {
 
 				if (toSend > LOCAL_SEND_BUFSIZE) toSend = LOCAL_SEND_BUFSIZE;
 
-				if (-1 == (ifd = open(c->file.name->ptr, O_RDONLY))) {
-					log_error_write(srv, __FILE__, __LINE__, "ss", "open failed:", strerror(errno));
+				if (-1 == (ifd = open(BUF_STR(c->file.name), O_RDONLY))) {
+					ERROR("open(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
 
-					return -1;
+					return NETWORK_STATUS_FATAL_ERROR;
 				}
 
 
 				lseek(ifd, offset, SEEK_SET);
 				if (-1 == (toSend = read(ifd, local_send_buffer, toSend))) {
 					close(ifd);
-					log_error_write(srv, __FILE__, __LINE__, "ss", "read failed:", strerror(errno));
-					return -1;
+					
+					ERROR("read(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+
+					return NETWORK_STATUS_FATAL_ERROR;
 				}
 
 				s = local_send_buffer;
@@ -282,7 +284,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 						/* perhaps we have error waiting in our error-queue */
 						if (0 != (err = ERR_get_error())) {
 							do {
-								log_error_write(srv, __FILE__, __LINE__, "sdds", "SSL:",
+								ERROR("SSL_write(): ssl-error: %d (ret = %d): %s",
 										ssl_r, r,
 										ERR_error_string(err, NULL));
 							} while((err = ERR_get_error()));
@@ -290,35 +292,34 @@ NETWORK_BACKEND_WRITE(openssl) {
 							/* no, but we have errno */
 							switch(errno) {
 							case EPIPE:
-								return -2;
+								return NETWORK_STATUS_CONNECTION_CLOSE;
 							default:
-								log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:",
+								ERROR("SSL_write(): ssl-error: %d (ret = %d). errno=%d, %s",
 										ssl_r, r, errno,
 										strerror(errno));
 								break;
 							}
 						} else {
-							/* neither error-queue nor errno ? */
-							log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL (error):",
-									ssl_r, r, errno,
-									strerror(errno));
+							ERROR("SSL_write(): ssl-error: %d (ret = %d). errno=%d, %s",
+										ssl_r, r, errno,
+										strerror(errno));
 						}
 
-						return  -1;
+						return  NETWORK_STATUS_FATAL_ERROR;
 					case SSL_ERROR_ZERO_RETURN:
 						/* clean shutdown on the remote side */
 
-						if (r == 0)  return -2;
+						if (r == 0)  return NETWORK_STATUS_CONNECTION_CLOSE;
 
 						/* fall thourgh */
 					default:
 						while((err = ERR_get_error())) {
-							log_error_write(srv, __FILE__, __LINE__, "sdds", "SSL:",
+							ERROR("SSL_write(): ssl-error: %d (ret = %d), %s",
 									ssl_r, r,
 									ERR_error_string(err, NULL));
 						}
 
-						return -1;
+						return NETWORK_STATUS_FATAL_ERROR;
 					}
 				} else {
 					c->offset += r;
@@ -333,9 +334,9 @@ NETWORK_BACKEND_WRITE(openssl) {
 			break;
 		}
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "s", "type not known");
+			ERROR("type not known: %d", c->type);
 
-			return -1;
+			return NETWORK_STATUS_FATAL_ERROR;
 		}
 
 		if (!chunk_finished) {

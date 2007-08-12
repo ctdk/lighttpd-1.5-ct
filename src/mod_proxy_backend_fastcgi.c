@@ -591,6 +591,48 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 				in->bytes_out += we_have;
 				we_need -= we_have;
 			}
+/**
+==18752== Conditional jump or move depends on uninitialised value(s)
+==18752==    at 0x401D255: strlen (mc_replace_strmem.c:246)
+==18752==    by 0x42B7A1B: vfprintf (in /lib/tls/i686/cmov/libc-2.3.6.so)
+==18752==    by 0x42D6280: vsnprintf (in /lib/tls/i686/cmov/libc-2.3.6.so)
+==18752==    by 0x805EAAD: log_trace (log.c:325)
+==18752==    by 0x4513C5B: proxy_fastcgi_stream_decoder (mod_proxy_backend_fastcgi.c:594)
+==18752==    by 0x4565130: proxy_stream_decoder (mod_proxy_core.c:587)
+==18752==    by 0x4565D46: proxy_stream_encode_decode (mod_proxy_core.c:855)
+==18752==    by 0x4567D69: proxy_state_engine (mod_proxy_core.c:1567)
+==18752==    by 0x45686C7: mod_proxy_core_start_backend (mod_proxy_core.c:2397)
+==18752==    by 0x4568CBC: mod_proxy_send_request_content (mod_proxy_core.c:2441)
+==18752==    by 0x80634EC: plugins_call_handle_send_request_content (plugin.c:387)
+==18752==    by 0x8054CE7: connection_state_machine (connections.c:1192)
+==18752==
+==18752== Syscall param write(buf) points to uninitialised byte(s)
+==18752==    at 0x4000792: (within /lib/ld-2.3.6.so)
+==18752==    by 0x4513C5B: proxy_fastcgi_stream_decoder (mod_proxy_backend_fastcgi.c:594)
+==18752==    by 0x4565130: proxy_stream_decoder (mod_proxy_core.c:587)
+==18752==    by 0x4565D46: proxy_stream_encode_decode (mod_proxy_core.c:855)
+==18752==    by 0x4567D69: proxy_state_engine (mod_proxy_core.c:1567)
+==18752==    by 0x45686C7: mod_proxy_core_start_backend (mod_proxy_core.c:2397)
+==18752==    by 0x4568CBC: mod_proxy_send_request_content (mod_proxy_core.c:2441)
+==18752==    by 0x80634EC: plugins_call_handle_send_request_content (plugin.c:387)
+==18752==    by 0x8054CE7: connection_state_machine (connections.c:1192)
+==18752==    by 0x804F5D8: lighty_mainloop (server.c:1001)
+==18752==    by 0x80517AE: main (server.c:1705)
+==18752==  Address 0x4A7C899 is 81 bytes inside a block of size 4,160 alloc'd
+==18752==    at 0x401C4B0: malloc (vg_replace_malloc.c:149)
+==18752==    by 0x805DCFA: buffer_prepare_copy (buffer.c:85)
+==18752==    by 0x805EA7E: log_trace (log.c:321)
+==18752==    by 0x4513C5B: proxy_fastcgi_stream_decoder (mod_proxy_backend_fastcgi.c:594)
+==18752==    by 0x4565130: proxy_stream_decoder (mod_proxy_core.c:587)
+==18752==    by 0x4565D46: proxy_stream_encode_decode (mod_proxy_core.c:855)
+==18752==    by 0x4567D69: proxy_state_engine (mod_proxy_core.c:1567)
+==18752==    by 0x45686C7: mod_proxy_core_start_backend (mod_proxy_core.c:2397)
+==18752==    by 0x4568CBC: mod_proxy_send_request_content (mod_proxy_core.c:2441)
+==18752==    by 0x80634EC: plugins_call_handle_send_request_content (plugin.c:387)
+==18752==    by 0x8054CE7: connection_state_machine (connections.c:1192)
+==18752==    by 0x804F5D8: lighty_mainloop (server.c:1001)
+mod_proxy_backend_fastcgi.c.597: (trace) (stderr from 127.0.0.1:9090 for /trac/) SERVER_ADDR
+*/
 			TRACE("(stderr from %s for %s) %s", 
 					BUF_STR(proxy_con->address->name),
 					BUF_STR(sess->remote_con->uri.path),

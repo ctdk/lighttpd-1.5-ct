@@ -726,6 +726,7 @@ static int mod_deflate_compress(server *srv, connection *con, handler_ctx *hctx,
 
 static int mod_deflate_stream_flush(server *srv, connection *con, handler_ctx *hctx, int end) {
 	int ret = -1;
+
 	if(hctx->bytes_in == 0) return 0;
 	switch(hctx->compression_type) {
 #ifdef USE_ZLIB
@@ -941,6 +942,10 @@ static int deflate_compress_cleanup(server *srv, connection *con, handler_ctx *h
 	return 0;
 }
 
+/**
+ * compress the in queue and move the content to the out queue
+ *
+ */
 static handler_t deflate_compress_response(server *srv, connection *con, handler_ctx *hctx, int end) { 
 	plugin_data *p = hctx->plugin_data;
 	chunk *c;
@@ -951,12 +956,12 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	int out = 0, max = 0;
 	
 	we_have = chunkqueue_length(hctx->in);
-	if(p->conf.debug) {
+	if (p->conf.debug) {
 		log_error_write(srv, __FILE__, __LINE__, "sd",
 				"compress: in_queue len=", we_have);
 	}
 	/* calculate max bytes to compress for this call. */
-	if(!end) {
+	if (!end) {
 		max = p->conf.work_block_size * 1024;
 		if(max == 0 || max > we_have) max = we_have;
 	} else {
@@ -964,7 +969,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	}
 
 	/* Compress chunks from in queue into chunks for out queue */
-	for(c = hctx->in->first; c && max > 0; c = c->next) {
+	for (c = hctx->in->first; c && max > 0; c = c->next) {
 		chunk_finished = 0;
 		we_have = 0;
 		we_want = 0;
@@ -972,32 +977,40 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 		switch(c->type) {
 		case MEM_CHUNK:
 			if (c->mem->used == 0) continue;
+			
 			we_have = c->mem->used - c->offset - 1;
 			if (we_have == 0) continue;
+			
 			we_want = we_have < max ? we_have : max;
+
 			if (mod_deflate_compress(srv, con, hctx, (unsigned char *)(c->mem->ptr + c->offset), we_want) < 0) {
 				log_error_write(srv, __FILE__, __LINE__, "s", 
 						"compress failed.");
 				return HANDLER_ERROR;
 			}
+
 			break;
 		case FILE_CHUNK:
 			if (c->file.length == 0) continue;
+			
 			we_have = c->file.length - c->offset;
 			if (we_have == 0) continue;
+			
 			we_want = we_have < max ? we_have : max;
+			
 			if ((we_want = mod_deflate_file_chunk(srv, con, hctx, c, we_want)) < 0) {
 				log_error_write(srv, __FILE__, __LINE__, "s", 
 						"compress file chunk failed.");
 				return HANDLER_ERROR;
 			}
+			
 			break;
 		default:
-			
-			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
+			ERROR("type not known: %d", c->type);
 			
 			return HANDLER_ERROR;
 		}
+
 		hctx->in->bytes_out += we_want;
 		c->offset += we_want;
 		out += we_want;
@@ -1019,12 +1032,13 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 		/* make sure we finished compressing the chunk before going to the next chunk */
 		if(!chunk_finished) break;
 	}
-	if(p->conf.debug) {
+
+	if (p->conf.debug) {
 		log_error_write(srv, __FILE__, __LINE__, "sd",
 				"compressed bytes:", out);
 	}
 
-	if(chunks_written > 0) {
+	if (chunks_written > 0) {
 		chunkqueue_remove_finished_chunks(hctx->in);
 	}
 
@@ -1037,10 +1051,12 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 
 	/* flush the output buffer to make room for more data. */
 	rc = mod_deflate_stream_flush(srv, con, hctx, end);
-	if(rc < 0) {
+
+	if (rc < 0) {
 		log_error_write(srv, __FILE__, __LINE__, "s", "flush error");
 	}
-	if(end) {
+	
+	if (end) {
 		hctx->out->is_closed = 1;
 		if(p->conf.debug) {
 			log_error_write(srv, __FILE__, __LINE__, "sbsb",
@@ -1050,6 +1066,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 		/* We have more data to compress. */
 		joblist_append(srv, con);
 	}
+
 	return HANDLER_GO_ON;
 }
 
@@ -1377,10 +1394,14 @@ CONNECTION_FUNC(mod_deflate_handle_filter_response_content) {
 	handler_ctx *hctx = con->plugin_ctx[p->id];
 	handler_t ret;
 
-	if(hctx == NULL) return HANDLER_GO_ON;
-	if(!hctx->stream_open) return HANDLER_GO_ON;
-	if(con->request.http_method == HTTP_METHOD_HEAD) return HANDLER_GO_ON;
+	if (hctx == NULL) return HANDLER_GO_ON;
+	if (!hctx->stream_open) return HANDLER_GO_ON;
 
+	/**
+	 * HEAD requests don't have a content body */
+	if (con->request.http_method == HTTP_METHOD_HEAD) return HANDLER_GO_ON;
+
+	/** compress the streams */
 	ret = deflate_compress_response(srv, con, hctx, 0); 
 
 	if (ret == HANDLER_GO_ON && hctx->out->is_closed) {

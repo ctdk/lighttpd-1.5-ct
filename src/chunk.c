@@ -20,6 +20,22 @@
 #include "sys-mmap.h"
 #include "sys-files.h"
 
+#include "log.h"
+
+/**
+ * create a global pool for unused chunks
+ *
+ * the chunk is moved from queue to queue (by stealing)
+ * and moved back into the unused pool. 
+ *
+ * Instead of having a local pool of unused chunks per queue
+ * we use a global pool
+ *
+ */
+
+static chunk *chunkpool        = NULL;
+static size_t chunkpool_chunks = 0;
+
 chunkqueue *chunkqueue_init(void) {
 	chunkqueue *cq;
 
@@ -105,6 +121,95 @@ static void chunk_free(chunk *c) {
 	free(c);
 }
 
+/**
+ * mark the chunk as done 
+ *
+ * @param c chunk to set done
+ * @return 1 if done, 0 if not
+ */
+void chunk_set_done(chunk *c) {
+	switch (c->type) {
+	case MEM_CHUNK:
+		c->offset = c->mem->used - 1;
+
+		break;
+	case FILE_CHUNK:
+		c->offset = c->file.length;
+
+		break;
+	default:
+		break;
+	}
+}
+
+/**
+ * check if chunk is finished 
+ *
+ * @param c chunk to set done
+ * @return 1 if done, 0 if not
+ */
+int chunk_is_done(chunk *c) {
+	switch (c->type) {
+	case MEM_CHUNK:
+		return ((c->mem->used == 0) || (c->offset == (off_t)c->mem->used - 1));
+	case FILE_CHUNK:
+		return c->offset == c->file.length;
+	default:
+		return 1;
+	}
+}
+
+void chunkpool_init(void) {
+	/* nothing to do */
+	return;
+}
+
+void chunkpool_free(void) {
+	if (!chunkpool) return;
+
+	/* free the pool */
+}
+
+static chunk *chunkpool_get_unused_chunk(void) {
+	chunk *c;
+	
+	/* check if we have an unused chunk */
+	if (!chunkpool) {
+		c = chunk_init();
+	} else {
+		/* take the first element from the list (a stack) */
+		c = chunkpool;
+		chunkpool = c->next;
+		c->next = NULL;
+
+		chunkpool_chunks--;
+	}
+
+	return c;
+}
+
+/**
+ * keep unused chunks alive and store them in the chunkpool
+ *
+ * we only want to keep a small set of chunks alive to balance between
+ * memory-usage and mallocs
+ *
+ * each filter will ask for a chunk
+ */
+static void chunkpool_add_unused_chunk(chunk *c) {
+	if (chunkpool_chunks > 128) {
+		chunk_free(c);
+	} else {
+		chunk_reset(c);
+		
+		/* prepend the chunk to the chunkpool */
+		c->next = chunkpool;
+		chunkpool = c;
+		chunkpool_chunks++;
+	}
+}
+
+
 void chunkqueue_free(chunkqueue *cq) {
 	chunk *c, *pc;
 
@@ -123,23 +228,6 @@ void chunkqueue_free(chunkqueue *cq) {
 	}
 
 	free(cq);
-}
-
-static chunk *chunkqueue_get_unused_chunk(chunkqueue *cq) {
-	chunk *c;
-
-	/* check if we have an unused chunk */
-	if (!cq->unused) {
-		c = chunk_init();
-	} else {
-		/* take the first element from the list (a stack) */
-		c = cq->unused;
-		cq->unused = c->next;
-		c->next = NULL;
-		cq->unused_chunks--;
-	}
-
-	return c;
 }
 
 static int chunkqueue_prepend_chunk(chunkqueue *cq, chunk *c) {
@@ -195,7 +283,7 @@ int chunkqueue_append_file(chunkqueue *cq, buffer *fn, off_t offset, off_t len) 
 
 	if (len == 0) return 0;
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 
 	c->type = FILE_CHUNK;
 
@@ -215,7 +303,7 @@ int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in) {
 	assert(in->type == FILE_CHUNK);
 	assert(in->file.is_temp == 1);
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 
 	c->type = FILE_CHUNK;
 	buffer_copy_string_buffer(c->file.name, in->file.name);
@@ -261,8 +349,8 @@ int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c) {
  * copy/steal all chunks from in chunkqueue.  return total bytes copied/stolen.
  *
  */
-int chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in) {
-	size_t total = 0;
+off_t chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in) {
+	off_t total = 0;
 	off_t we_have = 0;
 	chunk *c;
 
@@ -415,7 +503,7 @@ int chunkqueue_append_buffer(chunkqueue *cq, buffer *mem) {
 
 	if (mem->used == 0) return 0;
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 	c->type = MEM_CHUNK;
 	c->offset = 0;
 	buffer_copy_string_buffer(c->mem, mem);
@@ -430,7 +518,7 @@ int chunkqueue_prepend_buffer(chunkqueue *cq, buffer *mem) {
 
 	if (mem->used == 0) return 0;
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 	c->type = MEM_CHUNK;
 	c->offset = 0;
 	buffer_copy_string_buffer(c->mem, mem);
@@ -445,7 +533,7 @@ int chunkqueue_append_mem(chunkqueue *cq, const char * mem, size_t len) {
 
 	if (len == 0) return 0;
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 	c->type = MEM_CHUNK;
 	c->offset = 0;
 	buffer_copy_string_len(c->mem, mem, len - 1);
@@ -458,7 +546,7 @@ int chunkqueue_append_mem(chunkqueue *cq, const char * mem, size_t len) {
 buffer * chunkqueue_get_prepend_buffer(chunkqueue *cq) {
 	chunk *c;
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 
 	c->type = MEM_CHUNK;
 	c->offset = 0;
@@ -472,7 +560,7 @@ buffer * chunkqueue_get_prepend_buffer(chunkqueue *cq) {
 buffer *chunkqueue_get_append_buffer(chunkqueue *cq) {
 	chunk *c;
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 
 	c->type = MEM_CHUNK;
 	c->offset = 0;
@@ -495,7 +583,7 @@ chunk *chunkqueue_get_append_tempfile(chunkqueue *cq) {
 	chunk *c;
 	buffer *template = buffer_init_string("/var/tmp/lighttpd-upload-XXXXXX");
 
-	c = chunkqueue_get_unused_chunk(cq);
+	c = chunkpool_get_unused_chunk();
 
 	c->type = FILE_CHUNK;
 	c->offset = 0;
@@ -582,34 +670,14 @@ int chunkqueue_remove_finished_chunks(chunkqueue *cq) {
 	chunk *c;
 
 	for (c = cq->first; c; c = cq->first) {
-		int is_finished = 0;
+		if (!chunk_is_done(c)) break;
 
-		switch (c->type) {
-		case MEM_CHUNK:
-			if (c->mem->used == 0) is_finished = 1;
-			if (c->offset == (off_t)c->mem->used - 1) is_finished = 1;
-			break;
-		case FILE_CHUNK:
-			if (c->offset == c->file.length) is_finished = 1;
-			break;
-		default:
-			break;
-		}
-
-		if (!is_finished) break;
-
+		/* the chunk is finished, remove it from the queue */
 		cq->first = c->next;
 		if (c == cq->last) cq->last = NULL;
 
-		/* keep at max 4 chunks in the 'unused'-cache */
-		if (cq->unused_chunks > 4) {
-			chunk_free(c);
-		} else {
-			chunk_reset(c);
-			c->next = cq->unused;
-			cq->unused = c;
-			cq->unused_chunks++;
-		}
+		chunkpool_add_unused_chunk(c);
+
 	}
 
 	return 0;

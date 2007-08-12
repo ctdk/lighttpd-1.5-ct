@@ -69,7 +69,7 @@ INIT_FUNC(mod_chunked_init) {
 	return p;
 }
 
-/* detroy the plugin data */
+/* destroy the plugin data */
 FREE_FUNC(mod_chunked_free) {
 	plugin_data *p = p_d;
 
@@ -296,10 +296,12 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 	in = hctx->fl->prev->cq;
 	out = hctx->fl->cq;
 
-	/* no more data to encode. */
+	/* we are all done already (see the end of the function) */
 	if (out->is_closed) return HANDLER_GO_ON;
-	/**/
 
+	/* move all chunks to the out queue
+	 * and append a HTTP/1.1 chunked header to each chunk 
+	 */
 	for (c = in->first; c; c = c->next) {
 		switch (c->type) {
 		case MEM_CHUNK:
@@ -310,7 +312,9 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 			if(we_have == 0) continue;
 			we_have += http_chunk_append_len(out, we_have);
 			chunkqueue_append_buffer(out, c->mem);
-			c->offset = c->mem->used - 1;
+
+			chunk_set_done(c);
+			
 			break;
 		case FILE_CHUNK:
 			if (c->file.length == 0) continue;
@@ -318,13 +322,15 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 			we_have = c->file.length;
 			in->bytes_out += we_have;
 			we_have += http_chunk_append_len(out, c->file.length);
+
 			if(c->file.is_temp) {
 				chunkqueue_steal_tempfile(out, c);
 			} else {
 				chunkqueue_append_file(out, c->file.name, c->file.start, c->file.length);
 			}
 
-			c->offset = c->file.length;
+			chunk_set_done(c);
+
 			break;
 		case UNUSED_CHUNK:
 			break;
@@ -333,18 +339,23 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 		we_have += 2;
 		out->bytes_in += we_have;
 	}
+
+	/* terminate the last chunk */
 	if (in->is_closed) {
 		chunkqueue_append_mem(out, "0\r\n\r\n", 5 + 1);
 		out->bytes_in += 5;
 	}
-	if(hctx->debug > 1) TRACE("chunk encoded: in=%lld, out=%lld", in->bytes_out, out->bytes_in);
+
+	if (hctx->debug > 1) TRACE("chunk encoded: in=%lld, out=%lld", in->bytes_out, out->bytes_in);
 
 	chunkqueue_remove_finished_chunks(in);
 
+	/* the in side is closed, close out too */
 	if (in->is_closed) {
 		/* mark the output queue as finished. */
 		out->is_closed = 1;
 	}
+
 	return HANDLER_GO_ON;
 }
 

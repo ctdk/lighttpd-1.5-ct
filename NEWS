@@ -11,6 +11,7 @@ NEWS
   * added threaded disk-read() support
   * fixed the out-of-fd support 
   * fixed crash in mod_expire if 'modification' is used and stat() failed (#1063)
+  * fixed hardcoded font-sizes in mod_dirlisting (#1267)
 
 - 1.4.14 - ???
   * added mod_extforward module [1665]

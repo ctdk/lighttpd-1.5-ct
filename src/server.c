@@ -1540,13 +1540,30 @@ int main (int argc, char **argv, char **envp) {
 				}
 			} else {
 				int status;
-				wait(&status);
-				num_childs++;
+
+				if (0 == wait(&status)) {
+					/* a child terminated, restart it */
+					num_childs++;
+				} else {
+					/* we got interrupted */
+
+					switch (errno) {
+					case EINTR:
+						break;
+					default:
+						TRACE("(angel) wait() failed with: %s (errno=%d)", strerror(errno), errno);
+						break;
+					}
+				}
 			}
 		}
+
 		if (srv_shutdown) {
+			/* kill all childs */
 			kill(0, SIGTERM);
 		}
+
+		/* if we are the parent, leave here */
 		if (!child) return 0;
 	}
 #endif

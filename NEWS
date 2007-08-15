@@ -13,6 +13,7 @@ NEWS
   * fixed crash in mod_expire if 'modification' is used and stat() failed (#1063)
   * fixed hardcoded font-sizes in mod_dirlisting (#1267)
   * fixed different ETag length on 32/64 platforms (#1279)
+  * fixed conditional dir-listing.exclude (#930)
 
 - 1.4.14 - ???
   * added mod_extforward module [1665]

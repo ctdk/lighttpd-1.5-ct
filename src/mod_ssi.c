@@ -707,7 +707,7 @@ static int process_ssi_stmt(server *srv, connection *con, plugin_data *p,
 			/* close stdin */
 			close(STDIN_FILENO);
 
-			execl("/bin/sh", "sh", "-c", cmd, NULL);
+			execl("/bin/sh", "sh", "-c", cmd, (char *)NULL);
 
 			/* */
 			SEGFAULT("spawing '%s' failed: %s", cmd, strerror(errno));

@@ -122,7 +122,7 @@ Host: www.example.org
 Connection: close
 EOF
  );
-$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Content-Length' => '' } ];
+$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => '' } ];
 ok($tf->handle_http($t) == 0, 'cgi-env: CONTENT_LENGTH');
 
 ok($tf->stop_proc == 0, "Stopping lighttpd");

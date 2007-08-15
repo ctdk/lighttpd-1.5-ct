@@ -63,6 +63,7 @@ typedef struct {
 
 	buffer *external_css;
 	buffer *encoding;
+	buffer *set_footer;
 } plugin_config;
 
 typedef struct {
@@ -181,6 +182,7 @@ FREE_FUNC(mod_dirlisting_free) {
 			excludes_buffer_free(s->excludes);
 			buffer_free(s->external_css);
 			buffer_free(s->encoding);
+			buffer_free(s->set_footer);
 
 			free(s);
 		}
@@ -249,6 +251,8 @@ static int parse_config_entry(server *srv, plugin_config *s, array *ca, const ch
 #define CONFIG_SHOW_HEADER      "dir-listing.show-header"
 #define CONFIG_HIDE_HEADER_FILE "dir-listing.hide-header-file"
 #define CONFIG_DIR_LISTING      "server.dir-listing"
+#define CONFIG_SET_FOOTER       "dir-listing.set-footer"
+
 
 SETDEFAULTS_FUNC(mod_dirlisting_set_defaults) {
 	plugin_data *p = p_d;
@@ -265,6 +269,7 @@ SETDEFAULTS_FUNC(mod_dirlisting_set_defaults) {
 		{ CONFIG_SHOW_HEADER,      NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 7 */
 		{ CONFIG_HIDE_HEADER_FILE, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 8 */
 		{ CONFIG_DIR_LISTING,      NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 9 */
+		{ CONFIG_SET_FOOTER,       NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION }, /* 10 */
 
 		{ NULL,                          NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
@@ -287,6 +292,7 @@ SETDEFAULTS_FUNC(mod_dirlisting_set_defaults) {
 		s->show_header = 0;
 		s->hide_header_file = 0;
 		s->encoding = buffer_init();
+		s->set_footer = buffer_init();
 
 		cv[0].destination = s->excludes;
 		cv[1].destination = &(s->dir_listing);
@@ -298,6 +304,7 @@ SETDEFAULTS_FUNC(mod_dirlisting_set_defaults) {
 		cv[7].destination = &(s->show_header);
 		cv[8].destination = &(s->hide_header_file);
 		cv[9].destination = &(s->dir_listing); /* old name */
+		cv[10].destination = s->set_footer;
 
 		p->config_storage[i] = s;
 		ca = ((data_config *)srv->config_context->data[i])->value;
@@ -325,6 +332,7 @@ static int mod_dirlisting_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(show_header);
 	PATCH_OPTION(hide_header_file);
 	PATCH_OPTION(excludes);
+	PATCH_OPTION(set_footer);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -355,6 +363,8 @@ static int mod_dirlisting_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(show_header);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_HIDE_HEADER_FILE))) {
 				PATCH_OPTION(hide_header_file);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_SET_FOOTER))) {
+				PATCH_OPTION(set_footer);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_EXCLUDE))) {
 				PATCH_OPTION(excludes);
 			}
@@ -573,7 +583,9 @@ static void http_list_directory_footer(server *srv, connection *con, plugin_data
 		"<div class=\"foot\">"
 	);
 
-	if (buffer_is_empty(con->conf.server_tag)) {
+	if (p->conf.set_footer->used > 1) {
+		buffer_append_string_buffer(out, p->conf.set_footer);
+	} else if (buffer_is_empty(con->conf.server_tag)) {
 		BUFFER_APPEND_STRING_CONST(out, PACKAGE_NAME "/" PACKAGE_VERSION);
 	} else {
 		buffer_append_string_buffer(out, con->conf.server_tag);

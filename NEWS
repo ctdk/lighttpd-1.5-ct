@@ -9,6 +9,7 @@ NEWS
   * added query-string parsing for mod_uploadprogress
   * added threaded stat() 
   * added threaded disk-read() support
+  * added dir-listing.set-footer in mod_dirlisting (#1277)
   * fixed the out-of-fd support 
   * fixed crash in mod_expire if 'modification' is used and stat() failed (#1063)
   * fixed hardcoded font-sizes in mod_dirlisting (#1267)

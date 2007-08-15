@@ -1541,7 +1541,7 @@ int main (int argc, char **argv, char **envp) {
 			} else {
 				int status;
 
-				if (0 == wait(&status)) {
+				if (-1 != wait(&status)) {
 					/* a child terminated, restart it */
 					num_childs++;
 				} else {

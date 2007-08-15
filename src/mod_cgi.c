@@ -738,14 +738,16 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		}
 
 #ifdef USE_OPENSSL
-       if (srv_sock->is_ssl) {
-               cgi_env_add(&env, CONST_STR_LEN("HTTPS"), CONST_STR_LEN("on"));
-       }
+		if (srv_sock->is_ssl) {
+			cgi_env_add(&env, CONST_STR_LEN("HTTPS"), CONST_STR_LEN("on"));
+		}
 #endif
 
 		/* request.content_length < SSIZE_MAX, see request.c */
-		ltostr(buf, con->request.content_length);
-		cgi_env_add(&env, CONST_STR_LEN("CONTENT_LENGTH"), buf, strlen(buf));
+		if (con->request.content_length > 0) {
+			ltostr(buf, con->request.content_length);
+			cgi_env_add(&env, CONST_STR_LEN("CONTENT_LENGTH"), buf, strlen(buf));
+		}
 		cgi_env_add(&env, CONST_STR_LEN("SCRIPT_FILENAME"), CONST_BUF_LEN(con->physical.path));
 		cgi_env_add(&env, CONST_STR_LEN("SCRIPT_NAME"), CONST_BUF_LEN(con->uri.path));
 		cgi_env_add(&env, CONST_STR_LEN("DOCUMENT_ROOT"), CONST_BUF_LEN(con->physical.doc_root));

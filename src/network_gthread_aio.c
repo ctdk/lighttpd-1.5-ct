@@ -1,13 +1,10 @@
 /**
- * - pread() needs _XOPEN_SOURCE
  * - MAP_ANON needs _BSD_SOURCE | _SVID_SOURCE
+ * - pread() needs _XOPEN_SOURCE 500 on Linux 
+ * - _XOPEN_SOURCE breaks the compile on FreeBSD (see #1240, #1251)
  *
- * a _GNU_SOURCE combines them all, set it externally and we are fine
  */
 #ifndef _GNU_SOURCE
-# ifndef _XOPEN_SOURCE
-#  define _XOPEN_SOURCE 500
-# endif
 # ifndef _BSD_SOURCE
 #  define _BSD_SOURCE 1
 # endif

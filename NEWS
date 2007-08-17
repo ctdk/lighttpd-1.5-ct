@@ -17,6 +17,7 @@ NEWS
   * fixed conditional dir-listing.exclude (#930)
   * fixed CONTENT_LENGTH = -1 in mod_cgi (#1276)
   * fixed typecast of NULL on execl() (#1235)
+  * fixed mysql server reconnects (#518)
 
 - 1.4.14 - ???
   * added mod_extforward module [1665]

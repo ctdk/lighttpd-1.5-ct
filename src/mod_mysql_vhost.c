@@ -170,6 +170,11 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 
 				return HANDLER_ERROR;
 			}
+
+			/* in mysql versions above 5.0.3 the reconnect flag is off by default */
+			my_bool reconnect = 1;
+			mysql_options(s->mysql, MYSQL_OPT_RECONNECT, &reconnect);
+
 #define FOO(x) (s->core->x->used ? s->core->x->ptr : NULL)
 
 			s->mysql->free_me = 1;

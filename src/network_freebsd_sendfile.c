@@ -68,7 +68,6 @@ NETWORK_BACKEND_WRITE(freebsdsendfile) {
 			off_t offset, r;
 			size_t toSend;
 			stat_cache_entry *sce = NULL;
-			int ifd;
 
 			if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
 				log_error_write(srv, __FILE__, __LINE__, "sb",
@@ -104,11 +103,9 @@ NETWORK_BACKEND_WRITE(freebsdsendfile) {
 				case EAGAIN:
 					break;
 				case ENOTCONN:
-					close(ifd);
 					return NETWORK_STATUS_CONNECTION_CLOSE;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile: ", strerror(errno), errno);
-					close(ifd);
 					return NETWORK_STATUS_FATAL_ERROR;
 				}
 			}

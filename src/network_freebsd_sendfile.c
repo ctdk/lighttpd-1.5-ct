@@ -81,22 +81,25 @@ NETWORK_BACKEND_WRITE(freebsdsendfile) {
 			toSend = c->file.length - c->offset > ((1 << 30) - 1) ?
 				((1 << 30) - 1) : c->file.length - c->offset;
 
-			if (offset > sce->st.st_size) {
-				log_error_write(srv, __FILE__, __LINE__, "sb", "file was shrinked:", c->file.name);
+			if (-1 == c->file.fd) {
+				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY))) {
+					switch (errno) {
+					case EMFILE:
+						return NETWORK_STATUS_WAIT_FOR_FD;
+					default:
+						ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
 
-				return NETWORK_STATUS_FATAL_ERROR;
-			}
+						return NETWORK_STATUS_FATAL_ERROR;
+					}
 
-			if (-1 == (ifd = open(c->file.name->ptr, O_RDONLY))) {
-				log_error_write(srv, __FILE__, __LINE__, "ss", "open failed: ", strerror(errno));
-
-				return NETWORK_STATUS_FATAL_ERROR;
+					return NETWORK_STATUS_FATAL_ERROR;
+				}
 			}
 
 			r = 0;
 
 			/* FreeBSD sendfile() */
-			if (-1 == sendfile(ifd, sock->fd, offset, toSend, NULL, &r, 0)) {
+			if (-1 == sendfile(c->file.fd, sock->fd, offset, toSend, NULL, &r, 0)) {
 				switch(errno) {
 				case EAGAIN:
 					break;
@@ -109,7 +112,25 @@ NETWORK_BACKEND_WRITE(freebsdsendfile) {
 					return NETWORK_STATUS_FATAL_ERROR;
 				}
 			}
-			close(ifd);
+
+			if (r == 0) {
+				/* We got an event to write but we wrote nothing
+				 *
+				 * - the file shrinked -> error
+				 * - the remote side closed inbetween -> remote-close */
+
+				if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
+					/* file is gone ? */
+					return NETWORK_STATUS_FATAL_ERROR;
+				}
+
+				if (offset > sce->st.st_size) {
+					/* file shrinked, close the connection */
+					return NETWORK_STATUS_FATAL_ERROR;
+				}
+
+				return NETWORK_STATUS_CONNECTION_CLOSE;
+			}
 
 			c->offset += r;
 			cq->bytes_out += r;
@@ -121,8 +142,7 @@ NETWORK_BACKEND_WRITE(freebsdsendfile) {
 			break;
 		}
 		default:
-
-			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
+			ERROR("chunk-type '%d' not known", c->type);
 
 			return NETWORK_STATUS_FATAL_ERROR;
 		}

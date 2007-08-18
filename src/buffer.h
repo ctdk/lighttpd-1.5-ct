@@ -116,7 +116,7 @@ LI_API int buffer_to_lower(buffer *b);
 LI_API int buffer_to_upper(buffer *b);
 
 /** deprecated */
-LI_API int ltostr(char *buf, long val);
+LI_API int LI_ltostr(char *buf, long val);
 LI_API char hex2int(unsigned char c);
 LI_API char int2hex(char i);
 

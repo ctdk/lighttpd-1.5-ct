@@ -29,10 +29,10 @@ NEWS
   * prevent wrong pidfile unlinking on graceful restart (Chris Webb) [1656]
   * ignore empty packets from STDERR stream. #998 
   * fix a crash for files with an mtime of 0 reported by cubiq on irc [1519]
-  * allow empty passwords with ldap (Jörg Sonnenberger) [1516]
+  * allow empty passwords with ldap (Joerg Sonnenberger) [1516]
   * mod_scgi.c segfault fix #964
   * Added round-robin support to mod_fastcgi [1500]
-  * Handle DragonFlyBSD the same way as Freebsd (Jörg Sonnenberger) [1492]
+  * Handle DragonFlyBSD the same way as Freebsd (Joerg Sonnenberger) [1492]
   * added now and weeks support to mod_expire. #943
   * fix cpu hog in certain requests [1473]
   * fix for handling hostnames with trailing dot [1406]

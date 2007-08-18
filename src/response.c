@@ -49,6 +49,14 @@ int http_response_write_header(server *srv, connection *con, chunkqueue *raw) {
 	if (con->response.transfer_encoding & HTTP_TRANSFER_ENCODING_CHUNKED) {
 		response_header_overwrite(srv, con, CONST_STR_LEN("Transfer-Encoding"), CONST_STR_LEN("chunked"));
 		allow_keep_alive = 1;
+	} else if ((con->http_status >= 100 && con->http_status < 200) ||
+		    con->http_status == 204 ||
+		    con->http_status == 304) {
+		/* 1xx, 204 and 304 never have a content-body -> 
+		 *   never have a Content-Length and are always 
+		 *   able to do keep-alive
+		 */
+		allow_keep_alive = 1;
 	} else if (con->response.content_length >= 0) {
 		buffer_copy_off_t(srv->tmp_buf, con->response.content_length);
 		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Length"), srv->tmp_buf->ptr, srv->tmp_buf->used - 1);

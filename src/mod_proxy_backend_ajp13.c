@@ -412,7 +412,7 @@ int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *ses
 
 	/* make sure we have content-length header */
 	if(con->request.content_length > 0) {
-		ltostr(buf, con->request.content_length);
+		LI_ltostr(buf, con->request.content_length);
 		array_set_key_value(sess->request_headers, CONST_STR_LEN("Content-Length"), buf, strlen(buf));
 	} else {
 		array_set_key_value(sess->request_headers, CONST_STR_LEN("Content-Length"), CONST_STR_LEN("0"));

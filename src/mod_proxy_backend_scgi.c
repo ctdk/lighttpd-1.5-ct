@@ -67,7 +67,7 @@ static int proxy_scgi_get_env_scgi(server *srv, proxy_session *sess, buffer *env
 
 	/* request.content_length < SSIZE_MAX, see request.c */
 	if(con->request.content_length > 0) {
-		len = ltostr(buf, con->request.content_length);
+		len = LI_ltostr(buf, con->request.content_length);
 	} else {
 		buf[0] = '0';
 		buf[1] = '\0';
@@ -95,7 +95,7 @@ static int proxy_scgi_get_env_scgi(server *srv, proxy_session *sess, buffer *env
 
 	scgi_env_add(env_headers, CONST_STR_LEN("GATEWAY_INTERFACE"), CONST_STR_LEN("CGI/1.1"));
 
-	len = ltostr(buf,
+	len = LI_ltostr(buf,
 #ifdef HAVE_IPV6
 	       ntohs(srv_sock->addr.plain.sa_family ? srv_sock->addr.ipv6.sin6_port : srv_sock->addr.ipv4.sin_port)
 #else
@@ -115,7 +115,7 @@ static int proxy_scgi_get_env_scgi(server *srv, proxy_session *sess, buffer *env
 	}
 	scgi_env_add(env_headers, CONST_STR_LEN("SERVER_ADDR"), s, strlen(s));
 
-	len = ltostr(buf,
+	len = LI_ltostr(buf,
 #ifdef HAVE_IPV6
 	       ntohs(con->dst_addr.plain.sa_family ? con->dst_addr.ipv6.sin6_port : con->dst_addr.ipv4.sin_port)
 #else

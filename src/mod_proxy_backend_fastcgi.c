@@ -120,7 +120,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 
 	array_set_key_value(sess->env_headers, CONST_STR_LEN("GATEWAY_INTERFACE"), CONST_STR_LEN("CGI/1.1"));
 
-	ltostr(buf,
+	LI_ltostr(buf,
 #ifdef HAVE_IPV6
 	       ntohs(srv_sock->addr.plain.sa_family ? srv_sock->addr.ipv6.sin6_port : srv_sock->addr.ipv4.sin_port)
 #else
@@ -140,7 +140,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 	}
 	array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_ADDR"), s, strlen(s));
 
-	ltostr(buf,
+	LI_ltostr(buf,
 #ifdef HAVE_IPV6
 	       ntohs(con->dst_addr.plain.sa_family ? con->dst_addr.ipv6.sin6_port : con->dst_addr.ipv4.sin_port)
 #else
@@ -162,7 +162,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 		/* CGI-SPEC 6.1.2 and FastCGI spec 6.3 */
 
 		/* request.content_length < SSIZE_MAX, see request.c */
-		ltostr(buf, con->request.content_length);
+		LI_ltostr(buf, con->request.content_length);
 		array_set_key_value(sess->env_headers, CONST_STR_LEN("CONTENT_LENGTH"), buf, strlen(buf));
 	}
 

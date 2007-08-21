@@ -364,12 +364,12 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			}
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("Content-Length")))) {
 			char *err;
-			long long int r;
+			off_t r;
 
 			/* ignore the header, if it is a duplicate */
 			if (con->request.content_length != -1) continue;
 
-			r = strtoll(ds->value->ptr, &err, 10);
+			r = str_to_off_t(ds->value->ptr, &err, 10);
 
 			if (*err != '\0') {
 				TRACE("content-length is not a number: %s (Status: 400)", err);
@@ -379,8 +379,11 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 				return 0;
 			}
 
-			if (r == LLONG_MIN ||
-			    r == LLONG_MAX) {
+			/**
+			 * check if we had a over- or underrun in the string conversion
+			 */
+			if (r == STR_OFF_T_MIN ||
+			    r == STR_OFF_T_MAX) {
 				if (errno == ERANGE) {
 					con->http_status = 413;
 
@@ -388,6 +391,10 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 				}
 			}
 
+			/**
+			 * negative content-length is not supported 
+			 * and is a bad request
+			 */
 			if (r < 0) {
 				con->http_status = 400;
 

@@ -5,7 +5,9 @@
 #define strcasecmp stricmp
 #define strncasecmp strnicmp
 #include <stdlib.h>
-#define strtoll(p, e, b) _strtoi64(p, e, b)
+#define str_to_off_t(p, e, b) _strtoi64(p, e, b)
+#define STR_OFF_T_MAX LLONG_MAX
+#define STR_OFF_T_MIN LLONG_MIN 
 #define strtoull _strtoui64
 #ifdef __MINGW32__
 /* missing prototype */
@@ -20,6 +22,24 @@ __int64 _strtoi64(
 		int base 
 		);
 #endif
+#else /** we are a unix */
+
+/**
+ * we use strtoll() for parsing the ranges into a off_t
+ *
+ * if off_t is 32bit, we can use strtol() instead
+ */
+ #if SIZEOF_OFF_T == SIZEOF_LONG
+  #define str_to_off_t(p, e, b) strtol(p, e, b)
+  #define STR_OFF_T_MAX LONG_MAX
+  #define STR_OFF_T_MIN LONG_MIN 
+ #elif defined(HAVE_STRTOLL)
+  #define str_to_off_t(p, e, b) strtoll(p, e, b)
+  #define STR_OFF_T_MAX LLONG_MAX
+  #define STR_OFF_T_MIN LLONG_MIN 
+ #else
+  #error off_t is more than 4 bytes but we can't parse it with strtol()
+ #endif
 #endif
 
 #endif

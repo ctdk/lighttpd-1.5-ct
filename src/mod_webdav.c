@@ -1702,7 +1702,17 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				return HANDLER_FINISHED;
 			}
 
-			offset = strtoll(num, &err, 10);
+			offset = str_to_off_t(num, &err, 10);
+
+			if (offset == STR_OFF_T_MAX ||
+			    offset == STR_OFF_T_MIN) {
+				/**
+				 * conversion did a over- or underrun
+				 */
+				con->http_status = 501; /* not implemented */
+
+				return HANDLER_FINISHED;
+			}
 
 			if (*err != '-' || offset < 0) {
 				con->http_status = 501; /* not implemented */

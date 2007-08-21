@@ -96,6 +96,8 @@ static volatile sig_atomic_t graceful_shutdown = 0;
 static volatile sig_atomic_t graceful_restart = 0;
 static volatile sig_atomic_t handle_sig_alarm = 1;
 static volatile sig_atomic_t handle_sig_hup = 0;
+static volatile siginfo_t last_sigterm_info;
+static volatile siginfo_t last_sighup_info;
 
 #ifdef USE_GTHREAD
 gpointer stat_cache_thread(gpointer );
@@ -106,19 +108,32 @@ gpointer linux_aio_read_thread(gpointer );
 
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
 static void sigaction_handler(int sig, siginfo_t *si, void *context) {
-	UNUSED(si);
 	UNUSED(context);
 
 	switch (sig) {
-	case SIGTERM: srv_shutdown = 1; break;
+	case SIGTERM: 
+		srv_shutdown = 1; 
+		memcpy(&last_sigterm_info, si, sizeof(*si));
+		break;
 	case SIGINT:
-	     if (graceful_shutdown) srv_shutdown = 1;
-	     else graceful_shutdown = 1;
+		if (graceful_shutdown) {
+			srv_shutdown = 1;
+		} else {
+			graceful_shutdown = 1;
+		}
 
-	     break;
-	case SIGALRM: handle_sig_alarm = 1; break;
-	case SIGHUP:  handle_sig_hup = 1; break;
-	case SIGCHLD: break;
+		memcpy(&last_sigterm_info, si, sizeof(*si));
+
+		break;
+	case SIGALRM: 
+		handle_sig_alarm = 1; 
+		break;
+	case SIGHUP: 
+		handle_sig_hup = 1; 
+		memcpy(&last_sighup_info, si, sizeof(*si));
+		break;
+	case SIGCHLD: 
+		break;
 	}
 }
 #elif defined(HAVE_SIGNAL) || defined(HAVE_SIGACTION)
@@ -626,6 +641,10 @@ int lighty_mainloop(server *srv) {
 				log_error_write(srv, __FILE__, __LINE__, "s", "cycling errorlog failed, dying");
 
 				return -1;
+			} else {
+				TRACE("logfiles cycled by UID=%d, PID=%d", 
+						last_sighup_info.si_uid, 
+						last_sighup_info.si_pid);
 			}
 #endif
 		}
@@ -825,7 +844,7 @@ int lighty_mainloop(server *srv) {
 				}
 
 				if (graceful_shutdown) {
-					TRACE("[note] graceful shutdown started%s", "");
+					TRACE("[note] graceful shutdown started by UID=%d, PID=%d", last_sigterm_info.si_uid, last_sigterm_info.si_pid);
 				} else if (srv->fdwaitqueue->used) {
 					TRACE("[note] out of FDs, server-socket get disabled for a while, we have %d connections open and they are waiting for %d FDs",
 					    srv->conns->used, srv->fdwaitqueue->used);
@@ -1786,6 +1805,9 @@ int main (int argc, char **argv, char **envp) {
 	connections_free(srv);
 	plugins_free(srv);
 	server_free(srv);
+
+	TRACE("server stopped by UID=%d, PID=%d", last_sigterm_info.si_uid, last_sigterm_info.si_pid);
+
 	log_free();
 	status_counter_free();
 

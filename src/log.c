@@ -88,8 +88,6 @@ void log_free(void) {
 
 	if (!err) return;
 
-	TRACE("%s", "server stopped");
-
 	switch(err->mode) {
 	case ERRORLOG_FILE:
 		close(err->fd);
@@ -194,8 +192,6 @@ int log_error_cycle(void) {
 			err->fd = new_fd;
 		}
 	}
-
-	TRACE("%s", "logfiles cycled");
 
 	return 0;
 }

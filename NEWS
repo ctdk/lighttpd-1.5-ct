@@ -20,6 +20,7 @@ NEWS
   * fixed typecast of NULL on execl() (#1235)
   * fixed extra Content-Length header on 1xx, 204 and 304 (#1002)
   * fixed mysql server reconnects (#518)
+  * fixed prctl() usage (#1310)
 
 - 1.4.14 - ???
   * added mod_extforward module [1665]

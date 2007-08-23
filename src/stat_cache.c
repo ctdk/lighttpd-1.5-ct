@@ -372,6 +372,7 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 	}
 
 	if (-1 == fstat(fd, &st)) {
+		close(fd);
 		return HANDLER_ERROR;
 	}
 

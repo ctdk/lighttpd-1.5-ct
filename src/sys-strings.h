@@ -38,7 +38,7 @@ __int64 _strtoi64(
   #define STR_OFF_T_MAX LLONG_MAX
   #define STR_OFF_T_MIN LLONG_MIN 
  #else
-  #error off_t is more than 4 bytes but we can't parse it with strtol()
+  #error off_t is more than 4 bytes but we can not parse it with strtol() (run autogen.sh again if you build from svn)
  #endif
 #endif
 

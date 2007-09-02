@@ -1348,7 +1348,10 @@ int main (int argc, char **argv, char **envp) {
 			initgroups(srv->srvconf.username->ptr, grp->gr_gid);
 		if (srv->srvconf.username->used) setuid(pwd->pw_uid);
 #endif
-#ifdef HAVE_SYS_PRCTL_H
+#if defined(HAVE_SYS_PRCTL_H) && defined(PR_SET_DUMPABLE)
+		/**
+		 * IRIX 6.5.x has prctl() but no PR_SET_DUMPABLE
+		 */
 		if (srv->srvconf.enable_cores) {
 			prctl(PR_SET_DUMPABLE, 1, 0, 0, 0);
 		}

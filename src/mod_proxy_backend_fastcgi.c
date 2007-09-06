@@ -314,6 +314,13 @@ static int fcgi_env_add(buffer *env, const char *key, size_t key_len, const char
 	len += key_len > 127 ? 4 : 1;
 	len += val_len > 127 ? 4 : 1;
 
+	/**
+	 * ensure we don't create a longer packet than fastcgi can handle
+	 */
+	if (env->used + len >= FCGI_MAX_LENGTH) {
+		return -1;
+	}
+
 	buffer_prepare_append(env, len);
 
 	if (key_len > 127) {

@@ -22,6 +22,12 @@ NEWS
   * fixed mysql server reconnects (#518)
   * fixed prctl() usage (#1310, #1333)
   * fixed FastCGI header overrun in mod_fastcgi (reported by mattias@secweb.se)
+  * fixed mem-leak in mod_auth (reported by Stefan Esser)
+  * fixed crash with md5-sess and cnonce not set in mod_auth (reported by Stefan Esser)
+  * fixed missing check for base64 encoded string in mod_auth and Basic auth
+    (reported by Stefan Esser)
+  * fixed possible crash in Auth-Digest header parser on trailing WS in 
+    mod_auth (reported by Stefan Esser) 
 
 - 1.4.14 - ???
   * added mod_extforward module [1665]

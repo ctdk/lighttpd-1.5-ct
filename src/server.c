@@ -1571,6 +1571,16 @@ int main (int argc, char **argv, char **envp) {
 
 					switch (errno) {
 					case EINTR:
+						/** 
+						 * we got asked to rotate the logs
+						 *
+						 * as we are just the parent and have no main-loop we have to fix it ourself
+						 */
+						if (handle_sig_hup) {
+							handle_sig_hup = 0;
+
+							log_error_cycle();
+						}
 						break;
 					default:
 						TRACE("(angel) wait() failed with: %s (errno=%d)", strerror(errno), errno);

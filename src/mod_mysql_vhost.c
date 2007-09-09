@@ -139,7 +139,7 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 		sel = buffer_init();
 		buffer_copy_string_buffer(sel, s->core->select_vhost);
 
-		if (sel->used && (qmark = index(sel->ptr, '?'))) {
+		if (sel->used && (qmark = strchr(sel->ptr, '?'))) {
 			*qmark = '\0';
 			buffer_copy_string(s->mysql_pre, sel->ptr);
 			buffer_copy_string(s->mysql_post, qmark+1);
@@ -171,9 +171,11 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 				return HANDLER_ERROR;
 			}
 
+#if MYSQL_VERSION_ID >= 50003
 			/* in mysql versions above 5.0.3 the reconnect flag is off by default */
 			my_bool reconnect = 1;
 			mysql_options(s->mysql, MYSQL_OPT_RECONNECT, &reconnect);
+#endif
 
 #define FOO(x) (s->core->x->used ? s->core->x->ptr : NULL)
 

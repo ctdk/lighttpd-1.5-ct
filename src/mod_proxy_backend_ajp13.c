@@ -280,16 +280,31 @@ static int ajp13_decode_string(buffer *str, ajp13_state_data *data, int is_heade
 
 	/* string length */
 	len = ajp13_decode_int(data);
-	if ((ssize_t)len == -1) return len;
+	if ((ssize_t)len == -1) {
+		ERROR("ajp13_decode_int() returned invalid len: %d", len);
+		return len;
+	}
+#ifdef AJP13_DEBUG
+	TRACE("ajp13_decode_string() string-len: %d (is_header: %d, common-header: %d)", len, is_header, (len & AJP13_COMMON_HEADER_CODE));
+#endif
 
 	/* if string is header, check for common header code. */
 	if (is_header && (len & AJP13_COMMON_HEADER_CODE)) {
-		p = keyvalue_get_value(response_headers, len);
-		if(p) len = strlen(p);
+		p = keyvalue_get_value(response_headers, len & ~AJP13_COMMON_HEADER_CODE);
+		if (p) {
+			len = strlen(p);
+		} else {
+			ERROR("ajp13_decode_string() can't resolve common-header: %d", len & ~AJP13_COMMON_HEADER_CODE);
+
+			return -1;
+		}
 	}
 	/* copy string from buffer. */
 	if (p == NULL) {
-		if ((data->buf->used - data->offset) <= (len + 1)) return -1;
+		if ((data->buf->used - data->offset) <= (len + 1)) {
+			ERROR("we have %d bytes, but a partial-string wants %d. no way", (data->buf->used - data->offset), len);
+			return -1;
+		}
 		p = data->buf->ptr + data->offset;
 		data->offset += len + 1;
 	}
@@ -308,22 +323,51 @@ static int ajp13_decode_response_headers(http_resp *resp, ajp13_state_data *data
 
 	resp->protocol = HTTP_VERSION_UNSET;
 	resp->status = ajp13_decode_int(data);
-	if (resp->status == -1) return -1;
-	if (ajp13_decode_string(resp->reason, data, 0) == -1) return -1;
-	num = ajp13_decode_int(data);
-	if(num > 0) {
-		key = buffer_init();
-		value = buffer_init();
-		for(i = 0; i < num; i++) {
-			key_len = ajp13_decode_string(key, data, 1);
-			value_len = ajp13_decode_string(value, data, 1);
-			if (key_len > 0 && value_len >= 0) {
-				array_append_key_value(resp->headers, key->ptr, key_len, value->ptr, value_len);
-			}
-		}
-		buffer_free(key);
-		buffer_free(value);
+	
+	if (resp->status == -1) {
+		ERROR("parsing AJP13 response-status failed, got %d", resp->status);
+		return -1;
 	}
+
+	if (ajp13_decode_string(resp->reason, data, 0) == -1) {
+		ERROR("parsing AJP13 response-reason failed: %s", "...");
+		return -1;
+	}
+
+#ifdef AJP13_DEBUG
+	TRACE("ajp13: header-status: %d", resp->status);
+	TRACE("ajp13: header-reason: %s", resp->reason->ptr);
+#endif
+
+	/* leave if we have no headers to decode */
+	num = ajp13_decode_int(data);
+#ifdef AJP13_DEBUG
+	TRACE("ajp13: header-count: %d", num);
+#endif
+
+	if (0 == num) return 0;
+
+	key = buffer_init();
+	value = buffer_init();
+	for(i = 0; i < num; i++) {
+		key_len = ajp13_decode_string(key, data, 1);
+		value_len = ajp13_decode_string(value, data, 1);
+#ifdef AJP13_DEBUG
+		TRACE("ajp13: header[%d]: key-len: %d, value-len: %d", i, key_len, value_len);
+#endif
+
+		if (key_len > 0 && value_len >= 0) {
+			array_append_key_value(resp->headers, key->ptr, key_len, value->ptr, value_len);
+#ifdef AJP13_DEBUG
+			TRACE("ajp13: header[%d]: %s = %s", i, key->ptr, value->ptr);
+#endif
+		} else {
+			ERROR("ajp13: response-headers skipped: key-len = %d, val-len = %d", key_len, value_len);
+		}
+	}
+	buffer_free(key);
+	buffer_free(value);
+
 	return 0;
 }
 

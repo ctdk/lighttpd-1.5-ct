@@ -3,7 +3,10 @@
 NEWS
 ====
 
-- 1.5.0 - ...
+- 1.5.0 - 
+  * fixed decoding of common headers in AJP13 (#1399)
+
+- 1.5.0-r19.. - 
   * -F option added for spawn-fcgi
   * replaced mod_fastcgi, mod_scgi, mod_proxy with mod_proxy_core + backends
   * added query-string parsing for mod_uploadprogress
@@ -11,6 +14,7 @@ NEWS
   * added threaded disk-read() support
   * added dir-listing.set-footer in mod_dirlisting (#1277)
   * added logging of the PID and UID of the sending process for SIGTERM and SIGINT
+  * added support for AJP13 to mod_proxy_core
   * fixed the out-of-fd support 
   * fixed crash in mod_expire if 'modification' is used and stat() failed (#1063)
   * fixed hardcoded font-sizes in mod_dirlisting (#1267)
@@ -27,7 +31,7 @@ NEWS
   * fixed missing check for base64 encoded string in mod_auth and Basic auth
     (reported by Stefan Esser)
   * fixed possible crash in Auth-Digest header parser on trailing WS in 
-    mod_auth (reported by Stefan Esser) 
+    mod_auth (reported by Stefan Esser)
 
 - 1.4.14 - ???
   * added mod_extforward module [1665]

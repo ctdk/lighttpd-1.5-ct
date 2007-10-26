@@ -780,7 +780,7 @@ static handler_t magnet_attract(server *srv, connection *con, plugin_data *p, bu
 
 	if (lua_isnumber(L, -1)) {
 		/* if the ret-value is a number, take it */
-		lua_return_value = (int)lua_tonumber(L, -1);
+		lua_return_value = lua_tointeger(L, -1);
 	}
 	lua_pop(L, 1); /* pop the ret-value */
 

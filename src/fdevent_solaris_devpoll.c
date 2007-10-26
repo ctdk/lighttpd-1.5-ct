@@ -82,7 +82,7 @@ static int fdevent_solaris_devpoll_get_revents(fdevents *ev, size_t event_count,
 		if (ev->devpollfds[ndx].revents) {
 			if (ev->devpollfds[ndx].revents & POLLNVAL) {
 				/* should never happen */
-				SEGFAULT();
+				SEGFAULT("ev->devpollfds[%d].revents = %d (POLLNVAL)", ndx, ev->devpollfds[ndx].revents);
 			}
 
 			fdevent_revents_add(revents, ev->devpollfds[ndx].fd, ev->devpollfds[ndx].revents);

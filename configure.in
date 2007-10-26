@@ -444,10 +444,14 @@ PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.4.0, [
   AC_DEFINE([HAVE_GLIB_H], [1], [glib.h])
 ])
 
+if false; then
+	dnl async-io doesn't work for all file-systems 
+	dnl we disable it here in the configure checks 
+	dnl and in settings.h
+
 dnl Check for libaio
 AC_MSG_CHECKING(for libaio)
-AC_ARG_WITH(linux-aio, AC_HELP_STRING([--with-linux-aio],[Async IO support for Linux via libaio]),
-[WITH_LINUXLIBAIO=$withval],[WITH_LINUXLIBAIO=no])
+AC_ARG_WITH(linux-aio, AC_HELP_STRING([--with-linux-aio],[Async IO support for Linux via libaio]), [WITH_LINUXLIBAIO=$withval],[WITH_LINUXLIBAIO=no])
 AC_MSG_RESULT([$WITH_LINUXLIBAIO])
 if test "$WITH_LINUXLIBAIO" != "no"; then
  AC_CHECK_LIB(aio, io_submit, [
@@ -459,7 +463,7 @@ if test "$WITH_LINUXLIBAIO" != "no"; then
  ])
  AC_SUBST(AIO_LIB)
 fi
- 
+
  AC_SEARCH_LIBS(aio_suspend, rt, [
          AC_CHECK_HEADERS([aio.h],[
        	         if test "$ac_cv_search_aio_suspend" != no; then
@@ -476,6 +480,7 @@ fi
          ])
  ])
  AC_SUBST(POSIX_AIO_LIB)
+fi
 
 save_LIBS=$LIBS
 AC_SEARCH_LIBS(crypt,crypt,[

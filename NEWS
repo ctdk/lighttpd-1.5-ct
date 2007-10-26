@@ -5,6 +5,7 @@ NEWS
 
 - 1.5.0 - 
   * fixed decoding of common headers in AJP13 (#1399)
+  * disable experimental linux-aio and posix-aio support, use gthread-aio instead
 
 - 1.5.0-r19.. - 
   * -F option added for spawn-fcgi

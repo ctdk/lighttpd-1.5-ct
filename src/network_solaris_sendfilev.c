@@ -39,7 +39,7 @@
 
 
 NETWORK_BACKEND_WRITE(solarissendfilev) {
-	chunk *c;
+	chunk *c, *tc;
 	size_t chunks_written = 0;
 
 	for(c = cq->first; c; c = c->next, chunks_written++) {
@@ -48,13 +48,26 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 
 		switch(c->type) {
 		case MEM_CHUNK:
-			ret = network_write_chunkqueue_writev_mem(srv, con, sock, cq, &c);
+			ret = network_write_chunkqueue_writev_mem(srv, con, sock, cq, c);
+
+			/* check which chunks are finished now */
+			for (tc = c; tc; tc = tc->next) {
+				/* finished the chunk */
+				if (tc->offset == tc->mem->used - 1) {
+					/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
+					if (chunk_finished) {
+						c = c->next;
+					} else {
+						chunk_finished = 1;
+					}
+				} else {
+					break;
+				}
+			}
 
 			if (ret != NETWORK_STATUS_SUCCESS) {
 				return ret;
 			}
-
-			chunk_finished = 1;
 
 			break;
 		case FILE_CHUNK: {
@@ -93,8 +106,11 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 
 			/* Solaris sendfilev() */
 			if (-1 == (r = sendfilev(sock->fd, &fvec, 1, &written))) {
-				if (errno != EAGAIN) {
-					log_error_write(srv, __FILE__, __LINE__, "ssd", "sendfile: ", strerror(errno), errno);
+				switch (errno) {
+				case EAGAIN:
+					break;
+				default:
+					ERROR("sendfilev() failed: %s (errno=%d)", strerror(errno), errno);
 
 					close(ifd);
 					return NETWORK_STATUS_FATAL_ERROR;
@@ -114,7 +130,7 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 			break;
 		}
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
+			ERROR("chunk-type '%s' is not known", c->type);
 
 			return NETWORK_STATUS_FATAL_ERROR;
 		}
@@ -122,7 +138,7 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 		if (!chunk_finished) {
 			/* not finished yet */
 
-			break;
+			return NETWORK_STATUS_WAIT_FOR_EVENT;
 		}
 	}
 

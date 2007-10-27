@@ -1324,6 +1324,19 @@ int main (int argc, char **argv, char **envp) {
 
 			return -1;
 		}
+
+#ifdef HAVE_PWD_H
+		/**
+		 * initgroups() has to be called before chroot()
+		 */
+		if (srv->srvconf.groupname->used) {
+			setgid(grp->gr_gid);
+			setgroups(0, NULL);
+			if (srv->srvconf.username->used) {
+				initgroups(srv->srvconf.username->ptr, grp->gr_gid);
+			}
+		}
+#endif
 #ifdef HAVE_CHROOT
 		if (srv->srvconf.changeroot->used) {
 			tzset();
@@ -1340,12 +1353,6 @@ int main (int argc, char **argv, char **envp) {
 #endif
 #ifdef HAVE_PWD_H
 		/* drop root privs */
-		if (srv->srvconf.groupname->used) {
-			setgid(grp->gr_gid);
-			setgroups(0, NULL);
-		}
-		if (srv->srvconf.username->used && srv->srvconf.groupname->used)
-			initgroups(srv->srvconf.username->ptr, grp->gr_gid);
 		if (srv->srvconf.username->used) setuid(pwd->pw_uid);
 #endif
 #if defined(HAVE_SYS_PRCTL_H) && defined(PR_SET_DUMPABLE)

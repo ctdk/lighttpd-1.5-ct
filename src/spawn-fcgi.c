@@ -429,6 +429,15 @@ int main(int argc, char **argv) {
 					"I will not set gid to 0\n");
 				return -1;
 			}
+
+			/* do the change before we do the chroot() */
+			setgid(grp->gr_gid);
+			setgroups(0, NULL); 
+
+			if (username) {
+				initgroups(username, grp->gr_gid);
+			}
+
 		}
 
 		if (changeroot) {
@@ -447,13 +456,7 @@ int main(int argc, char **argv) {
 		}
 
 		/* drop root privs */
-		if (groupname) {
-			setgid(grp->gr_gid);
-		}
 		if (username) {
-			if (groupname) {
-				initgroups(username, grp->gr_gid);
-			}
 			setuid(pwd->pw_uid);
 		}
 	}

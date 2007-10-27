@@ -91,13 +91,21 @@ sub start_proc {
 	$ENV{'PORT'} = $self->{PORT};
 
 	unlink($self->{LIGHTTPD_PIDFILE});
+	my $cmdline = "";
 	if (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'strace') {
-		system("strace -tt -s 512 -o strace ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &");
+		$cmdline = "strace -tt -s 512 -o strace ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &";
+	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'truss') {
+		$cmdline = "truss -a -l -w all -v all -o strace ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &";
+	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'gdb') {
+		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." > gdb.out &";
+
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'valgrind') {
-		system("valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &");
+		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &";
 	} else {
-		system($self->{LIGHTTPD_PATH}." -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH});
+		$cmdline = $self->{LIGHTTPD_PATH}." -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
 	}
+	# diag("starting lighttpd at :".$self->{PORT}.", cmdline: ".$cmdline );
+	system($cmdline) == 0 or die($?);
 
 	select(undef, undef, undef, 0.1);
 	if (not -e $self->{LIGHTTPD_PIDFILE} or 0 == kill 0, `cat $self->{LIGHTTPD_PIDFILE}`) {
@@ -130,6 +138,7 @@ sub handle_http {
 
 	my @request = $t->{REQUEST};
 	my @response = $t->{RESPONSE};
+	my $is_debug = $ENV{"TRACE_HTTP"};
 
 	my $remote = 
  	  IO::Socket::INET->new(Proto    => "tcp",
@@ -143,20 +152,26 @@ sub handle_http {
 
 	$remote->autoflush(1);
 
+	diag("sending request header to ".$host.":".$self->{PORT}) if $is_debug;
 	foreach(@request) {
 		# pipeline requests
 		s/\r//g;
 		s/\n/$EOL/g;
 
 		print $remote $_.$BLANK;	
+		diag("<< ".$_) if $is_debug;
 	}
+	diag("... done") if $is_debug;
 
 	my $lines = "";
 
+	diag("receiving response") if $is_debug;
 	# read everything
 	while(<$remote>) {
 		$lines .= $_;
+		diag(">> ".$_) if $is_debug;
 	}
+	diag("... done") if $is_debug;
 	
 	close $remote;
 

@@ -132,6 +132,10 @@ BUFFER_CTYPE_FUNC(alpha)
 BUFFER_CTYPE_FUNC(alnum)
 
 #define BUF_STR(x) x->ptr
+
+/* used on solaris as their vprintf() hates NULL for %s */
+#define SAFE_BUF_STR(x) x && x->ptr ? x->ptr : "(null)" 
+
 #define BUFFER_APPEND_STRING_CONST(x, y) \
 	buffer_append_string_len(x, y, sizeof(y) - 1)
 

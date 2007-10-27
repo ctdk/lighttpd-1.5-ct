@@ -6,6 +6,9 @@ NEWS
 - 1.5.0 - 
   * fixed decoding of common headers in AJP13 (#1399)
   * disable experimental linux-aio and posix-aio support, use gthread-aio instead
+  * fixed several crashes in log-request-handling with %s being NULL on solaris
+  * fixed network-backend-solaris-sendfilev (EINVAL in writev())
+  * fixed initgroups() called after chroot (#1384)
 
 - 1.5.0-r19.. - 
   * -F option added for spawn-fcgi

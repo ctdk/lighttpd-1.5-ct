@@ -281,7 +281,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 				}
 			}
 
-			TRACE("parsing failed at token (%s [%d]), header: %s", BUF_STR(token), token_id, BUF_STR(hdr));
+			TRACE("parsing failed at token (%s [%d]), header: %s", SAFE_BUF_STR(token), token_id, SAFE_BUF_STR(hdr));
 
 			buffer_free(hdr);
 		}

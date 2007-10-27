@@ -224,11 +224,11 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "splitting Request-URI");
-			TRACE("Request-URI  : %s", BUF_STR(con->request.uri));
-			TRACE("URI-scheme   : %s", BUF_STR(con->uri.scheme));
-			TRACE("URI-authority: %s", BUF_STR(con->uri.authority));
-			TRACE("URI-path     : %s", BUF_STR(con->uri.path_raw));
-			TRACE("URI-query    : %s", BUF_STR(con->uri.query));
+			TRACE("Request-URI  : %s", SAFE_BUF_STR(con->request.uri));
+			TRACE("URI-scheme   : %s", SAFE_BUF_STR(con->uri.scheme));
+			TRACE("URI-authority: %s", SAFE_BUF_STR(con->uri.authority));
+			TRACE("URI-path     : %s", SAFE_BUF_STR(con->uri.path_raw));
+			TRACE("URI-query    : %s", SAFE_BUF_STR(con->uri.query));
 		}
 
 		/* disable keep-alive if requested */
@@ -402,7 +402,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			TRACE("-- %s", "before doc_root");
 			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
 			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
-			TRACE("Path         : %s", BUF_STR(con->physical.path));
+			TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 		}
 		/* the docroot plugin should set the doc_root and might also set the physical.path
 		 * for us (all vhost-plugins are supposed to set the doc_root)

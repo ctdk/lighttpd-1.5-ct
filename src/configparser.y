@@ -422,6 +422,7 @@ context ::= DOLLAR SRVVARNAME(B) LBRACKET stringop(C) RBRACKET cond(E) expressio
       size_t len;
     } comps[] = {
       { COMP_SERVER_SOCKET,      CONST_STR_LEN("SERVER[\"socket\"]"   ) },
+      { COMP_HTTP_SCHEME,        CONST_STR_LEN("HTTP[\"scheme\"]"     ) },
       { COMP_HTTP_URL,           CONST_STR_LEN("HTTP[\"url\"]"        ) },
       { COMP_HTTP_HOST,          CONST_STR_LEN("HTTP[\"host\"]"       ) },
       { COMP_HTTP_REFERER,       CONST_STR_LEN("HTTP[\"referer\"]"    ) },

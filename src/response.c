@@ -200,6 +200,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		buffer_copy_string_buffer(con->uri.authority, con->request.http_host);
 		buffer_to_lower(con->uri.authority);
 
+		config_patch_connection(srv, con, COMP_HTTP_SCHEME);    /* Scheme:      */
 		config_patch_connection(srv, con, COMP_HTTP_HOST);      /* Host:        */
 		config_patch_connection(srv, con, COMP_HTTP_REMOTE_IP); /* Client-IP */
 		config_patch_connection(srv, con, COMP_HTTP_REFERER);   /* Referer:     */

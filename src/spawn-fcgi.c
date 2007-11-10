@@ -151,7 +151,7 @@ int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const 
 				/* loose control terminal */
 				setsid();
 
-				/* is save as we limit to 256 childs */
+				/* is safe as we limit to 256 childs */
 				sprintf(cgi_childs, "PHP_FCGI_CHILDREN=%d", child_count);
 
 				if(fcgi_fd != FCGI_LISTENSOCK_FILENO) {

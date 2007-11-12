@@ -41,7 +41,7 @@ typedef int socklen_t;
 #endif
 
 #ifdef HAVE_SYS_UN_H
-int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const char *unixsocket, int fork_count, int child_count, int pid_fd, int nofork) {
+int fcgi_spawn_connection(char *appPath, char **appArgv, char *addr, unsigned short port, const char *unixsocket, int fork_count, int child_count, int pid_fd, int nofork) {
 	int fcgi_fd;
 	int socket_type, status;
 	struct timeval tv = { 0, 100 * 1000 };
@@ -143,7 +143,6 @@ int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const 
 			switch (child) {
 			case 0: {
 				char cgi_childs[64];
-				char *b;
 				int max_fd = 0;
 
 				int i = 0;
@@ -180,12 +179,17 @@ int fcgi_spawn_connection(char *appPath, char *addr, unsigned short port, const 
 				putenv(cgi_childs);
 
 				/* fork and replace shell */
-				b = malloc(strlen("exec ") + strlen(appPath) + 1);
-				strcpy(b, "exec ");
-				strcat(b, appPath);
+				if (appArgv) {
+					execv(appArgv[0], appArgv);
 
-				/* exec the cgi */
-				execl("/bin/sh", "sh", "-c", b, (char *)NULL);
+				} else {
+					char *b = malloc(strlen("exec ") + strlen(appPath) + 1);
+					strcpy(b, "exec ");
+					strcat(b, appPath);
+
+					/* exec the cgi */
+					execl("/bin/sh", "sh", "-c", b, (char *)NULL);
+				}
 
 				exit(errno);
 
@@ -264,9 +268,12 @@ void show_version () {
 }
 
 void show_help () {
-	char *b = "spawn-fcgi" "-" PACKAGE_VERSION \
-" - spawns fastcgi processes\n" \
-"usage:\n" \
+	char *b = \
+"Usage: spawn-fcgi [options] -- <fcgiapp> [fcgi app arguments]\n" \
+"\n" \
+"spawn-fcgi v" PACKAGE_VERSION " - spawns fastcgi processes\n" \
+"\n" \
+"Options:\n" \
 " -f <fcgiapp> filename of the fcgi-application\n" \
 " -a <addr>    bind to ip address\n" \
 " -p <port>    bind to tcp-port\n" \
@@ -290,6 +297,7 @@ int main(int argc, char **argv) {
 	char *fcgi_app = NULL, *changeroot = NULL, *username = NULL,
                *groupname = NULL, *unixsocket = NULL, *pid_file = NULL,
                 *addr = NULL;
+	char **fcgi_app_argv = { NULL };
 	unsigned short port = 0;
 	int child_count = 5;
 	int fork_count = 1;
@@ -300,7 +308,7 @@ int main(int argc, char **argv) {
 
 	i_am_root = (getuid() == 0);
 
-       while (-1 != (o = getopt(argc, argv, "c:f:g:hna:p:u:vC:F:s:P:"))) {
+	while (-1 != (o = getopt(argc, argv, "c:f:g:hna:p:u:vC:F:s:P:"))) {
 		switch(o) {
 		case 'f': fcgi_app = optarg; break;
 		case 'a': addr = optarg;/* ip addr */ break;
@@ -321,7 +329,11 @@ int main(int argc, char **argv) {
 		}
 	}
 
-	if (fcgi_app == NULL || (port == 0 && unixsocket == NULL)) {
+	if (optind < argc) {
+		fcgi_app_argv = &argv[optind];
+	}
+
+	if ((fcgi_app == NULL && fcgi_app_argv == NULL) || (port == 0 && unixsocket == NULL)) {
 		show_help();
 		return -1;
 	}
@@ -461,7 +473,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
-       return fcgi_spawn_connection(fcgi_app, addr, port, unixsocket, fork_count, child_count, pid_fd, nofork);
+       return fcgi_spawn_connection(fcgi_app, fcgi_app_argv, addr, port, unixsocket, fork_count, child_count, pid_fd, nofork);
 }
 #else
 int main() {

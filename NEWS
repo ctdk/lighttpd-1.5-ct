@@ -9,17 +9,18 @@ NEWS
   * fixed several crashes in log-request-handling with %s being NULL on solaris
   * fixed network-backend-solaris-sendfilev (EINVAL in writev())
   * fixed initgroups() called after chroot (#1384)
+  * execute fcgi app without /bin/sh if used as argument to spawn-fcgi (#1428)
 
 - 1.5.0-r19.. - 
   * -F option added for spawn-fcgi
   * replaced mod_fastcgi, mod_scgi, mod_proxy with mod_proxy_core + backends
   * added query-string parsing for mod_uploadprogress
-  * added threaded stat() 
+  * added threaded stat()
   * added threaded disk-read() support
   * added dir-listing.set-footer in mod_dirlisting (#1277)
   * added logging of the PID and UID of the sending process for SIGTERM and SIGINT
   * added support for AJP13 to mod_proxy_core
-  * fixed the out-of-fd support 
+  * fixed the out-of-fd support
   * fixed crash in mod_expire if 'modification' is used and stat() failed (#1063)
   * fixed hardcoded font-sizes in mod_dirlisting (#1267)
   * fixed different ETag length on 32/64 platforms (#1279)
@@ -34,5 +35,5 @@ NEWS
   * fixed crash with md5-sess and cnonce not set in mod_auth (reported by Stefan Esser)
   * fixed missing check for base64 encoded string in mod_auth and Basic auth
     (reported by Stefan Esser)
-  * fixed possible crash in Auth-Digest header parser on trailing WS in 
+  * fixed possible crash in Auth-Digest header parser on trailing WS in
     mod_auth (reported by Stefan Esser)

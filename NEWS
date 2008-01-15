@@ -3,15 +3,16 @@
 NEWS
 ====
 
-- 1.5.0 - 
+- 1.5.0 -
   * fixed decoding of common headers in AJP13 (#1399)
   * disable experimental linux-aio and posix-aio support, use gthread-aio instead
   * fixed several crashes in log-request-handling with %s being NULL on solaris
   * fixed network-backend-solaris-sendfilev (EINVAL in writev())
   * fixed initgroups() called after chroot (#1384)
   * execute fcgi app without /bin/sh if used as argument to spawn-fcgi (#1428)
+  * fix bug that rrdtool reports "0" for incoming data (#1514)
 
-- 1.5.0-r19.. - 
+- 1.5.0-r19.. -
   * -F option added for spawn-fcgi
   * replaced mod_fastcgi, mod_scgi, mod_proxy with mod_proxy_core + backends
   * added query-string parsing for mod_uploadprogress

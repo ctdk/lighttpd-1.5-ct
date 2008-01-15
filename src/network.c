@@ -675,16 +675,22 @@ int network_register_fdevents(server *srv) {
 
 network_status_t network_read(server *srv, connection *con, iosocket *sock, chunkqueue *cq) {
 	server_socket *srv_socket = con->srv_socket;
+	network_status_t ret = NETWORK_STATUS_UNSET;
+	off_t start_bytes_in = cq->bytes_in;
 
    	if (srv_socket->is_ssl) {
 #ifdef USE_OPENSSL
-		return srv->network_ssl_backend_read(srv, con, sock, cq);
+		ret = srv->network_ssl_backend_read(srv, con, sock, cq);
 #else
-		return NETWORK_STATUS_FATAL_ERROR;
+		ret = NETWORK_STATUS_FATAL_ERROR;
 #endif
 	} else {
-		return srv->network_backend_read(srv, con, sock, cq);
+		ret =  srv->network_backend_read(srv, con, sock, cq);
 	}
+
+	con->bytes_read += cq->bytes_in - start_bytes_in;
+
+	return ret;
 }
 
 network_status_t network_write_chunkqueue(server *srv, connection *con, chunkqueue *cq) {

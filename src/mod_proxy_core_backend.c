@@ -36,9 +36,9 @@ proxy_backends *proxy_backends_init(void) {
 }
 
 void proxy_backends_free(proxy_backends *backends) {
-	FOREACH(backends, proxy_backend, element, proxy_backend_free(element))
-
-	if (backends->ptr) free(backends->ptr);
+	if (!backends) return;
+	
+	ARRAY_STATIC_FREE(backends, proxy_backend, element, proxy_backend_free(element));
 
 	free(backends);
 }

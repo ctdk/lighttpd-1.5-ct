@@ -61,9 +61,7 @@ void proxy_rewrites_add(proxy_rewrites *rewrites, proxy_rewrite *rewrite) {
 void proxy_rewrites_free(proxy_rewrites *rewrites) {
 	if (!rewrites) return;
 
-	FOREACH(rewrites, proxy_rewrite, rewrite, proxy_rewrite_free(rewrite))
-
-	if (rewrites->ptr) free(rewrites->ptr);
+	ARRAY_STATIC_FREE(rewrites, proxy_rewrite, rewrite, proxy_rewrite_free(rewrite));
 
 	free(rewrites);
 }

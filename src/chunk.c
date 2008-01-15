@@ -294,8 +294,8 @@ int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in) {
 
 	c->type = FILE_CHUNK;
 	buffer_copy_string_buffer(c->file.name, in->file.name);
-	c->file.start = in->offset;
-	c->file.length = in->file.length - c->file.start - in->offset;
+	c->file.start = in->file.start + in->offset;
+	c->file.length = in->file.length - in->offset;
 	c->offset = 0;
 	c->file.is_temp = 1;
 	in->file.is_temp = 0;
@@ -306,36 +306,43 @@ int chunkqueue_steal_tempfile(chunkqueue *cq, chunk *in) {
 }
 
 /**
- * move the content of chunk to another chunkqueue
+ * move the content of chunk to another chunkqueue. return total bytes copied/stolen.
  */
-int chunkqueue_steal_chunk(chunkqueue *cq, chunk *c) {
+off_t chunkqueue_steal_chunk(chunkqueue *cq, chunk *c) {
 	/* we are copying the whole buffer, just steal it */
-	size_t len;
-	char *s;
-	buffer *b;
+	off_t total = 0;
+	buffer *b, btmp;
 
 	if (!cq) return 0;
+	if (chunk_is_done(c)) return 0;
 
-	assert(c->type == MEM_CHUNK);
+	switch (c->type) {
+	case MEM_CHUNK:
+		total = c->mem->used - c->offset - 1;
+		if (c->offset == 0) {
+			b = chunkqueue_get_append_buffer(cq);
+			btmp = *b; *b = *(c->mem); *(c->mem) = btmp;
+		} else {
+			chunkqueue_append_mem(cq, c->mem->ptr + c->offset, total);
+			chunk_set_done(c);
+		}
+		break;
+	case FILE_CHUNK:
+		total = c->file.length - c->offset;
 
-	b = chunkqueue_get_append_buffer(cq);
+		if (c->file.is_temp) {
+			chunkqueue_steal_tempfile(cq, c);
+		} else {
+			chunkqueue_append_file(cq, c->file.name, c->file.start + c->offset, c->file.length - c->offset);
+			chunk_set_done(c);
+		}
 
-	/* swap len, alloced-size and pointer */
-	len = b->used;
-	b->used = c->mem->used;
-	c->mem->used = len;
+		break;
+	case UNUSED_CHUNK:
+		return 0;
+	}
 
-	len = b->size;
-	b->size = c->mem->size;
-	c->mem->size = len;
-
-	s = b->ptr;
-	b->ptr = c->mem->ptr;
-	c->mem->ptr = s;
-
-	chunk_set_done(c); /* mark the old chunk as read */
-
-	return 0;
+	return total;
 }
 
 /*
@@ -349,38 +356,7 @@ off_t chunkqueue_steal_all_chunks(chunkqueue *cq, chunkqueue *in) {
 	if (!cq || !in) return 0;
 
 	for (c = in->first; c; c = c->next) {
-		off_t we_have = 0;
-
-		/* is there something to move ? */
-		if (chunk_is_done(c)) continue;
-
-		switch (c->type) {
-		case MEM_CHUNK:
-			we_have = c->mem->used - c->offset - 1;
-			
-			if (c->offset == 0) {
-				chunkqueue_steal_chunk(cq, c);
-			} else {
-				chunkqueue_append_buffer(cq, c->mem);
-			}
-			break;
-		case FILE_CHUNK:
-			we_have = c->file.length - c->offset;
-
-			if (c->file.is_temp) {
-				chunkqueue_steal_tempfile(cq, c);
-			} else {
-				chunkqueue_append_file(cq, c->file.name, c->file.start, c->file.length);
-			}
-
-			break;
-		case UNUSED_CHUNK:
-			break;
-		}
-		
-		chunk_set_done(c);
-
-		total += we_have;
+		total += chunkqueue_steal_chunk(cq, c);
 	}
 
 	return total;
@@ -449,7 +425,7 @@ off_t chunkqueue_steal_chunks_len(chunkqueue *out, chunk *c, off_t max_len) {
 	
 			we_want = we_have < max_len ? we_have : max_len;
 	
-			if (c->offset == 0 && we_have == we_want) {
+			if (we_have == we_want) {
 				/* steal whole chunk */
 				chunkqueue_steal_chunk(out, c);
 			} else {
@@ -540,7 +516,7 @@ int chunkqueue_append_mem(chunkqueue *cq, const char * mem, size_t len) {
 	c = chunkpool_get_unused_chunk();
 	c->type = MEM_CHUNK;
 	c->offset = 0;
-	buffer_copy_string_len(c->mem, mem, len - 1);
+	buffer_copy_string_len(c->mem, mem, len);
 
 	chunkqueue_append_chunk(cq, c);
 

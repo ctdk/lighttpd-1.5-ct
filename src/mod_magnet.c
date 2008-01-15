@@ -584,7 +584,7 @@ static int magnet_attach_content(server *srv, connection *con, plugin_data *p, l
 				size_t s_len = 0;
 				const char *s = lua_tolstring(L, -1, &s_len);
 
-				chunkqueue_append_mem(con->send, s, s_len + 1);
+				chunkqueue_append_mem(con->send, s, s_len);
 			} else if (lua_istable(L, -1)) {
 				lua_getfield(L, -1, "filename");
 				lua_getfield(L, -2, "length");

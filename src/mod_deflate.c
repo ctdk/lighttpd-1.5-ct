@@ -395,7 +395,7 @@ static int stream_deflate_compress(server *srv, connection *con, handler_ctx *hc
 		if(z->avail_out == 0 || z->avail_in > 0) {
 			len = hctx->output->size - z->avail_out;
 			out += len;
-			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len+1);
+			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len);
 			hctx->out->bytes_in += len;
 			z->next_out = (unsigned char *)hctx->output->ptr;
 			z->avail_out = hctx->output->size;
@@ -460,7 +460,7 @@ static int stream_deflate_flush(server *srv, connection *con, handler_ctx *hctx,
 		len = hctx->output->size - z->avail_out;
 		if(z->avail_out == 0 || (flush && len > 0)) {
 			out += len;
-			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len+1);
+			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len);
 			hctx->out->bytes_in += len;
 			z->next_out = (unsigned char *)hctx->output->ptr;
 			z->avail_out = hctx->output->size;
@@ -504,7 +504,7 @@ static int stream_deflate_end(server *srv, connection *con, handler_ctx *hctx) {
 		c[6] = (z->total_in >> 16) & 0xff;
 		c[7] = (z->total_in >> 24) & 0xff;
 		/* append footer to write_queue */
-		chunkqueue_append_mem(hctx->out, (char *)c, 9);
+		chunkqueue_append_mem(hctx->out, (char *)c, 8);
 		hctx->out->bytes_in += 8;
 		if(p->conf.debug) {
 			log_error_write(srv, __FILE__, __LINE__, "sd",
@@ -604,7 +604,7 @@ static int stream_bzip2_compress(server *srv, connection *con, handler_ctx *hctx
 		if(bz->avail_out == 0 || bz->avail_in > 0) {
 			len = hctx->output->size - bz->avail_out;
 			out += len;
-			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len+1);
+			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len);
 			hctx->out->bytes_in += len;
 			bz->next_out = hctx->output->ptr;
 			bz->avail_out = hctx->output->size;
@@ -661,7 +661,7 @@ static int stream_bzip2_flush(server *srv, connection *con, handler_ctx *hctx, i
 		len = hctx->output->size - bz->avail_out;
 		if(bz->avail_out == 0 || (flush && len > 0)) {
 			out += len;
-			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len+1);
+			chunkqueue_append_mem(hctx->out, hctx->output->ptr, len);
 			hctx->out->bytes_in += len;
 			bz->next_out = hctx->output->ptr;
 			bz->avail_out = hctx->output->size;

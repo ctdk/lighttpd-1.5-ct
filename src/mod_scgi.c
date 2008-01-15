@@ -1736,11 +1736,7 @@ static int scgi_demux_response(server *srv, handler_ctx *hctx) {
 	* for now we wait for EOF on the socket */
 
 	/* copy the content to the next cq */
-	for (c = hctx->rb->first; c; c = c->next) {
-		chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-
-		c->offset = c->mem->used - 1;
-	}
+	chunkqueue_steal_all_chunks(con->send, hctx->rb);
 
 	chunkqueue_remove_finished_chunks(hctx->rb);
 	joblist_append(srv, con);

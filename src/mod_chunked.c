@@ -335,14 +335,14 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 		case UNUSED_CHUNK:
 			break;
 		}
-		chunkqueue_append_mem(out, "\r\n", 2 + 1);
+		chunkqueue_append_mem(out, CONST_STR_LEN("\r\n"));
 		we_have += 2;
 		out->bytes_in += we_have;
 	}
 
 	/* terminate the last chunk */
 	if (in->is_closed) {
-		chunkqueue_append_mem(out, "0\r\n\r\n", 5 + 1);
+		chunkqueue_append_mem(out, CONST_STR_LEN("0\r\n\r\n"));
 		out->bytes_in += 5;
 	}
 

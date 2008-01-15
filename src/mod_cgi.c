@@ -257,18 +257,9 @@ static int cgi_copy_response(server *srv, connection *con, cgi_session *sess) {
 	for (c = sess->rb->first; c; c = c->next) {
 		if (c->mem->used == 0) continue;
 
-		we_have = c->mem->used - c->offset - 1;
+		we_have = chunkqueue_steal_chunk(con->send, c);
 		sess->rb->bytes_out += we_have;
 		con->send->bytes_in += we_have;
-		if (c->offset == 0) {
-			/* steal the buffer from the previous queue */
-
-			chunkqueue_steal_chunk(con->send, c);
-		} else {
-			chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-
-			c->offset = c->mem->used - 1; /* mark the incoming side as read */
-		}
 	}
 	chunkqueue_remove_finished_chunks(sess->rb);
 

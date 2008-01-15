@@ -526,18 +526,10 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 		if (sess->send_response_content) {
 			con->send->bytes_in += we_have;
 			/* X-Sendfile ignores the content-body */
-			if (c->offset == 0) {
-				/* steal the buffer from the previous queue */
-
-				chunkqueue_steal_chunk(con->send, c);
-			} else {
-				chunkqueue_append_mem(con->send, c->mem->ptr + c->offset, c->mem->used - c->offset);
-
-				c->offset = c->mem->used - 1; /* mark the incoming side as read */
-			}
+			chunkqueue_steal_chunk(con->send, c);
 		} else {
 			/* discard the data */
-			c->offset = c->mem->used - 1; /* mark the incoming side as read */
+			chunk_set_done(c);
 		}
 	}
 	chunkqueue_remove_finished_chunks(sess->recv);

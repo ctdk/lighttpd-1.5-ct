@@ -60,7 +60,7 @@ void proxy_address_pool_add(proxy_address_pool *address_pool, proxy_address *add
 		}
 	}
 
-	TRACE("adding %s to the address-pool", BUF_STR(address->name));
+	/* TRACE("adding %s to the address-pool", BUF_STR(address->name)); */
 
 	ARRAY_STATIC_PREPARE_APPEND(address_pool);
 

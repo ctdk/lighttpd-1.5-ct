@@ -11,6 +11,7 @@ NEWS
   * fixed initgroups() called after chroot (#1384)
   * execute fcgi app without /bin/sh if used as argument to spawn-fcgi (#1428)
   * fix bug that rrdtool reports "0" for incoming data (#1514)
+  * ssl.cipher-list and ssl.use-sslv2 ported from 1.4.x (#1422)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

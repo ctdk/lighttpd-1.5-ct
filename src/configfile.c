@@ -97,6 +97,8 @@ static int config_insert(server *srv) {
 		{ "server.max-read-threads",    NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 49 */
 		{ "server.max-connection-idle",  NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },   /* 50 */
 		{ "debug.log-timing",            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 51 */
+		{ "ssl.cipher-list",             NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 52 */
+		{ "ssl.use-sslv2",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 53 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -162,6 +164,8 @@ static int config_insert(server *srv) {
 		s->error_handler = buffer_init();
 		s->server_tag    = buffer_init();
 		s->errorfile_prefix = buffer_init();
+		s->ssl_cipher_list = buffer_init();
+		s->ssl_use_sslv2 = 0;
 		s->max_keep_alive_requests = 16;
 		s->max_keep_alive_idle = 5;
 		s->max_read_idle = 60;
@@ -219,6 +223,8 @@ static int config_insert(server *srv) {
 		cv[40].destination = &(s->range_requests);
 
 		cv[50].destination = &(s->max_connection_idle);
+		cv[52].destination = s->ssl_cipher_list;
+		cv[53].destination = &(s->ssl_use_sslv2);
 
 		srv->config_storage[i] = s;
 
@@ -289,6 +295,8 @@ int config_setup_connection(server *srv, connection *con) {
 
 	PATCH(ssl_pemfile);
 	PATCH(ssl_ca_file);
+	PATCH(ssl_cipher_list);
+	PATCH(ssl_use_sslv2);
 	return 0;
 }
 
@@ -340,6 +348,10 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(ssl_ca_file);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.engine"))) {
 				PATCH(is_ssl);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.cipher-list"))) {
+				PATCH(ssl_cipher_list);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.use-sslv2"))) {
+				PATCH(ssl_use_sslv2);
 #ifdef HAVE_LSTAT
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.follow-symlink"))) {
 				PATCH(follow_symlink);

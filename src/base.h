@@ -298,6 +298,8 @@ typedef struct {
 	/* server wide */
 	buffer *ssl_pemfile;
 	buffer *ssl_ca_file;
+	buffer *ssl_cipher_list;
+	unsigned short ssl_use_sslv2;
 	unsigned short use_ipv6;
 	unsigned short is_ssl;
 	unsigned short allow_http11;
@@ -305,7 +307,7 @@ typedef struct {
 	unsigned int max_request_size;
 
 	unsigned short kbytes_per_second; /* connection kb/s limit */
-
+	
 	/* configside */
 	unsigned short global_kbytes_per_second; /*  */
 
@@ -569,6 +571,8 @@ typedef struct {
 
 	buffer *ssl_pemfile;
 	buffer *ssl_ca_file;
+	buffer *ssl_cipher_list;
+	unsigned short ssl_use_sslv2;
 	unsigned short use_ipv6;
 	unsigned short is_ssl;
 

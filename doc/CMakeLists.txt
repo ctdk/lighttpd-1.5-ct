@@ -18,7 +18,6 @@ SET(L_DOCS
 	fastcgi-state.txt
 	fastcgi.txt
 	features.txt
-	mysqlvhost.txt
 	performance.txt
 	plugins.txt
 	proxy.txt

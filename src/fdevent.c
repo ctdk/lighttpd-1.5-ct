@@ -340,14 +340,14 @@ int fdevent_event_add(fdevents *ev, iosocket *sock, int events) {
 }
 
 int fdevent_poll(fdevents *ev, int timeout_ms) {
-	if (ev->poll == NULL) SEGFAULT("ev->poll is %p", ev->poll);
+	if (ev->poll == NULL) SEGFAULT("ev->poll is %p", (void*) (intptr_t) ev->poll);
 	return ev->poll(ev, timeout_ms);
 }
 
 int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *revents) {
 	size_t i;
 
-	if (ev->get_revents == NULL) SEGFAULT("ev->get_revents is %p", ev->get_revents);
+	if (ev->get_revents == NULL) SEGFAULT("ev->get_revents is %p", (void*) (intptr_t)  ev->get_revents);
 
 	fdevent_revents_reset(revents);
 

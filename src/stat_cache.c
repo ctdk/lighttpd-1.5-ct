@@ -194,6 +194,7 @@ static void stat_cache_entry_free(void *data) {
 
 #ifdef HAVE_GLIB_H
 gboolean stat_cache_free_hrfunc(gpointer _key, gpointer _value, gpointer _user_data) {
+	UNUSED(_user_data);
 	stat_cache_entry *sce = _value;
 	buffer *b = _key;
 
@@ -243,6 +244,9 @@ handler_t stat_cache_handle_fdevent(void *_srv, void *_fce, int revent) {
 #ifdef HAVE_SYS_INOTIFY_H
 	case STAT_CACHE_ENGINE_INOTIFY:
 		return stat_cache_handle_fdevent_inotify(_srv, _fce, revent);
+#else
+	UNUSED(_fce);
+	UNUSED(revent);
 #endif
 	default:
 		return HANDLER_GO_ON;
@@ -262,6 +266,8 @@ static int stat_cache_lstat(server *srv, buffer *dname, struct stat *lst) {
 #endif
 
 static int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
+	UNUSED(srv);
+	UNUSED(sce);
 	return 1;
 }
 

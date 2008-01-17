@@ -321,7 +321,7 @@ int log_trace(const char *fmt, ...) {
 		l = vsnprintf(b->ptr, b->size, fmt, ap);
 		va_end(ap);
 
-		if (l > -1 && l < b->size) {
+		if (l > -1 && ((unsigned int) l) < b->size) {
 			b->used = l + 1;
 
 			break;

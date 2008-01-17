@@ -113,7 +113,7 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 	switch (sig) {
 	case SIGTERM: 
 		srv_shutdown = 1; 
-		memcpy(&last_sigterm_info, si, sizeof(*si));
+		memcpy((siginfo_t*) &last_sigterm_info, si, sizeof(*si));
 		break;
 	case SIGINT:
 		if (graceful_shutdown) {
@@ -122,7 +122,7 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 			graceful_shutdown = 1;
 		}
 
-		memcpy(&last_sigterm_info, si, sizeof(*si));
+		memcpy((siginfo_t*) &last_sigterm_info, si, sizeof(*si));
 
 		break;
 	case SIGALRM: 
@@ -130,7 +130,7 @@ static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 		break;
 	case SIGHUP: 
 		handle_sig_hup = 1; 
-		memcpy(&last_sighup_info, si, sizeof(*si));
+		memcpy((siginfo_t*) &last_sighup_info, si, sizeof(*si));
 		break;
 	case SIGCHLD: 
 		break;
@@ -1036,7 +1036,9 @@ int main (int argc, char **argv, char **envp) {
 	int need_joblist_queue_thread = 0;
 	GThread **stat_cache_threads;
 	GThread **aio_write_threads = NULL;
+#ifdef USE_LINUX_AIO_SENDFILE
 	GThread *linux_aio_read_thread_id = NULL;
+#endif
 	GThread * joblist_queue_thread_id = NULL;
 	GError *gerr = NULL;
 #endif

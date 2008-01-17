@@ -11,6 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 extern void qsort();
 extern double strtod();
@@ -976,10 +977,9 @@ struct lemon *lemp;
 ** If either action is a SHIFT, then it must be apx.  This
 ** function won't work if apx->type==REDUCE and apy->type==SHIFT.
 */
-static int resolve_conflict(apx,apy,errsym)
+static int resolve_conflict(apx,apy)
 struct action *apx;
 struct action *apy;
-struct symbol *errsym;   /* The error symbol (if defined.  NULL otherwise) */
 {
   struct symbol *spx, *spy;
   int errcnt = 0;
@@ -1326,6 +1326,7 @@ int main(argc,argv)
 int argc;
 char **argv;
 {
+  ( (void) argc ); // UNUSED(argc)
   static int version = 0;
   static int rpflag = 0;
   static int basisflag = 0;
@@ -1651,7 +1652,7 @@ FILE *err;
   }else if( op[j].type==OPT_FLAG ){
     *((int*)op[j].arg) = v;
   }else if( op[j].type==OPT_FFLAG ){
-    (*(void(*)())(op[j].arg))(v);
+    (*(void(*)())((intptr_t)op[j].arg))(v);
   }else{
     if( err ){
       fprintf(err,"%smissing argument on switch.\n",emsg);
@@ -1733,19 +1734,19 @@ FILE *err;
         *(double*)(op[j].arg) = dv;
         break;
       case OPT_FDBL:
-        (*(void(*)())(op[j].arg))(dv);
+        (*(void(*)())((intptr_t)op[j].arg))(dv);
         break;
       case OPT_INT:
         *(int*)(op[j].arg) = lv;
         break;
       case OPT_FINT:
-        (*(void(*)())(op[j].arg))((int)lv);
+        (*(void(*)())((intptr_t)op[j].arg))((int)lv);
         break;
       case OPT_STR:
         *(char**)(op[j].arg) = sv;
         break;
       case OPT_FSTR:
-        (*(void(*)())(op[j].arg))(sv);
+        (*(void(*)())((intptr_t)op[j].arg))(sv);
         break;
     }
   }

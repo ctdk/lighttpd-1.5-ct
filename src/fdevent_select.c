@@ -54,7 +54,6 @@ static int fdevent_select_event_del(fdevents *ev, iosocket *sock) {
 static int fdevent_select_event_add(fdevents *ev, iosocket *sock, int events) {
 	/* we should be protected by max-fds, but you never know */
 #ifndef _WIN32
-	u_int i;
 	assert(sock->fd < FD_SETSIZE);
 #endif
 

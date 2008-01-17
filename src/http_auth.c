@@ -487,25 +487,25 @@ static void apr_md5_encode(const char *pw, const char *salt, char *result, size_
     /*
      * The password first, since that is what is most unknown
      */
-    MD5_Update(&ctx, pw, strlen(pw));
+    MD5_Update(&ctx, (const unsigned char*) pw, strlen(pw));
 
     /*
      * Then our magic string
      */
-    MD5_Update(&ctx, APR1_ID, strlen(APR1_ID));
+    MD5_Update(&ctx, (const unsigned char*) APR1_ID, strlen(APR1_ID));
 
     /*
      * Then the raw salt
      */
-    MD5_Update(&ctx, sp, sl);
+    MD5_Update(&ctx, (const unsigned char*) sp, sl);
 
     /*
      * Then just as many characters of the MD5(pw, salt, pw)
      */
     MD5_Init(&ctx1);
-    MD5_Update(&ctx1, pw, strlen(pw));
-    MD5_Update(&ctx1, sp, sl);
-    MD5_Update(&ctx1, pw, strlen(pw));
+    MD5_Update(&ctx1, (const unsigned char*) pw, strlen(pw));
+    MD5_Update(&ctx1, (const unsigned char*) sp, sl);
+    MD5_Update(&ctx1, (const unsigned char*) pw, strlen(pw));
     MD5_Final(final, &ctx1);
     for (pl = strlen(pw); pl > 0; pl -= APR_MD5_DIGESTSIZE) {
         MD5_Update(&ctx, final,
@@ -525,7 +525,7 @@ static void apr_md5_encode(const char *pw, const char *salt, char *result, size_
             MD5_Update(&ctx, final, 1);
         }
         else {
-            MD5_Update(&ctx, pw, 1);
+            MD5_Update(&ctx, (const unsigned char*) pw, 1);
         }
     }
 
@@ -547,24 +547,24 @@ static void apr_md5_encode(const char *pw, const char *salt, char *result, size_
     for (i = 0; i < 1000; i++) {
         MD5_Init(&ctx1);
         if (i & 1) {
-            MD5_Update(&ctx1, pw, strlen(pw));
+            MD5_Update(&ctx1, (const unsigned char*) pw, strlen(pw));
         }
         else {
             MD5_Update(&ctx1, final, APR_MD5_DIGESTSIZE);
         }
         if (i % 3) {
-            MD5_Update(&ctx1, sp, sl);
+            MD5_Update(&ctx1, (const unsigned char*) sp, sl);
         }
 
         if (i % 7) {
-            MD5_Update(&ctx1, pw, strlen(pw));
+            MD5_Update(&ctx1, (const unsigned char*) pw, strlen(pw));
         }
 
         if (i & 1) {
             MD5_Update(&ctx1, final, APR_MD5_DIGESTSIZE);
         }
         else {
-            MD5_Update(&ctx1, pw, strlen(pw));
+            MD5_Update(&ctx1, (const unsigned char*) pw, strlen(pw));
         }
         MD5_Final(final,&ctx1);
     }

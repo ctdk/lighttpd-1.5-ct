@@ -333,7 +333,8 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 
 #ifdef HAVE_GLIB_H
 static gboolean cached_vhost_remove_expired(gpointer _key, gpointer _val, gpointer data) {
-	buffer *key       = _key;
+//	buffer *key       = _key;
+	UNUSED(_key);
 	cached_vhost *val = _val;
 	server *srv       = data;
 

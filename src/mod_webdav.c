@@ -1532,7 +1532,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		}
 
 		if (p->conf.log_xml) {
-			TRACE("XML-response-body: %s", b);
+			TRACE("XML-response-body: %s", BUF_STR(b));
 		}
 		con->send->is_closed = 1;
 

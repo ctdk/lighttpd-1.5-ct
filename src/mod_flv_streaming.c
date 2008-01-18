@@ -212,7 +212,7 @@ URIHANDLER_FUNC(mod_flv_streaming_path_handler) {
 			data_string *get_param;
 			stat_cache_entry *sce = NULL;
 			buffer *b;
-			int start;
+			long start;
 			char *err = NULL;
 			/* if there is a start=[0-9]+ in the header use it as start,
 			 * otherwise send the full file */

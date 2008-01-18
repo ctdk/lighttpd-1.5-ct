@@ -534,7 +534,7 @@ URIHANDLER_FUNC(mod_uploadprogress_response_header) {
 	}
 
 	if (p->conf.debug) {
-		TRACE("response_header: con=%p, http_method=%d, http_status=%d",con,
+		TRACE("response_header: con=%p, http_method=%d, http_status=%d", (void*) con,
 			con->request.http_method, con->http_status);
 	}
 

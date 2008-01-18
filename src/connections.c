@@ -1338,7 +1338,7 @@ int connection_state_machine(server *srv, connection *con) {
 					cq_len = chunkqueue_length(f->cq);
 					
 					if (cq_len > 0) {
-						TRACE("filter[%d] is not empty: %lld (report me)", f->id);
+						TRACE("filter[%d] is not empty: %lld (report me)", f->id, cq_len);
 					}
 				}
 			}

@@ -350,7 +350,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						}
 
 						if (r != c->file.copy.length) {
-							ERROR("read() returned %d instead of %d", r, c->file.copy.length);
+							ERROR("read() returned %d instead of %ju", r, c->file.copy.length);
 
 							return NETWORK_STATUS_FATAL_ERROR;
 						}

@@ -278,7 +278,7 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 	if (srv->cur_ts - ts > p->conf.timeout ||
 	    srv->cur_ts - ts < -p->conf.timeout) {
 		if (con->conf.log_request_handling) {
-			TRACE("timestamp is too old: %d, timeout: %d", ts, p->conf.timeout);
+			TRACE("timestamp is too old: %ld, timeout: %d", ts, p->conf.timeout);
 		}
 
 		con->http_status = 408;

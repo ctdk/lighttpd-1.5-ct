@@ -984,7 +984,7 @@ int lighty_mainloop(server *srv) {
 			}
 
 		} else if (n < 0 && poll_errno != EINTR) {
-			ERROR("fdevent_poll failed:", strerror(poll_errno));
+			ERROR("fdevent_poll failed: %s", strerror(poll_errno));
 		}
 
 		/*

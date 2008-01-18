@@ -184,7 +184,7 @@ static http_req_parser_t http_req_tokenizer(
 			if (t->c == t->lookup_c &&
 				t->offset == t->lookup_offset + 1) {
 
-				ERROR("invalid char (%d) at pos: %d", t->c, t->offset);
+				ERROR("invalid char (%d) at pos: %d", c, t->offset);
 				return PARSER_ERROR;
 			}
 

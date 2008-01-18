@@ -302,7 +302,7 @@ static int ajp13_decode_string(buffer *str, ajp13_state_data *data, int is_heade
 	/* copy string from buffer. */
 	if (p == NULL) {
 		if ((data->buf->used - data->offset) <= (len + 1)) {
-			ERROR("we have %d bytes, but a partial-string wants %d. no way", (data->buf->used - data->offset), len);
+			ERROR("we have %ju bytes, but a partial-string wants %zu. no way", (data->buf->used - data->offset), len);
 			return -1;
 		}
 		p = data->buf->ptr + data->offset;

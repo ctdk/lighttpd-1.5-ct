@@ -56,10 +56,10 @@ static void write_job_free(write_job *wj) {
 static void timing_print(server *srv, connection *con) {
 	if (!srv->srvconf.log_timing) return;
 
-	TRACE("write-start: %d.%06d "
-	      "read-queue-wait: %d ms "
-	      "read-time: %d ms "
-	      "write-time: %d ms ",
+	TRACE("write-start: %ld.%06ld "
+	      "read-queue-wait: %ld ms "
+	      "read-time: %ld ms "
+	      "write-time: %ld ms ",
 	       con->timestamps[TIME_SEND_WRITE_START].tv_sec,
 	       con->timestamps[TIME_SEND_WRITE_START].tv_usec,
 

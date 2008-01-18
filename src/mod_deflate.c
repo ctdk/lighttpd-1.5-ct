@@ -879,7 +879,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 	}
 	if (mod_deflate_compress(srv, con, hctx,
 				(unsigned char *)start + (abs_offset - c->file.mmap.offset), toSend) < 0) {
-		ERROR("compress failed.", 0);
+		ERROR("%s", "compress failed.");
 		return -1;
 	}
 
@@ -952,7 +952,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 			we_want = we_have < max ? we_have : max;
 
 			if (mod_deflate_compress(srv, con, hctx, (unsigned char *)(c->mem->ptr + c->offset), we_want) < 0) {
-				ERROR("compress failed.", 0);
+				ERROR("%s", "compress failed.");
 				return HANDLER_ERROR;
 			}
 
@@ -966,7 +966,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 			we_want = we_have < max ? we_have : max;
 			
 			if ((we_want = mod_deflate_file_chunk(srv, con, hctx, c, we_want)) < 0) {
-				ERROR("compress file chunk failed.", 0);
+				ERROR("%s", "compress file chunk failed.");
 				return HANDLER_ERROR;
 			}
 			
@@ -1018,7 +1018,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	rc = mod_deflate_stream_flush(srv, con, hctx, end);
 
 	if (rc < 0) {
-		ERROR("flush error", 0);
+		ERROR("%s", "flush error");
 	}
 	
 	if (end) {
@@ -1124,7 +1124,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	/* is compression allowed */
 	if(!p->conf.enabled) {
 		if(p->conf.debug) {
-			TRACE("compression disabled.", 0);
+			TRACE("%s", "compression disabled.");
 		}
 		return HANDLER_GO_ON;
 	}
@@ -1173,7 +1173,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	/* get filter. */
 	fl = filter_chain_get_filter(con->send_filters, p->id);
 	if (!fl) {
-		if(p->conf.debug) TRACE("add deflate filter to filter chain", 0);
+		if(p->conf.debug) TRACE("%s", "add deflate filter to filter chain");
 		fl = filter_chain_create_filter(con->send_filters, p->id);
 	}
 	/* get our input and output chunkqueues. */
@@ -1212,7 +1212,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 			data_string *mimetype = (data_string *)p->conf.mimetypes->data[m];
 
 			if(p->conf.debug) {
-				TRACE("mime-type:", BUF_STR(mimetype->value));
+				TRACE("mime-type: %s", BUF_STR(mimetype->value));
 			}
 			if (strncmp(mimetype->value->ptr, ds->value->ptr, mimetype->value->used-1) == 0) {
 				/* mimetype found */

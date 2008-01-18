@@ -1004,7 +1004,8 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 		 * mod_proxy_connection_close_callback() frees the 
 		 */
 
-		ERROR("the session ctx is NULL: %p, expect a crash", sess);
+		ERROR("the session ctx is NULL: %p, expect a crash", (void*) sess);
+		// FIXME: do not dereference an known NULL ???
 	}
 
 	proxy_con = sess->proxy_con;
@@ -1444,7 +1445,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 
 			TRACE("connecting to address %s (%p) failed, disabling for 60 sec", 
 					BUF_STR(sess->proxy_con->address->name),
-					sess->proxy_con->address);
+					(void*) sess->proxy_con->address);
 			COUNTER_INC(sess->proxy_backend->requests_failed);
 
 			sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
@@ -1474,7 +1475,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			switch (sess->proxy_con->state) {
 			case PROXY_CONNECTION_STATE_CONNECTING:
 				if (0 != getsockopt(sess->proxy_con->sock->fd, SOL_SOCKET, SO_ERROR, &socket_error, &socket_error_len)) {
-					ERROR("getsockopt failed:", strerror(errno));
+					ERROR("getsockopt failed: %s", strerror(errno));
 	
 					return HANDLER_ERROR;
 				}

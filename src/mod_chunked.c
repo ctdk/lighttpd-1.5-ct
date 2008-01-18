@@ -202,7 +202,7 @@ URIHANDLER_FUNC(mod_chunked_response_header) {
 		con->response.content_length = chunkqueue_length(in);
 	}
 	if(con->response.content_length >= 0) {
-		if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%d", con->response.content_length);
+		if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%ju", con->response.content_length);
 		use_chunked = 0;
 	} else if (con->request.http_method != HTTP_METHOD_HEAD) {
 		/* a HEAD request never gets a chunk-encoding, but might stay with keep-alive

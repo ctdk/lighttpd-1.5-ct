@@ -479,7 +479,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 		 *  */
 		out->is_closed = 1;
 
-		TRACE("%ld / %ld -> %d", 
+		TRACE("%ju / %ju -> %d", 
 				in->bytes_in, in->bytes_out,
 				in->is_closed);
 

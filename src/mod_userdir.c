@@ -22,6 +22,7 @@ typedef struct {
 	array *include_user;
 	buffer *path;
 	buffer *basepath;
+	unsigned short letterhomes;
 } plugin_config;
 
 typedef struct {
@@ -90,6 +91,7 @@ SETDEFAULTS_FUNC(mod_userdir_set_defaults) {
 		{ "userdir.exclude-user",       NULL, T_CONFIG_ARRAY,  T_CONFIG_SCOPE_CONNECTION },       /* 1 */
 		{ "userdir.include-user",       NULL, T_CONFIG_ARRAY,  T_CONFIG_SCOPE_CONNECTION },       /* 2 */
 		{ "userdir.basepath",           NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },       /* 3 */
+		{ "userdir.letterhomes",	NULL, T_CONFIG_BOOLEAN,T_CONFIG_SCOPE_CONNECTION },	  /* 4 */
 		{ NULL,                         NULL, T_CONFIG_UNSET,  T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -105,11 +107,13 @@ SETDEFAULTS_FUNC(mod_userdir_set_defaults) {
 		s->include_user = array_init();
 		s->path = buffer_init();
 		s->basepath = buffer_init();
+		s->letterhomes = 0;
 
 		cv[0].destination = s->path;
 		cv[1].destination = s->exclude_user;
 		cv[2].destination = s->include_user;
 		cv[3].destination = s->basepath;
+		cv[4].destination = &(s->letterhomes);
 
 		p->config_storage[i] = s;
 
@@ -129,6 +133,7 @@ static int mod_userdir_patch_connection(server *srv, connection *con, plugin_dat
 	PATCH_OPTION(exclude_user);
 	PATCH_OPTION(include_user);
 	PATCH_OPTION(basepath);
+	PATCH_OPTION(letterhomes);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -150,6 +155,8 @@ static int mod_userdir_patch_connection(server *srv, connection *con, plugin_dat
 				PATCH_OPTION(include_user);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("userdir.basepath"))) {
 				PATCH_OPTION(basepath);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("userdir.letterhomes"))) {
+				PATCH_OPTION(letterhomes);
 			}
 		}
 	}
@@ -253,6 +260,10 @@ URIHANDLER_FUNC(mod_userdir_docroot_handler) {
 
 		buffer_copy_string_buffer(p->temp_path, p->conf.basepath);
 		PATHNAME_APPEND_SLASH(p->temp_path);
+		if (p->conf.letterhomes) {
+			buffer_append_string_len(p->temp_path, p->username->ptr, 1);
+			PATHNAME_APPEND_SLASH(p->temp_path);
+		}
 		buffer_append_string_buffer(p->temp_path, p->username);
 	}
 	PATHNAME_APPEND_SLASH(p->temp_path);

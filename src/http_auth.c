@@ -54,6 +54,7 @@
  */
 
 handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s);
+void auth_ldap_cleanup(ldap_plugin_config *p);
 
 static const char base64_pad = '=';
 
@@ -697,12 +698,13 @@ static int http_auth_basic_password_compare(server *srv, mod_auth_plugin_data *p
 		}
 	} else if (p->conf.auth_backend == AUTH_BACKEND_LDAP) {
 #ifdef USE_LDAP
-		LDAP *ldap;
-		LDAPMessage *lm, *first;
-		char *dn;
-		int ret;
+		LDAP *ldap = NULL;
+		LDAPMessage *lm = NULL, *first = NULL;
+		struct berval credentials;
+		char *dn = NULL;
+		int ret = 0;
 		char *attrs[] = { LDAP_NO_ATTRS, NULL };
-		size_t i;
+		size_t i = 0;
 
 		/* for now we stay synchronous */
 
@@ -737,36 +739,59 @@ static int http_auth_basic_password_compare(server *srv, mod_auth_plugin_data *p
 		if (p->conf.auth_ldap_allow_empty_pw != 1 && pw[0] == '\0')
 			return -1;
 
-		/* build filter */
-		buffer_copy_string_buffer(p->ldap_filter, p->conf.ldap_filter_pre);
-		buffer_append_string_buffer(p->ldap_filter, username);
-		buffer_append_string_buffer(p->ldap_filter, p->conf.ldap_filter_post);
-
-
 		/* 2. */
-		if (p->conf.ldap == NULL ||
-		    LDAP_SUCCESS != (ret = ldap_search_s(p->conf.ldap, p->conf.auth_ldap_basedn->ptr, LDAP_SCOPE_SUBTREE, p->ldap_filter->ptr, attrs, 0, &lm))) {
-			if (auth_ldap_init(srv, &p->conf) != HANDLER_GO_ON)
+
+		if (p->conf.ldap->ldap == NULL) {
+			if(auth_ldap_init(srv, &p->conf) != HANDLER_GO_ON)
 				return -1;
-			if (LDAP_SUCCESS != (ret = ldap_search_s(p->conf.ldap, p->conf.auth_ldap_basedn->ptr, LDAP_SCOPE_SUBTREE, p->ldap_filter->ptr, attrs, 0, &lm))) {
-
-			log_error_write(srv, __FILE__, __LINE__, "sssb",
-					"ldap:", ldap_err2string(ret), "filter:", p->ldap_filter);
-
-			return -1;
-			}
 		}
 
-		if (NULL == (first = ldap_first_entry(p->conf.ldap, lm))) {
-			log_error_write(srv, __FILE__, __LINE__, "s", "ldap ...");
+		/* build filter */
+		buffer_copy_string_buffer(p->ldap_filter, p->conf.ldap->ldap_filter_pre);
+		buffer_append_string_buffer(p->ldap_filter, username);
+		buffer_append_string_buffer(p->ldap_filter, p->conf.ldap->ldap_filter_post);
+
+		ret = ldap_search_ext_s(p->conf.ldap->ldap, p->conf.auth_ldap_basedn->ptr, LDAP_SCOPE_SUBTREE, p->ldap_filter->ptr, attrs, 0, NULL, NULL, NULL, 0, &lm);
+
+		if (ret == LDAP_SERVER_DOWN) {
+			log_error_write(srv, __FILE__, __LINE__, "s",
+				"ldap: server down, try to reconnect");
+
+			auth_ldap_cleanup(p->conf.ldap);
+
+			if(auth_ldap_init(srv, &p->conf) != HANDLER_GO_ON)
+				return -1;
+
+			log_error_write(srv, __FILE__, __LINE__, "s",
+				"ldap: successfully reconnected");
+		}
+
+		if (ret != LDAP_SUCCESS) {
+			log_error_write(srv, __FILE__, __LINE__, "sssb",
+					"ldap:", ldap_err2string(ret), ", filter:", p->ldap_filter);
+
+			return -1;
+		}
+
+		if (ldap_count_entries(p->conf.ldap->ldap, lm) > 1) {
+			log_error_write(srv, __FILE__, __LINE__, "ssb",
+				"ldap:", "more than one record returned, you might have to refine the filter:", p->ldap_filter);
+		}
+
+		first = ldap_first_entry(p->conf.ldap->ldap, lm);
+		if (first == NULL) {
+			ldap_get_option(p->conf.ldap->ldap, LDAP_OPT_ERROR_NUMBER, &ret);
+			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
 
 			ldap_msgfree(lm);
 
 			return -1;
 		}
 
-		if (NULL == (dn = ldap_get_dn(p->conf.ldap, first))) {
-			log_error_write(srv, __FILE__, __LINE__, "s", "ldap ...");
+		dn = ldap_get_dn(p->conf.ldap->ldap, first);
+		if (dn == NULL) {
+			ldap_get_option(p->conf.ldap->ldap, LDAP_OPT_ERROR_NUMBER, &ret);
+			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
 
 			ldap_msgfree(lm);
 
@@ -775,43 +800,62 @@ static int http_auth_basic_password_compare(server *srv, mod_auth_plugin_data *p
 
 		ldap_msgfree(lm);
 
-
 		/* 3. */
-		if (NULL == (ldap = ldap_init(p->conf.auth_ldap_hostname->ptr, LDAP_PORT))) {
-			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap ...", strerror(errno));
+		ret = ldap_initialize(&ldap, p->conf.auth_ldap_url->ptr);
+		if (ret) {
+			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
+
+			ldap_memfree(dn);
+
 			return -1;
 		}
 
-		ret = LDAP_VERSION3;
-		if (LDAP_OPT_SUCCESS != (ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION, &ret))) {
+		const int ldap_version = LDAP_VERSION3;
+		ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION, &ldap_version);
+		if (ret != LDAP_OPT_SUCCESS) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
 
-			ldap_unbind_s(ldap);
+			ldap_memfree(ldap);
+			ldap_memfree(dn);
 
 			return -1;
 		}
 
 		if (p->conf.auth_ldap_starttls == 1) {
-	 		if (LDAP_OPT_SUCCESS != (ret = ldap_start_tls_s(ldap, NULL,  NULL))) {
+			ret = ldap_start_tls_s(ldap, NULL,  NULL);
+	 		if (ret != LDAP_OPT_SUCCESS) {
 	 			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap startTLS failed:", ldap_err2string(ret));
 
-				ldap_unbind_s(ldap);
+				ldap_memfree(ldap);
+				ldap_memfree(dn);
 
 				return -1;
 	 		}
  		}
 
+		/* Don't initialize it using " = {...}" since upstream doesn't
+ 		 * guarantee an order and the compiler only issues a warning when
+		 * passing an int as the pointer and vice-versa.
+		 * We have to cast away the const since berval is a general struct,
+		 * but ldap_sasl_bind_s doesn't write to the *pw location
+		 */
+		credentials.bv_val = (char*)pw;
+		credentials.bv_len = strlen(pw);
 
-		if (LDAP_SUCCESS != (ret = ldap_simple_bind_s(ldap, dn, pw))) {
+		/* TODO: add funtionality to specify LDAP_SASL_EXTERNAL (or GSS-SPNEGO, etc.) */
+		ret = ldap_sasl_bind_s(ldap, dn, LDAP_SASL_SIMPLE, &credentials, NULL, NULL, NULL);
+		if (ret != LDAP_SUCCESS) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
 
-			ldap_unbind_s(ldap);
+			ldap_memfree(ldap);
+			ldap_memfree(dn);
 
 			return -1;
 		}
 
 		/* 5. */
-		ldap_unbind_s(ldap);
+		ldap_unbind_ext_s(ldap, NULL, NULL);
+		ldap_memfree(dn);
 
 		/* everything worked, good, access granted */
 

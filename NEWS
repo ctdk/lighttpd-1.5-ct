@@ -14,6 +14,7 @@ NEWS
   * ssl.cipher-list and ssl.use-sslv2 ported from 1.4.x (#1422)
   * add IdleServers and Scoreboard directives in ?auto mode for mod_status (#1507)
   * support letterhomes in mod_userdir (#1473)
+  * mod_auth ldap rework, most important change is being able to startup if ldap server is down (#1535)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

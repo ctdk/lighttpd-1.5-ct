@@ -188,6 +188,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 						/* no, but we have errno */
 						switch(errno) {
 						case EPIPE:
+						case ECONNRESET:
 							return NETWORK_STATUS_CONNECTION_CLOSE;
 						default:
 							log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:",
@@ -292,6 +293,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 							/* no, but we have errno */
 							switch(errno) {
 							case EPIPE:
+							case ECONNRESET:
 								return NETWORK_STATUS_CONNECTION_CLOSE;
 							default:
 								ERROR("SSL_write(): ssl-error: %d (ret = %d). errno=%d, %s",

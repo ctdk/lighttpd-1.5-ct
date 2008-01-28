@@ -15,6 +15,7 @@ NEWS
   * add IdleServers and Scoreboard directives in ?auto mode for mod_status (#1507)
   * support letterhomes in mod_userdir (#1473)
   * mod_auth ldap rework, most important change is being able to startup if ldap server is down (#1535)
+  * fixed ECONNRESET handling in network-openssl
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

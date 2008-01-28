@@ -16,7 +16,9 @@
 #include "sys-files.h"
 
 handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s);
+#ifdef USE_LDAP
 void auth_ldap_cleanup(ldap_plugin_config* p);
+#endif
 
 /**
  * the basic and digest auth framework
@@ -645,11 +647,13 @@ handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s) {
 		return HANDLER_GO_ON;
 }
 
+#ifdef USE_LDAP
 void auth_ldap_cleanup(ldap_plugin_config *p) {
 	if (p->ldap != NULL)
 		ldap_unbind_ext_s(p->ldap, NULL, NULL);
 	p->ldap = NULL;
 }
+#endif
 
 LI_EXPORT int mod_auth_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;

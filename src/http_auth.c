@@ -54,7 +54,9 @@
  */
 
 handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s);
+#ifdef USE_LDAP
 void auth_ldap_cleanup(ldap_plugin_config *p);
+#endif
 
 static const char base64_pad = '=';
 

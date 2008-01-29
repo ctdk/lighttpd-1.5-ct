@@ -762,13 +762,15 @@ else
 	disable_feature="$disable_feature $features"
 fi
 
+## libaio support is disabled above
+if false; then
 features="linux-libaio"
 if test ! "x$AIO_LIB" = x; then
 	enable_feature="$enable_feature $features"
 else
 	disable_feature="$disable_feature $features"
 fi
-
+fi
 
 
 ## output

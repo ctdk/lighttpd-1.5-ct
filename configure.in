@@ -446,44 +446,6 @@ PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.4.0, [
   AC_DEFINE([HAVE_GLIB_H], [1], [glib.h])
 ])
 
-if false; then
-	dnl async-io doesn't work for all file-systems 
-	dnl we disable it here in the configure checks 
-	dnl and in settings.h
-
-dnl Check for libaio
-AC_MSG_CHECKING(for libaio)
-AC_ARG_WITH(linux-aio, AC_HELP_STRING([--with-linux-aio],[Async IO support for Linux via libaio]), [WITH_LINUXLIBAIO=$withval],[WITH_LINUXLIBAIO=no])
-AC_MSG_RESULT([$WITH_LINUXLIBAIO])
-if test "$WITH_LINUXLIBAIO" != "no"; then
- AC_CHECK_LIB(aio, io_submit, [
-         AC_CHECK_HEADERS([libaio.h],[
-                 AIO_LIB="-laio -pthread"
-                 AC_DEFINE([HAVE_LIBAIO], [1], [libaio])
-		 AC_DEFINE([HAVE_LIBAIO_H], [1], [libaio.h])
-         ])
- ])
- AC_SUBST(AIO_LIB)
-fi
-
- AC_SEARCH_LIBS(aio_suspend, rt, [
-         AC_CHECK_HEADERS([aio.h],[
-       	         if test "$ac_cv_search_aio_suspend" != no; then
-			if test "$ac_cv_search_aio_suspend" = "none required"; then
-				POSIX_AIO_LIB="-pthread"
-			else
-				POSIX_AIO_LIB="$ac_cv_search_aio_suspend -pthread"
-			fi
-
-                 fi
-
-                 AC_DEFINE([HAVE_LIBRT], [1], [librt])
-		 AC_DEFINE([HAVE_AIO_H], [1], [aio.h])
-         ])
- ])
- AC_SUBST(POSIX_AIO_LIB)
-fi
-
 save_LIBS=$LIBS
 AC_SEARCH_LIBS(crypt,crypt,[
   AC_CHECK_HEADERS([crypt.h],[
@@ -761,17 +723,6 @@ if test "x$UUID_LIB" \!= x; then
 else
 	disable_feature="$disable_feature $features"
 fi
-
-## libaio support is disabled above
-if false; then
-features="linux-libaio"
-if test ! "x$AIO_LIB" = x; then
-	enable_feature="$enable_feature $features"
-else
-	disable_feature="$disable_feature $features"
-fi
-fi
-
 
 ## output
 

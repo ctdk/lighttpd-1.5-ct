@@ -71,12 +71,15 @@ NETWORK_BACKEND_READ(openssl) {
 				}
 
 				switch(errno) {
+				case EPIPE:
+				case ECONNRESET:
+					return NETWORK_STATUS_CONNECTION_CLOSE;
 				default:
 					ERROR("last-errno: (%d) %s", errno, strerror(errno));
 					break;
 				}
 
-				break;
+				return NETWORK_STATUS_FATAL_ERROR;
 			case SSL_ERROR_ZERO_RETURN:
 				/* clean shutdown on the remote side */
 
@@ -180,7 +183,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 					/* perhaps we have error waiting in our error-queue */
 					if (0 != (err = ERR_get_error())) {
 						do {
-							log_error_write(srv, __FILE__, __LINE__, "sdds", "SSL:",
+							ERROR("SSL_write(): SSL_get_error() = %d,  SSL_write() = %ld, msg = %s",
 									ssl_r, r,
 									ERR_error_string(err, NULL));
 						} while((err = ERR_get_error()));
@@ -191,16 +194,16 @@ NETWORK_BACKEND_WRITE(openssl) {
 						case ECONNRESET:
 							return NETWORK_STATUS_CONNECTION_CLOSE;
 						default:
-							log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL:",
-									ssl_r, r, errno,
-									strerror(errno));
+							ERROR("SSL_write(): SSL_get_error() = %d,  SSL_write() = %ld, errmsg = %s (%d)",
+									ssl_r, r,
+									strerror(errno), errno);
 							break;
 						}
 					} else {
 						/* neither error-queue nor errno ? */
-						log_error_write(srv, __FILE__, __LINE__, "sddds", "SSL (error):",
-								ssl_r, r, errno,
-								strerror(errno));
+						ERROR("SSL_write(): SSL_get_error() = %d,  SSL_write() = %ld, errmsg = %s (%d)",
+									ssl_r, r,
+									strerror(errno), errno);
 					}
 
 					return  NETWORK_STATUS_FATAL_ERROR;
@@ -212,7 +215,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 					/* fall through */
 				default:
 					while((err = ERR_get_error())) {
-						log_error_write(srv, __FILE__, __LINE__, "sdds", "SSL:",
+						ERROR("SSL_write(): SSL_get_error() = %d,  SSL_write() = %ld, msg = %s",
 								ssl_r, r,
 								ERR_error_string(err, NULL));
 					}
@@ -285,7 +288,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 						/* perhaps we have error waiting in our error-queue */
 						if (0 != (err = ERR_get_error())) {
 							do {
-								ERROR("SSL_write(): ssl-error: %d (ret = %d): %s",
+								ERROR("SSL_write(): ssl-error: %d (ret = %ld): %s",
 										ssl_r, r,
 										ERR_error_string(err, NULL));
 							} while((err = ERR_get_error()));
@@ -296,13 +299,13 @@ NETWORK_BACKEND_WRITE(openssl) {
 							case ECONNRESET:
 								return NETWORK_STATUS_CONNECTION_CLOSE;
 							default:
-								ERROR("SSL_write(): ssl-error: %d (ret = %d). errno=%d, %s",
+								ERROR("SSL_write(): ssl-error: %d (ret = %ld). errno=%d, %s",
 										ssl_r, r, errno,
 										strerror(errno));
 								break;
 							}
 						} else {
-							ERROR("SSL_write(): ssl-error: %d (ret = %d). errno=%d, %s",
+							ERROR("SSL_write(): ssl-error: %d (ret = %ld). errno=%d, %s",
 										ssl_r, r, errno,
 										strerror(errno));
 						}
@@ -316,7 +319,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 						/* fall thourgh */
 					default:
 						while((err = ERR_get_error())) {
-							ERROR("SSL_write(): ssl-error: %d (ret = %d), %s",
+							ERROR("SSL_write(): ssl-error: %d (ret = %ld), %s",
 									ssl_r, r,
 									ERR_error_string(err, NULL));
 						}

@@ -321,6 +321,10 @@ int log_trace(const char *fmt, ...) {
 		l = vsnprintf(b->ptr, b->size, fmt, ap);
 		va_end(ap);
 
+		/* if 'l' is between -1 and size we are good,
+		 * otherwise we have to resize to size 
+		 */
+
 		if (l > -1 && ((unsigned int) l) < b->size) {
 			b->used = l + 1;
 
@@ -328,11 +332,11 @@ int log_trace(const char *fmt, ...) {
 		}
 
 		if (l > -1) {
-			/* l is the mem-size we need */
+			/* C99: l is the mem-size we need */
 			buffer_prepare_copy(b, l);
 		} else {
-			/* try to get some more bytes and try again */
-			buffer_prepare_append(b, 512);
+			/* glibc 2.0.x and earlier return -1 */
+			buffer_prepare_copy(b, b->size + 512);
 		}
 	} while(1);
 

@@ -16,6 +16,7 @@ NEWS
   * support letterhomes in mod_userdir (#1473)
   * mod_auth ldap rework, most important change is being able to startup if ldap server is down (#1535)
   * fixed ECONNRESET handling in network-openssl
+  * fixed log_write() for log-files > 4kbyte
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

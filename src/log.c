@@ -309,7 +309,7 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 
 int log_trace(const char *fmt, ...) {
 	buffer *b;
-	int l;
+	int l, tries = 0;
 	errorlog *err = myconfig;
 	va_list ap;
 
@@ -317,6 +317,7 @@ int log_trace(const char *fmt, ...) {
 	buffer_prepare_copy(b, 4096);
 
 	do {
+		errno = 0;
 		va_start(ap, fmt);
 		l = vsnprintf(b->ptr, b->size, fmt, ap);
 		va_end(ap);
@@ -334,9 +335,23 @@ int log_trace(const char *fmt, ...) {
 		if (l > -1) {
 			/* C99: l is the mem-size we need */
 			buffer_prepare_copy(b, l);
+		} else if (tries++ >= 3) {
+			int e = errno;
+			/* glibc 2.0.6 and earlier return -1 if the output was truncated
+			 * so we try to increase the buffer size 3 times - so you cannot
+			 * print error messages longer than 8 * 4096 = 32k with glib <= 2.0.6
+			 */
+			buffer_copy_string_len(b, CONST_STR_LEN("log_trace: vsnprintf error: l = "));
+			buffer_append_long(b, l);
+			if (e) {
+				buffer_append_string_len(b, CONST_STR_LEN(", errno = "));
+				buffer_append_long(b, errno);
+				buffer_append_string_len(b, CONST_STR_LEN(": "));
+				buffer_append_string(b, strerror(e));
+			}
+			break;
 		} else {
-			/* glibc 2.0.x and earlier return -1 */
-			buffer_prepare_copy(b, b->size + 512);
+			buffer_prepare_copy(b, b->size * 2);
 		}
 	} while(1);
 

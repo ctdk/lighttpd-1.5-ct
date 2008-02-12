@@ -41,6 +41,7 @@ NETWORK_BACKEND_READ(openssl) {
 	UNUSED(con);
 
 	do {
+		int oerrno;
 		b = chunkqueue_get_append_buffer(cq);
 		buffer_prepare_copy(b, 8192 + 12); /* ssl-chunk-size is 8kb */
 		len = SSL_read(sock->ssl, b->ptr, b->size - 1);
@@ -54,6 +55,8 @@ NETWORK_BACKEND_READ(openssl) {
 		 */
 		if (len <= 0) {
 			int r, ssl_err;
+
+			oerrno = errno;
 
 			switch ((r = SSL_get_error(sock->ssl, len))) {
 			case SSL_ERROR_WANT_READ:
@@ -82,7 +85,7 @@ NETWORK_BACKEND_READ(openssl) {
 				case ECONNRESET:
 					return NETWORK_STATUS_CONNECTION_CLOSE;
 				default:
-					ERROR("last-errno: (%d) %s", errno, strerror(errno));
+					ERROR("last-errno: (%d) %s", oerrno, strerror(oerrno));
 					break;
 				}
 

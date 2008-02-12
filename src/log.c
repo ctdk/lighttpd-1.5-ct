@@ -334,7 +334,7 @@ int log_trace(const char *fmt, ...) {
 
 		if (l > -1) {
 			/* C99: l is the mem-size we need */
-			buffer_prepare_copy(b, l);
+			buffer_prepare_copy(b, l + 1); /* allocate a bit more than we need */
 		} else if (tries++ >= 3) {
 			int e = errno;
 			/* glibc 2.0.6 and earlier return -1 if the output was truncated

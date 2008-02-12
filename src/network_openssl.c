@@ -56,7 +56,7 @@ NETWORK_BACKEND_READ(openssl) {
 		if (len <= 0) {
 			int r, ssl_err;
 
-			oerrno = errno;
+			oerrno = errno; /* store the errno for SSL_ERROR_SYSCALL */
 
 			switch ((r = SSL_get_error(sock->ssl, len))) {
 			case SSL_ERROR_WANT_READ:
@@ -80,13 +80,17 @@ NETWORK_BACKEND_READ(openssl) {
 					ERROR("ssl-errors: %s", ERR_error_string(ssl_err, NULL));
 				}
 
-				switch(errno) {
-				case EPIPE:
-				case ECONNRESET:
+				if (len == 0) {
 					return NETWORK_STATUS_CONNECTION_CLOSE;
-				default:
-					ERROR("last-errno: (%d) %s", oerrno, strerror(oerrno));
-					break;
+				} else {
+					switch(oerrno) {
+					case EPIPE:
+					case ECONNRESET:
+						return NETWORK_STATUS_CONNECTION_CLOSE;
+					default:
+						ERROR("last-errno: (%d) %s", oerrno, strerror(oerrno));
+						break;
+					}
 				}
 
 				return NETWORK_STATUS_FATAL_ERROR;

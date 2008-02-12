@@ -45,7 +45,14 @@ NETWORK_BACKEND_READ(openssl) {
 		buffer_prepare_copy(b, 8192 + 12); /* ssl-chunk-size is 8kb */
 		len = SSL_read(sock->ssl, b->ptr, b->size - 1);
 
-		if (len < 0) {
+		/**
+		 * man SSL_read:
+		 *
+		 * >0   is success
+		 * 0    is connection close
+		 * <0   is error 
+		 */
+		if (len <= 0) {
 			int r, ssl_err;
 
 			switch ((r = SSL_get_error(sock->ssl, len))) {
@@ -81,13 +88,11 @@ NETWORK_BACKEND_READ(openssl) {
 
 				return NETWORK_STATUS_FATAL_ERROR;
 			case SSL_ERROR_ZERO_RETURN:
-				/* clean shutdown on the remote side */
-
-				if (r == 0) {
-					/* FIXME: later */
+				if (len == 0) {
+					/* clean shutdown on the remote side */
+					return NETWORK_STATUS_CONNECTION_CLOSE;
 				}
-
-				/* fall through */
+				/* fall through otherwise */
 			default:
 				while((ssl_err = ERR_get_error())) {
 					/* get all errors from the error-queue */
@@ -96,8 +101,6 @@ NETWORK_BACKEND_READ(openssl) {
 
 				return NETWORK_STATUS_FATAL_ERROR;
 			}
-		} else if (len == 0) {
-			return NETWORK_STATUS_FATAL_ERROR;
 		} else {
 			b->used += len;
 			b->ptr[b->used++] = '\0';

@@ -859,6 +859,7 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 	case -1:
 		/* error */
 		ERROR("fork() failed: %s", strerror(errno));
+		return -1;
 		break;
 	default: {
 		cgi_session *sess;

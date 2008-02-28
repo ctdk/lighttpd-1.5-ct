@@ -18,6 +18,7 @@ NEWS
   * fixed ECONNRESET handling in network-openssl
   * fixed log_write() for log-files > 4kbyte
   * fix sending source of cgi script instead of 500 error if fork fails
+  * fix min-procs handling in mod_scgi.c, just set to max-procs (patch from #623)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

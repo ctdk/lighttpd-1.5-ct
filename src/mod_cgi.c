@@ -77,9 +77,11 @@ typedef struct {
 	pid_t pid;
 
 	iosocket *sock;
+	iosocket *sock_err;
 	iosocket *wb_sock;
 
 	chunkqueue *rb;
+	chunkqueue *rb_err;
 	chunkqueue *wb;
 
 	cgi_state_t state;
@@ -92,9 +94,11 @@ static cgi_session * cgi_session_init() {
 	assert(sess);
 
 	sess->sock = iosocket_init();
+	sess->sock_err = iosocket_init();
 	sess->wb_sock = iosocket_init();
 	sess->wb = chunkqueue_init();
 	sess->rb = chunkqueue_init();
+	sess->rb_err = chunkqueue_init();
 
 	return sess;
 }
@@ -103,10 +107,12 @@ static void cgi_session_free(cgi_session *sess) {
 	if (!sess) return;
 
 	iosocket_free(sess->sock);
+	iosocket_free(sess->sock_err);
 	iosocket_free(sess->wb_sock);
 
 	chunkqueue_free(sess->wb);
 	chunkqueue_free(sess->rb);
+	chunkqueue_free(sess->rb_err);
 
 	free(sess);
 }
@@ -401,6 +407,12 @@ static handler_t cgi_connection_close(server *srv, connection *con, plugin_data 
 		fdevent_unregister(srv->ev, sess->sock);
 	}
 
+	if (sess->sock_err->fd != -1) {
+		/* close connection to the cgi-script */
+		fdevent_event_del(srv->ev, sess->sock_err);
+		fdevent_unregister(srv->ev, sess->sock_err);
+	}
+
 	if (sess->wb_sock->fd != -1) {
 		close(sess->wb_sock->fd);
 		sess->wb_sock->fd = -1;
@@ -546,6 +558,81 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 	return HANDLER_FINISHED;
 }
 
+/* so all cgi errors have the same source line as origin */
+static void cgi_log_err(const char *msg) {
+	ERROR("error from cgi: %s", msg);
+}
+
+static void cgi_copy_err(chunkqueue *cq) {
+	buffer *line = buffer_init();
+	chunk *c;
+
+	for (c = cq->first; c; c = c->next) {
+		off_t we_have;
+		char *str, *nl;
+
+		if (c->type != MEM_CHUNK) {
+			ERROR("%s", "wrong chunk type");
+			chunk_set_done(c);
+			continue;
+		}
+
+		we_have = c->mem->used - 1 - c->offset;
+		str = c->mem->ptr + c->offset;
+		if (we_have <= 0) continue;
+
+		for ( ; NULL != (nl = strchr(str, '\n')); str = nl+1) {
+			*nl = '\0';
+			if (!buffer_is_empty(line)) {
+				buffer_append_string(line, str);
+				cgi_log_err(SAFE_BUF_STR(line));
+				buffer_reset(line);
+			} else {
+				cgi_log_err(str);
+			}
+		}
+		if (*str) {
+			buffer_append_string(line, str);
+		}
+		chunk_set_done(c);
+	}
+
+	if (!buffer_is_empty(line)) {
+		cgi_log_err(SAFE_BUF_STR(line));
+	}
+	chunkqueue_remove_finished_chunks(cq);
+}
+
+static handler_t cgi_handle_err_fdevent(void *s, void *ctx, int revents) {
+	server      *srv  = (server *)s;
+	cgi_session *sess = ctx;
+	connection  *con  = sess->remote_con;
+
+	if (revents & FDEVENT_IN) {
+		switch (srv->network_backend_read(srv, con, sess->sock_err, sess->rb_err)) {
+		case NETWORK_STATUS_CONNECTION_CLOSE:
+			fdevent_event_del(srv->ev, sess->sock_err);
+
+			/* connection closed. close the read chunkqueue. */
+			sess->rb_err->is_closed = 1;
+			break;
+		case NETWORK_STATUS_SUCCESS:
+			break;
+		default:
+			ERROR("%s", "oops, we failed to read");
+			break;
+		}
+
+		cgi_copy_err(sess->rb_err);
+	}
+
+	if (revents & FDEVENT_ERR) {
+		fdevent_event_del(srv->ev, sess->sock_err);
+	}
+
+	return HANDLER_FINISHED;
+}
+
 
 static int cgi_env_add(char_array *env, const char *key, size_t key_len, const char *val, size_t val_len) {
 	char *dst;
@@ -580,6 +667,7 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 
 	int to_cgi_fds[2];
 	int from_cgi_fds[2];
+	int from_cgi_err_fds[2];
 	struct stat st;
 
 #ifndef _WIN32
@@ -600,6 +688,14 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 	}
 
 	if (pipe(from_cgi_fds)) {
+		close(to_cgi_fds[0]); close(to_cgi_fds[1]);
+		log_error_write(srv, __FILE__, __LINE__, "ss", "pipe failed:", strerror(errno));
+		return -1;
+	}
+
+	if (pipe(from_cgi_err_fds)) {
+		close(to_cgi_fds[0]); close(to_cgi_fds[1]);
+		close(from_cgi_fds[0]); close(from_cgi_fds[1]);
 		log_error_write(srv, __FILE__, __LINE__, "ss", "pipe failed:", strerror(errno));
 		return -1;
 	}
@@ -625,18 +721,19 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		/* not needed */
 		close(from_cgi_fds[0]);
 
+		/* move stderr to from_cgi_err_fd[1] */
+		close(STDERR_FILENO);
+		dup2(from_cgi_err_fds[1], STDERR_FILENO);
+		close(from_cgi_err_fds[1]);
+		/* not needed */
+		close(from_cgi_err_fds[0]);
+
 		/* move the stdin to to_cgi_fd[0] */
 		close(STDIN_FILENO);
 		dup2(to_cgi_fds[0], STDIN_FILENO);
 		close(to_cgi_fds[0]);
 		/* not needed */
 		close(to_cgi_fds[1]);
-
-		/**
-		 * FIXME: add a event-handler for STDERR_FILENO and let it LOG()
-		 */
-
-		close(STDERR_FILENO);
 
 		/* create environment */
 		env.ptr = NULL;
@@ -859,6 +956,9 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 	case -1:
 		/* error */
 		ERROR("fork() failed: %s", strerror(errno));
+		close(to_cgi_fds[0]); close(to_cgi_fds[1]);
+		close(from_cgi_fds[0]); close(from_cgi_fds[1]);
+		close(from_cgi_err_fds[0]); close(from_cgi_err_fds[1]);
 		return -1;
 		break;
 	default: {
@@ -866,6 +966,7 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 		/* father */
 
 		close(from_cgi_fds[1]);
+		close(from_cgi_err_fds[1]);
 		close(to_cgi_fds[0]);
 
 		/* register PID and wait for them asyncronously */
@@ -881,6 +982,8 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 
 		sess->sock->fd = from_cgi_fds[0];
 		sess->sock->type = IOSOCKET_TYPE_PIPE;
+		sess->sock_err->fd = from_cgi_err_fds[0];
+		sess->sock_err->type = IOSOCKET_TYPE_PIPE;
 		sess->wb_sock->fd = to_cgi_fds[1];
 		sess->wb_sock->type = IOSOCKET_TYPE_PIPE;
 
@@ -892,10 +995,21 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 			return -1;
 		}
 
+		if (-1 == fdevent_fcntl_set(srv->ev, sess->sock_err)) {
+			log_error_write(srv, __FILE__, __LINE__, "ss", "fcntl failed: ", strerror(errno));
+
+			cgi_session_free(sess);
+
+			return -1;
+		}
+
 		con->plugin_ctx[p->id] = sess;
 
 		fdevent_register(srv->ev, sess->sock, cgi_handle_fdevent, sess);
 		fdevent_event_add(srv->ev, sess->sock, FDEVENT_IN);
+
+		fdevent_register(srv->ev, sess->sock_err, cgi_handle_err_fdevent, sess);
+		fdevent_event_add(srv->ev, sess->sock_err, FDEVENT_IN);
 
 		sess->state = CGI_STATE_READ_RESPONSE_HEADER;
 
@@ -1089,6 +1203,9 @@ SUBREQUEST_FUNC(mod_cgi_read_response_content) {
 		fdevent_event_del(srv->ev, sess->sock);
 		fdevent_unregister(srv->ev, sess->sock);
 
+		fdevent_event_del(srv->ev, sess->sock_err);
+		fdevent_unregister(srv->ev, sess->sock_err);
+
 		cgi_session_free(sess);
 		sess = NULL;
 
@@ -1112,6 +1229,9 @@ SUBREQUEST_FUNC(mod_cgi_read_response_content) {
 
 		fdevent_event_del(srv->ev, sess->sock);
 		fdevent_unregister(srv->ev, sess->sock);
+
+		fdevent_event_del(srv->ev, sess->sock_err);
+		fdevent_unregister(srv->ev, sess->sock_err);
 
 		cgi_session_free(sess);
 		sess = NULL;

@@ -116,7 +116,7 @@ static int fdevent_poll_get_revents(fdevents *ev, size_t event_count, fdevent_re
 		if (ev->pollfds[ndx].revents) {
 			if (ev->pollfds[ndx].revents & POLLNVAL) {
 				/* should never happen */
-				SEGFAULT("ev->pollfds[%d].revents has POLLNVAL", ndx);
+				SEGFAULT("ev->pollfds[%zu].revents has POLLNVAL", ndx);
 			}
 
 			fdevent_revents_add(revents, ev->pollfds[ndx].fd, ev->pollfds[ndx].revents);

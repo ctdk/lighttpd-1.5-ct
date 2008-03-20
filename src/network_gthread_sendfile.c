@@ -169,17 +169,12 @@ NETWORK_BACKEND_WRITE(gthreadsendfile) {
 			ret = network_write_chunkqueue_writev_mem(srv, con, sock, cq, c);
 
 			/* check which chunks are finished now */
-			for (tc = c; tc; tc = tc->next) {
-				/* finished the chunk */
-				if (tc->offset == tc->mem->used - 1) {
-					/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
-					if (chunk_finished) {
-						c = c->next;
-					} else {
-						chunk_finished = 1;
-					}
+			for (tc = c; tc && chunk_is_done(tc); tc = tc->next) {
+				/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
+				if (chunk_finished) {
+					c = c->next;
 				} else {
-					break;
+					chunk_finished = 1;
 				}
 			}
 

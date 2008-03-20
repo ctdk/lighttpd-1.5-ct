@@ -649,18 +649,18 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 
 	/* don't compress files that are too large as we need to much time to handle them */
 	if (max_fsize && (sce->st.st_size >> 10) > max_fsize) {
-		if (con->conf.log_request_handling) TRACE("file '%s' is too large: %ju", 
+		if (con->conf.log_request_handling) TRACE("file '%s' is too large: %jd", 
 				BUF_STR(con->physical.path), 
-				sce->st.st_size);
+				(intmax_t) sce->st.st_size);
 
 		return HANDLER_GO_ON;
 	}
 
 	/* compressing the file might lead to larger files instead */
 	if (sce->st.st_size < 128) {
-		if (con->conf.log_request_handling) TRACE("file '%s' is too small: %ju", 
+		if (con->conf.log_request_handling) TRACE("file '%s' is too small: %jd", 
 				BUF_STR(con->physical.path), 
-				sce->st.st_size);
+				(intmax_t) sce->st.st_size);
 
 		return HANDLER_GO_ON;
 	}

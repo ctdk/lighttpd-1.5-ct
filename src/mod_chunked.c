@@ -202,7 +202,7 @@ URIHANDLER_FUNC(mod_chunked_response_header) {
 		con->response.content_length = chunkqueue_length(in);
 	}
 	if(con->response.content_length >= 0) {
-		if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%ju", con->response.content_length);
+		if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%jd", (intmax_t) con->response.content_length);
 		use_chunked = 0;
 	} else if (con->request.http_method != HTTP_METHOD_HEAD) {
 		/* a HEAD request never gets a chunk-encoding, but might stay with keep-alive
@@ -346,7 +346,7 @@ URIHANDLER_FUNC(mod_chunked_encode_response_content) {
 		out->bytes_in += 5;
 	}
 
-	if (hctx->debug > 1) TRACE("chunk encoded: in=%lld, out=%lld", in->bytes_out, out->bytes_in);
+	if (hctx->debug > 1) TRACE("chunk encoded: in=%jd, out=%jd", (intmax_t) in->bytes_out, (intmax_t) out->bytes_in);
 
 	chunkqueue_remove_finished_chunks(in);
 

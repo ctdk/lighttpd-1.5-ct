@@ -281,11 +281,11 @@ static int ajp13_decode_string(buffer *str, ajp13_state_data *data, int is_heade
 	/* string length */
 	len = ajp13_decode_int(data);
 	if ((ssize_t)len == -1) {
-		ERROR("ajp13_decode_int() returned invalid len: %d", len);
+		ERROR("ajp13_decode_int() returned invalid len: %zu", len);
 		return len;
 	}
 #ifdef AJP13_DEBUG
-	TRACE("ajp13_decode_string() string-len: %d (is_header: %d, common-header: %d)", len, is_header, (len & AJP13_COMMON_HEADER_CODE));
+	TRACE("ajp13_decode_string() string-len: %zu (is_header: %d, common-header: %zd)", len, is_header, (len & AJP13_COMMON_HEADER_CODE));
 #endif
 
 	/* if string is header, check for common header code. */
@@ -294,7 +294,7 @@ static int ajp13_decode_string(buffer *str, ajp13_state_data *data, int is_heade
 		if (p) {
 			len = strlen(p);
 		} else {
-			ERROR("ajp13_decode_string() can't resolve common-header: %d", len & ~AJP13_COMMON_HEADER_CODE);
+			ERROR("ajp13_decode_string() can't resolve common-header: %zd", len & ~AJP13_COMMON_HEADER_CODE);
 
 			return -1;
 		}
@@ -302,7 +302,7 @@ static int ajp13_decode_string(buffer *str, ajp13_state_data *data, int is_heade
 	/* copy string from buffer. */
 	if (p == NULL) {
 		if ((data->buf->used - data->offset) <= (len + 1)) {
-			ERROR("we have %ju bytes, but a partial-string wants %zu. no way", (data->buf->used - data->offset), len);
+			ERROR("we have %jd bytes, but a partial-string wants %zu. no way", (intmax_t) (data->buf->used - data->offset), len);
 			return -1;
 		}
 		p = data->buf->ptr + data->offset;

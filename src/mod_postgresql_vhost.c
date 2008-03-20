@@ -219,6 +219,8 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 	PGresult   *result;
 	gchar *field;
 
+	UNUSED(host);
+
 	/* no host specified? */
 	if (buffer_is_empty(con->uri.authority)) return HANDLER_ERROR;
 
@@ -258,7 +260,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 		}
 
 		if (PQstatus(p->conf.conn) != CONNECTION_OK){
-			ERROR("PQconnectdb() failed: %s", PQstatus(p->conf.conn));
+			ERROR("PQconnectdb() failed: %i", PQstatus(p->conf.conn));
 
 			PQfinish(p->conf.conn);
 

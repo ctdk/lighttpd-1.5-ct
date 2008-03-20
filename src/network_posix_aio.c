@@ -141,17 +141,12 @@ NETWORK_BACKEND_WRITE(posixaio) {
 			ret = network_write_chunkqueue_writev_mem(srv, con, sock, cq, c);
 
 			/* check which chunks are finished now */
-			for (tc = c; tc; tc = tc->next) {
-				/* finished the chunk */
-				if (tc->offset == tc->mem->used - 1) {
-					/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
-					if (chunk_finished) {
-						c = c->next;
-					} else {
-						chunk_finished = 1;
-					}
+			for (tc = c; tc && chunk_is_done(tc); tc = tc->next) {
+				/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
+				if (chunk_finished) {
+					c = c->next;
 				} else {
-					break;
+					chunk_finished = 1;
 				}
 			}
 
@@ -350,7 +345,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 						}
 
 						if (r != c->file.copy.length) {
-							ERROR("read() returned %d instead of %ju", r, c->file.copy.length);
+							ERROR("read() returned %zd instead of %jd", r, (intmax_t) c->file.copy.length);
 
 							return NETWORK_STATUS_FATAL_ERROR;
 						}
@@ -420,8 +415,9 @@ NETWORK_BACKEND_WRITE(posixaio) {
 					case ECONNRESET:
 						return NETWORK_STATUS_CONNECTION_CLOSE;
 					default:
-						ERROR("write failed: %d (%s) [%lld, %p, %lld]", 
-								errno, strerror(errno), c->file.copy.length, c->file.mmap.start, c->file.copy.offset);
+						ERROR("write failed: %d (%s) [%jd, %p, %jd]", 
+								errno, strerror(errno), (intmax_t) c->file.copy.length,
+								c->file.mmap.start, (intmax_t) c->file.copy.offset);
 						return NETWORK_STATUS_FATAL_ERROR;
 					}
 				}
@@ -435,7 +431,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 				c->offset += r; /* global offset in the file */
 				cq->bytes_out += r;
 
-				if (c->file.mmap.length == c->file.copy.offset) {
+				if ((off_t) c->file.mmap.length == c->file.copy.offset) {
 					munmap(c->file.mmap.start, c->file.mmap.length);
 					c->file.mmap.start = MAP_FAILED;
 					c->file.copy.length = 0;

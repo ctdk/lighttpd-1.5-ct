@@ -103,7 +103,7 @@ typedef struct {
 } plugin_data;
 
 typedef struct {
-	int bytes_in;
+	off_t bytes_in;
 	filter *fl;
 	chunkqueue *in;
 	chunkqueue *out;
@@ -359,7 +359,7 @@ static int stream_deflate_compress(server *srv, connection *con, handler_ctx *hc
 			/* copy gzip header into output buffer */
 			buffer_copy_memory(hctx->output, gzip_header, sizeof(gzip_header));
 			if(p->conf.debug) {
-				TRACE("gzip_header len=%i", sizeof(gzip_header));
+				TRACE("gzip_header len=%zu", sizeof(gzip_header));
 			}
 			/* initialize crc32 */
 			hctx->crc = crc32(0L, Z_NULL, 0);
@@ -752,8 +752,8 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 	off_t abs_offset;
 	off_t toSend;
 	stat_cache_entry *sce = NULL;
-	off_t we_want_to_mmap = 2 MByte; 
-	off_t we_want_to_send = st_size;
+	size_t we_want_to_mmap = 2 MByte; 
+	size_t we_want_to_send = st_size;
 	char *start = NULL;
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
@@ -765,9 +765,9 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 	abs_offset = c->file.start + c->offset;
 	
 	if (c->file.length + c->file.start > sce->st.st_size) {
-		ERROR("file '%s' was shrinked: was %lld, is %lld (%lld, %lld)", 
-				BUF_STR(c->file.name), c->file.length + c->file.start, sce->st.st_size,
-				c->file.start, c->offset);
+		ERROR("file '%s' was shrinked: was %ju, is %ju (%ju, %ju)", 
+				BUF_STR(c->file.name), (intmax_t) c->file.length + c->file.start, (intmax_t) sce->st.st_size,
+				(intmax_t) c->file.start, (intmax_t) c->offset);
 		
 		return -1;
 	}
@@ -811,7 +811,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 			/* in case the range-offset is after the first mmap()ed area we skip the area */
 			c->file.mmap.offset = 0;
 
-			while (c->file.mmap.offset + we_want_to_mmap < c->file.start) {
+			while (c->file.mmap.offset + (off_t) we_want_to_mmap < c->file.start) {
 				c->file.mmap.offset += we_want_to_mmap;
 			}
 		}
@@ -857,7 +857,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 
 	/* to_send = abs_mmap_end - abs_offset */
 	toSend = (c->file.mmap.offset + c->file.mmap.length) - (abs_offset);
-	if(toSend > we_want_to_send) toSend = we_want_to_send;
+	if (toSend > (off_t) we_want_to_send) toSend = we_want_to_send;
 
 	if (toSend < 0) {
 		ERROR("toSend is negative: %u %u %u %u",
@@ -897,8 +897,8 @@ static int deflate_compress_cleanup(server *srv, connection *con, handler_ctx *h
 	}
 
 	if(p->conf.debug && hctx->bytes_in < hctx->out->bytes_in) {
-		TRACE("compressing uri '%s' increased the sent content-size from %i to %lld",
-			BUF_STR(con->uri.path_raw), hctx->bytes_in, hctx->out->bytes_in);
+		TRACE("compressing uri '%s' increased the sent content-size from %jd to %jd",
+			BUF_STR(con->uri.path_raw), (intmax_t) hctx->bytes_in, (intmax_t) hctx->out->bytes_in);
 	}
 
 	/* cleanup compression state */
@@ -1011,7 +1011,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	end = (hctx->in->is_closed && hctx->in->bytes_in == hctx->in->bytes_out);
 
 	if (p->conf.debug) {
-		TRACE("end: %d - %lld - %lld", hctx->in->is_closed, hctx->in->bytes_in, hctx->in->bytes_out);
+		TRACE("end: %d - %jd - %jd", hctx->in->is_closed, (intmax_t) hctx->in->bytes_in, (intmax_t) hctx->in->bytes_out);
 	}
 
 	/* flush the output buffer to make room for more data. */

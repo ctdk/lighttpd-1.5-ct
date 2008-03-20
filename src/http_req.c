@@ -157,7 +157,7 @@ static http_req_parser_t http_req_tokenizer(
 				t->is_statusline = 0;
 				t->is_key = 1;
 			} else {
-				ERROR("CR with out LF at pos: %d", t->offset);
+				ERROR("CR with out LF at pos: %zu", t->offset);
 				return PARSER_ERROR;
 			}
 			break;
@@ -184,7 +184,7 @@ static http_req_parser_t http_req_tokenizer(
 			if (t->c == t->lookup_c &&
 				t->offset == t->lookup_offset + 1) {
 
-				ERROR("invalid char (%d) at pos: %d", c, t->offset);
+				ERROR("invalid char (%d) at pos: %zu", c, t->offset);
 				return PARSER_ERROR;
 			}
 

@@ -578,7 +578,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 	if (con->request.content_length != -1) {
 		/* divide by 1024 as srvconf.max_request_size is in kBytes */
 		if (srv->srvconf.max_request_size != 0 &&
-		    (con->request.content_length >> 10) > srv->srvconf.max_request_size) {
+		    ((size_t)(con->request.content_length >> 10)) > srv->srvconf.max_request_size) {
 			/* the request body itself is larger then
 			 * our our max_request_size
 			 */

@@ -846,10 +846,10 @@ int lighty_mainloop(server *srv) {
 				if (graceful_shutdown) {
 					TRACE("[note] graceful shutdown started by UID=%d, PID=%d", last_sigterm_info.si_uid, last_sigterm_info.si_pid);
 				} else if (srv->fdwaitqueue->used) {
-					TRACE("[note] out of FDs, server-socket get disabled for a while, we have %d connections open and they are waiting for %d FDs",
+					TRACE("[note] out of FDs, server-socket get disabled for a while, we have %zu connections open and they are waiting for %zu FDs",
 					    srv->conns->used, srv->fdwaitqueue->used);
 				} else if (srv->conns->used > srv->max_conns) {
-					TRACE("[note] we reached our connection limit of %d connections. Disabling server-sockets for a while", srv->max_conns);
+					TRACE("[note] we reached our connection limit of %zu connections. Disabling server-sockets for a while", srv->max_conns);
 				}
 
 				srv->sockets_disabled = 1;
@@ -893,7 +893,7 @@ int lighty_mainloop(server *srv) {
 			}
 
 
-			TRACE("conns used: %d, fd-waitqueue has %d entries, fds to share: %d", srv->conns->used, srv->fdwaitqueue->used, avail_fds);
+			TRACE("conns used: %zu, fd-waitqueue has %zu entries, fds to share: %d", srv->conns->used, srv->fdwaitqueue->used, avail_fds);
 
 			while (avail_fds-- && NULL != (con = fdwaitqueue_unshift(srv, srv->fdwaitqueue))) {
 				connection_state_machine(srv, con);

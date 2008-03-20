@@ -259,7 +259,7 @@ static buffer *get_tracking_id(plugin_data *p, connection *con) {
 	}
 
 	if (b->used != 32 + 1) {
-		if (p->conf.debug) ERROR("the Progress-ID has to be 32 characters long, got %d characters", b->used - 1);
+		if (p->conf.debug) ERROR("the Progress-ID has to be 32 characters long, got %zd characters", b->used - 1);
 		return NULL;
 	}
 

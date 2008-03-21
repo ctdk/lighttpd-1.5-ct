@@ -1264,9 +1264,6 @@ int main (int argc, char **argv, char **envp) {
 			}
 		}
 
-		/* #372: solaris need some fds extra for devpoll */
-		if (rlim.rlim_cur > 10) rlim.rlim_cur -= 10;
-
 		if (srv->event_handler == FDEVENT_HANDLER_SELECT) {
 			srv->max_fds = rlim.rlim_cur < FD_SETSIZE - 200 ? rlim.rlim_cur : FD_SETSIZE - 200;
 		} else {
@@ -1609,7 +1606,7 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif
 
-	if (NULL == (srv->ev = fdevent_init(/*srv->max_fds + 1*/ 4096, srv->event_handler))) {
+	if (NULL == (srv->ev = fdevent_init(srv->max_fds + 1, srv->event_handler))) {
 		log_error_write(srv, __FILE__, __LINE__,
 				"s", "fdevent_init failed");
 		return -1;

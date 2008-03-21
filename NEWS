@@ -22,6 +22,7 @@ NEWS
   * mod_cgi: add a event-handler for STDERR_FILENO and log it with ERROR()
   * fixed building/testing outside of the src dir
   * fix many (64-bit) format warnings and unsigned/signed compare warnings
+  * fixed out of range access in fd array (#1562, #372, #1603) (CVE-2008-0983)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

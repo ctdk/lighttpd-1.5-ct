@@ -104,26 +104,52 @@ FREE_FUNC(mod_compress_free) {
 	return HANDLER_GO_ON;
 }
 
-void mkdir_recursive(const char *dir) {
-
-	char dir_copy[256];
-	char *p = dir_copy;
+// 0 on success, -1 for error
+static int mkdir_recursive(char *dir) {
+	char *p = dir;
 
 	if (!dir || !dir[0])
-		return;
-
-	strncpy(dir_copy, dir, sizeof(dir_copy) / sizeof(dir_copy[0]));
+		return 0;
 
 	while ((p = strchr(p + 1, '/')) != NULL) {
 
 		*p = '\0';
-		if ((mkdir(dir_copy, 0700) != 0) && (errno != EEXIST))
-			return;
+		if ((mkdir(dir, 0700) != 0) && (errno != EEXIST)) {
+			*p = '/';
+			return -1;
+		}
 
 		*p++ = '/';
+		if (!*p) return 0; // Ignore trailing slash
 	}
 
-	mkdir(dir, 0700);
+	return (mkdir(dir, 0700) != 0) && (errno != EEXIST) ? -1 : 0;
+}
+
+// 0 on success, -1 for error
+static int mkdir_for_file(char *filename) {
+	char *p = filename;
+
+	if (!filename || !filename[0])
+		return -1;
+
+	while ((p = strchr(p + 1, '/')) != NULL) {
+
+		*p = '\0';
+		if ((mkdir(filename, 0700) != 0) && (errno != EEXIST)) {
+			ERROR("creating cache-directory \"%s\" failed: %s", filename, strerror(errno));
+			*p = '/';
+			return -1;
+		}
+
+		*p++ = '/';
+		if (!*p) {
+			ERROR("unexpected trailing slash for filename \"%s\"", filename);
+			return -1;
+		}
+	}
+
+	return 0;
 }
 
 SETDEFAULTS_FUNC(mod_compress_setdefaults) {
@@ -161,15 +187,11 @@ SETDEFAULTS_FUNC(mod_compress_setdefaults) {
 			struct stat st;
 			if (0 != stat(s->compress_cache_dir->ptr, &st)) {
 
-				log_error_write(srv, __FILE__, __LINE__, "sbs", "can't stat compress.cache-dir, attempting to create",
-						s->compress_cache_dir, strerror(errno));
+				ERROR("can't stat compress.cache-dir (%s), attempting to create '%s'", strerror(errno),SAFE_BUF_STR(s->compress_cache_dir));
 				mkdir_recursive(s->compress_cache_dir->ptr);
 
 				if (0 != stat(s->compress_cache_dir->ptr, &st)) {
-
-					log_error_write(srv, __FILE__, __LINE__, "sbs", "can't stat compress.cache-dir, create failed",
-									s->compress_cache_dir, strerror(errno));
-
+					ERROR("can't stat compress.cache-dir (%s), failed to create '%s'", strerror(errno),SAFE_BUF_STR(s->compress_cache_dir));
 					return HANDLER_ERROR;
 				}
 			}
@@ -377,27 +399,8 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 	PATHNAME_APPEND_SLASH(p->ofn);
 
 	if (0 == strncmp(con->physical.path->ptr, con->physical.doc_root->ptr, con->physical.doc_root->used-1)) {
-		size_t offset = p->ofn->used - 1;
-		char *dir, *nextdir;
-
 		buffer_append_string(p->ofn, con->physical.path->ptr + con->physical.doc_root->used - 1);
-
 		buffer_copy_string_buffer(p->b, p->ofn);
-
-		/* mkdir -p ... */
-		for (dir = p->b->ptr + offset; NULL != (nextdir = strchr(dir, '/')); dir = nextdir + 1) {
-			*nextdir = '\0';
-
-			if (-1 == mkdir(p->b->ptr, 0700)) {
-				if (errno != EEXIST) {
-					log_error_write(srv, __FILE__, __LINE__, "sbss", "creating cache-directory", p->b, "failed", strerror(errno));
-
-					return -1;
-				}
-			}
-
-			*nextdir = '/';
-		}
 	} else {
 		buffer_append_string_buffer(p->ofn, con->uri.path);
 	}
@@ -413,7 +416,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 		buffer_append_string(p->ofn, "-bzip2-");
 		break;
 	default:
-		log_error_write(srv, __FILE__, __LINE__, "sd", "unknown compression type", type);
+		ERROR("unknown compression type %d", type);
 		return -1;
 	}
 
@@ -422,7 +425,7 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 
 	if (HANDLER_ERROR != stat_cache_get_entry(srv, con, p->ofn, &compressed_sce)) {
 		/* file exists */
-		if (con->conf.log_request_handling) TRACE("file exists in the cache (%s), sending it", BUF_STR(p->ofn));
+		if (con->conf.log_request_handling) TRACE("file exists in the cache (%s), sending it", SAFE_BUF_STR(p->ofn));
 
 		chunkqueue_reset(con->send);
 		chunkqueue_append_file(con->send, p->ofn, 0, compressed_sce->st.st_size);
@@ -432,34 +435,23 @@ static int deflate_file_to_file(server *srv, connection *con, plugin_data *p, bu
 	}
 
 	if (-1 == (ofd = open(p->ofn->ptr, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0600))) {
-		if (errno == EEXIST) {
-			/* cache-entry exists */
-
+		if (-1 == mkdir_for_file(p->ofn->ptr)) {
+			return -1; // error message in mkdir_for_file
+		} else if (-1 == (ofd = open(p->ofn->ptr, O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0600))) {
+			ERROR("creating cachefile '%s' failed: %s", SAFE_BUF_STR(p->ofn), strerror(errno));
+			return -1;
 		}
-
-		log_error_write(srv, __FILE__, __LINE__, "sbss",
-				"creating cachefile", p->ofn,
-				"failed", strerror(errno));
-
-		return -1;
 	}
 
 	if (-1 == (ifd = open(filename, O_RDONLY | O_BINARY))) {
-		log_error_write(srv, __FILE__, __LINE__, "sbss",
-				"opening plain-file", fn,
-				"failed", strerror(errno));
-
+		ERROR("opening plain-file '%s' failed: %s", SAFE_BUF_STR(fn), strerror(errno));
 		close(ofd);
-
 		return -1;
 	}
 
 
 	if (MAP_FAILED == (start = mmap(NULL, sce->st.st_size, PROT_READ, MAP_SHARED, ifd, 0))) {
-		log_error_write(srv, __FILE__, __LINE__, "sbss",
-				"mmaping", fn,
-				"failed", strerror(errno));
-
+		ERROR("mmaping '%s' failed: %s", SAFE_BUF_STR(fn), strerror(errno));
 		close(ofd);
 		close(ifd);
 		return -1;
@@ -525,7 +517,7 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 	if (sce->st.st_size > 128 * 1024 * 1024) return -1;
 
 	if (-1 == (ifd = open(fn->ptr, O_RDONLY | O_BINARY))) {
-		log_error_write(srv, __FILE__, __LINE__, "sbss", "opening plain-file", fn, "failed", strerror(errno));
+		ERROR("opening plain-file '%s' failed: %s", SAFE_BUF_STR(fn), strerror(errno));
 
 		return -1;
 	}
@@ -535,7 +527,7 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 	close(ifd);
 
 	if (MAP_FAILED == start) {
-		log_error_write(srv, __FILE__, __LINE__, "sbss", "mmaping", fn, "failed", strerror(errno));
+		ERROR("mmaping '%s' failed: %s", SAFE_BUF_STR(fn), strerror(errno));
 
 		return -1;
 	}
@@ -643,14 +635,14 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	max_fsize = p->conf.compress_max_filesize;
 
 	if (HANDLER_GO_ON != stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
-		if (con->conf.log_request_handling) TRACE("file '%s' not found", BUF_STR(con->physical.path));
+		if (con->conf.log_request_handling) TRACE("file '%s' not found", SAFE_BUF_STR(con->physical.path));
 		return HANDLER_GO_ON;
 	}
 
 	/* don't compress files that are too large as we need to much time to handle them */
 	if (max_fsize && (sce->st.st_size >> 10) > max_fsize) {
 		if (con->conf.log_request_handling) TRACE("file '%s' is too large: %jd", 
-				BUF_STR(con->physical.path), 
+				SAFE_BUF_STR(con->physical.path), 
 				(intmax_t) sce->st.st_size);
 
 		return HANDLER_GO_ON;
@@ -659,7 +651,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	/* compressing the file might lead to larger files instead */
 	if (sce->st.st_size < 128) {
 		if (con->conf.log_request_handling) TRACE("file '%s' is too small: %jd", 
-				BUF_STR(con->physical.path), 
+				SAFE_BUF_STR(con->physical.path), 
 				(intmax_t) sce->st.st_size);
 
 		return HANDLER_GO_ON;
@@ -670,7 +662,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 		data_string *compress_ds = (data_string *)p->conf.compress->data[m];
 
 		if (!compress_ds) {
-			ERROR("evil: %s .. %s", BUF_STR(con->physical.path), BUF_STR(con->uri.path));
+			ERROR("evil: %s .. %s", SAFE_BUF_STR(con->physical.path), SAFE_BUF_STR(con->uri.path));
 
 			return HANDLER_GO_ON;
 		}
@@ -747,7 +739,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	/* perhaps we don't even have to compress the file as the browser still has the
 	 * current version */
 	if (HANDLER_FINISHED == http_response_handle_cachable(srv, con, mtime)) {
-		if (con->conf.log_request_handling) TRACE("%s is still the same, caching", BUF_STR(con->physical.path));
+		if (con->conf.log_request_handling) TRACE("%s is still the same, caching", SAFE_BUF_STR(con->physical.path));
 		return HANDLER_FINISHED;
 	}
 
@@ -779,7 +771,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 				CONST_STR_LEN("Content-Type"),
 				CONST_BUF_LEN(sce->content_type));
 
-		if (con->conf.log_request_handling) TRACE("looks like %s could be compressed", BUF_STR(con->physical.path));
+		if (con->conf.log_request_handling) TRACE("looks like %s could be compressed", SAFE_BUF_STR(con->physical.path));
 		return HANDLER_FINISHED;
 	}
 

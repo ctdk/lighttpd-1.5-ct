@@ -40,16 +40,18 @@
 #define SENDFILE(stream, filename) \
         FCGX_FPrintF(stream, "X-LIGHTTPD-send-file: %s\r\n\r\n", filename); 
 
+#define UNUSED(x) ( (void)(x) )
 
 static void *doit(void *a){
         FCGX_Request request;
         int rc;
         char *filename;
+        UNUSED(a);
 
         FCGX_InitRequest(&request, 0, /* FCGI_FAIL_ACCEPT_ON_INTR */ 0);
 
         while(1){
-		int fd;
+        int fd;
                 //Some platforms require accept() serialization, some don't. The documentation claims it to be thread safe
 //              static pthread_mutex_t accept_mutex = PTHREAD_MUTEX_INITIALIZER;
 //              pthread_mutex_lock(&accept_mutex);
@@ -102,10 +104,10 @@ int main(void){
                 pthread_create(&id[i], NULL, doit, NULL);
         }
 
-	/* block the current thread by executing one */
+    /* block the current thread by executing one */
         doit(NULL);
-	
-	for (i = 0; i < thread_count; i++) {
+
+    for (i = 0; i < thread_count; i++) {
                 pthread_join(id[i], NULL);
         }
 

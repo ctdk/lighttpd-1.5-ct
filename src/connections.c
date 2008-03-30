@@ -102,7 +102,11 @@ int connection_close(server *srv, connection *con) {
 	/* should be in iosocket_close() */
 
 	if (con->sock->ssl) {
-		switch (SSL_shutdown(con->sock->ssl)) {
+		int ret, ssl_r;
+		unsigned long err;
+
+		ERR_clear_error();
+		switch (ret = SSL_shutdown(con->sock->ssl)) {
 		case 1:
 			/* done */
 			break;
@@ -110,15 +114,35 @@ int connection_close(server *srv, connection *con) {
 			/* wait for fd-event
 			 *
 			 * FIXME: wait for fdevent and call SSL_shutdown again
-			 *
+			 * (But it is not that important as we close the underlying connection anyway)
 			 */
 
 			break;
 		default:
-			ERROR("SSL_shutdown failed: %s", ERR_error_string(ERR_get_error(), NULL));
+			switch ((ssl_r = SSL_get_error(con->sock->ssl, ret))) {
+			case SSL_ERROR_WANT_WRITE:
+			case SSL_ERROR_WANT_READ:
+				break;
+			case SSL_ERROR_SYSCALL:
+				/* perhaps we have error waiting in our error-queue */
+				if (0 != (err = ERR_get_error())) {
+					do {
+						ERROR("SSL_shutdown failed (%i, %i): %s", ssl_r, ret, ERR_error_string(err, NULL));
+					} while((err = ERR_get_error()));
+				} else {
+					ERROR("SSL_shutdown failed (%i, %i, %i): %s", ssl_r, ret, errno, strerror(errno));
+				}
+
+				break;
+			default:
+				while((err = ERR_get_error())) {
+					ERROR("SSL_shutdown failed (%i, %i): %s", ssl_r, ret, ERR_error_string(err, NULL));
+				}
+			}
 		}
 
 		SSL_free(con->sock->ssl);
+		ERR_clear_error();
 		con->sock->ssl = NULL;
 	}
 #endif

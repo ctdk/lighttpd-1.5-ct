@@ -44,6 +44,7 @@ NETWORK_BACKEND_READ(openssl) {
 		int oerrno;
 		b = chunkqueue_get_append_buffer(cq);
 		buffer_prepare_copy(b, 8192 + 12); /* ssl-chunk-size is 8kb */
+		ERR_clear_error();
 		len = SSL_read(sock->ssl, b->ptr, b->size - 1);
 
 		/**
@@ -183,6 +184,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 			 * checking toSend and not calling SSL_write() is simpler
 			 */
 
+			ERR_clear_error();
 			if (toSend != 0 && (r = SSL_write(sock->ssl, offset, toSend)) <= 0) {
 				unsigned long err;
 
@@ -287,6 +289,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 
 				close(ifd);
 
+				ERR_clear_error();
 				if ((r = SSL_write(sock->ssl, s, toSend)) <= 0) {
 					unsigned long err;
 

@@ -26,6 +26,7 @@ NEWS
   * fix auth-ldap configuration in tests
   * fcgi-stat-accel: Fix unused var / indentation
   * fix mod_compress bug (#1027)
+  * fix ssl error queue handling (#285) (CVE-2008-1531)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

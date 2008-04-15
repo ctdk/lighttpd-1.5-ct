@@ -1291,6 +1291,12 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 #endif
 	}
 
+	/* populate sess->request_uri with the actually requested path
+	 * (con->request.uri). if we have pcre and there is a _uri request
+	 * rewrite, it will be overwritten later
+	 */
+	buffer_copy_string_buffer(sess->request_uri, con->request.uri);
+
 	/* check if we want to rewrite the uri */
 #ifdef HAVE_PCRE_H
 	for (i = 0; i < p->conf.request_rewrites->used; i++) {
@@ -1367,12 +1373,6 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
 
 		}
 	}
-
-	if (i == p->conf.request_rewrites->used) {
-		buffer_copy_string_buffer(sess->request_uri, con->request.uri);
-	}
-#else
-	buffer_copy_string_buffer(sess->request_uri, con->request.uri);
 #endif
 
 	proxy_encode_request_headers(srv, sess, con->recv);

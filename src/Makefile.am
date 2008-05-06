@@ -18,38 +18,33 @@ if CROSS_COMPILING
 configparser.c configparser.h: 
 mod_ssi_exprparser.c mod_ssi_exprparser.h: 
 else
-$(srcdir)/configparser.y: lemon
-$(srcdir)/mod_ssi_exprparser.y: lemon
-$(srcdir)/http_resp_parser.y: lemon
-$(srcdir)/http_req_parser.y: lemon
-$(srcdir)/http_req_range_parser.y: lemon
 
-configparser.c configparser.h: $(srcdir)/configparser.y
+configparser.c configparser.h: $(LEMON) $(srcdir)/configparser.y $(srcdir)/lempar.c
 	rm -f configparser.h
 	$(LEMON) -q $(srcdir)/configparser.y $(srcdir)/lempar.c
 
-http_resp_parser.c http_resp_parser.h: $(srcdir)/http_resp_parser.y
+http_resp_parser.c http_resp_parser.h: $(LEMON) $(srcdir)/http_resp_parser.y $(srcdir)/lempar.c
 	rm -f http_resp_parser.h
 	$(LEMON) -q $(srcdir)/http_resp_parser.y $(srcdir)/lempar.c
 
-http_req_parser.c http_req_parser.h: $(srcdir)/http_req_parser.y
+http_req_parser.c http_req_parser.h: $(LEMON) $(srcdir)/http_req_parser.y $(srcdir)/lempar.c
 	rm -f http_req_parser.h
 	$(LEMON) -q $(srcdir)/http_req_parser.y $(srcdir)/lempar.c
 
-http_req_range_parser.c http_req_range_parser.h: $(srcdir)/http_req_range_parser.y
+http_req_range_parser.c http_req_range_parser.h: $(LEMON) $(srcdir)/http_req_range_parser.y $(srcdir)/lempar.c
 	rm -f http_req_range_parser.h
 	$(LEMON) -q $(srcdir)/http_req_range_parser.y $(srcdir)/lempar.c
 
-mod_ssi_exprparser.c mod_ssi_exprparser.h: $(srcdir)/mod_ssi_exprparser.y 
+mod_ssi_exprparser.c mod_ssi_exprparser.h: $(LEMON) $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
 	rm -f mod_ssi_exprparser.h
 	$(LEMON) -q $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
 endif
 
-$(srcdir)/configfile.c: configparser.h
-$(srcdir)/mod_ssi_expr.c: mod_ssi_exprparser.h
-$(srcdir)/http_resp.c: http_resp_parser.h
-$(srcdir)/http_req.c: http_req_parser.h
-$(srcdir)/http_req_range.c: http_req_range_parser.h
+configfile.o: configparser.h
+mod_ssi_expr.o: mod_ssi_exprparser.h
+http_resp.o: http_resp_parser.h
+http_req.o: http_req_parser.h
+http_req_range.o: http_req_range_parser.h
 
 common_src=buffer.c log.c \
       keyvalue.c chunk.c filter.c \

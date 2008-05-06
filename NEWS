@@ -28,6 +28,7 @@ NEWS
   * fix mod_compress bug (#1027)
   * fix ssl error queue handling (#285) (CVE-2008-1531)
   * fix dependencies of the parser files in the Makefile
+  * fix server.kbytes-per-second (#1102)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -725,7 +725,7 @@ network_status_t network_write_chunkqueue(server *srv, connection *con, chunkque
 		con->traffic_limit_reached = 1;
 		joblist_append(srv, con);
 
-		return 1;
+		return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 	}
 
 	written = cq->bytes_out;

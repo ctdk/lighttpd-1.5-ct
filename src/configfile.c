@@ -884,8 +884,8 @@ int config_parse_file(server *srv, config_t *context, const char *fn) {
 	int ret;
 	buffer *filename;
 
-	if (buffer_is_empty(context->basedir) &&
-			(fn[0] == '/' || fn[0] == '\\') &&
+	if (buffer_is_empty(context->basedir) ||
+			(fn[0] == '/' || fn[0] == '\\') ||
 			(fn[0] == '.' && (fn[1] == '/' || fn[1] == '\\'))) {
 		filename = buffer_init_string(fn);
 	} else {

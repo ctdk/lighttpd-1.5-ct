@@ -206,7 +206,7 @@ sub handle_http {
 						$resp_hdr{$h} = $2;
 					}
 				} else {
-					diag(sprintf("unexpected line '$line'\n"));
+					diag(sprintf("unexpected line '%s'\n", $line));
 					return -1;
 				}
 			}
@@ -240,7 +240,7 @@ sub handle_http {
 				return -1;
 			}
 		} else {
-			diag(sprintf("unexpected resp_line '$resp_line'\n"));
+			diag(sprintf("unexpected resp_line '%s'\n", $resp_line));
 			return -1;
 		}
 
@@ -310,7 +310,7 @@ sub handle_http {
 
 	# we should have sucked up everything
 	if (defined $lines) {
-		diag(sprintf("unexpected lines '$lines'\n"));
+		diag(sprintf("unexpected lines '%s'\n", $lines));
 		return -1;
 	}
 

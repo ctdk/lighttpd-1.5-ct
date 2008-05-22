@@ -91,18 +91,17 @@ sub start_proc {
 	$ENV{'PORT'} = $self->{PORT};
 
 	unlink($self->{LIGHTTPD_PIDFILE});
-	my $cmdline = "";
+	my $cmdargs = "-f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
+	my $cmdline = $self->{LIGHTTPD_PATH}." ".$cmdargs;
+	my $cmdline_nofork = $self->{LIGHTTPD_PATH}." -D ".$cmdargs;
 	if (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'strace') {
-		$cmdline = "strace -tt -s 512 -o strace ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &";
+		$cmdline = "strace -tt -s 512 -o strace $cmdline_nofork &";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'truss') {
-		$cmdline = "truss -a -l -w all -v all -o strace ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &";
+		$cmdline = "truss -a -l -w all -v all -o strace $cmdline_nofork &";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'gdb') {
-		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." > gdb.out &";
-
+		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args $cmdline_nofork &";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'valgrind') {
-		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind ".$self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH}." &";
-	} else {
-		$cmdline = $self->{LIGHTTPD_PATH}." -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
+		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind $cmdline_nofork &";
 	}
 	# diag("starting lighttpd at :".$self->{PORT}.", cmdline: ".$cmdline );
 	system($cmdline) == 0 or die($?);

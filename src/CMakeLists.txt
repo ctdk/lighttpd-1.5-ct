@@ -74,8 +74,10 @@ MACRO(XCONFIG _package _include_DIR _link_DIR _link_FLAGS _cflags)
     SET(XCONFIG_EXECUTABLE "${${_package}CONFIG_EXECUTABLE}")
     MESSAGE(STATUS "found ${_package}: ${XCONFIG_EXECUTABLE}")
 
-    EXEC_PROGRAM(${XCONFIG_EXECUTABLE} ARGS --libs OUTPUT_VARIABLE ${_link_FLAGS} )
-    EXEC_PROGRAM(${XCONFIG_EXECUTABLE} ARGS --cflags OUTPUT_VARIABLE ${_cflags} )
+    EXEC_PROGRAM(${XCONFIG_EXECUTABLE} ARGS --libs OUTPUT_VARIABLE __link_FLAGS)
+    STRING(REPLACE "\n" "" ${_link_FLAGS} ${__link_FLAGS})
+    EXEC_PROGRAM(${XCONFIG_EXECUTABLE} ARGS --cflags OUTPUT_VARIABLE __cflags)
+    STRING(REPLACE "\n" "" ${_cflags} ${__cflags})
 
   ELSE(${_package}CONFIG_EXECUTABLE)
     MESSAGE(STATUS "found ${_package}: no")
@@ -143,10 +145,8 @@ IF(WITH_XML)
   IF(XML2_LDFLAGS OR XML2_CFLAGS) 
     MESSAGE(STATUS "found xml2 at: LDFLAGS: ${XML2_LDFLAGS} CFLAGS: ${XML2_CFLAGS}")
 
-    IF(NOT XML2_CFLAGS STREQUAL "\n")
-      ## if it is empty we'll get newline returned
-      SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${XML2_CFLAGS}")
-    ENDIF(NOT XML2_CFLAGS STREQUAL "\n")
+    ## if it is empty we'll get newline returned
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${XML2_CFLAGS}")
 
     CHECK_INCLUDE_FILES(libxml/tree.h HAVE_LIBXML_H)
 

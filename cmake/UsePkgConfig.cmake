@@ -33,13 +33,17 @@ MACRO(PKGCONFIG _package _include_DIR _link_DIR _link_FLAGS _cflags)
     # and if the package of interest also exists for pkg-config, then get the information
     IF(NOT _return_VALUE)
 
-      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --variable=includedir OUTPUT_VARIABLE ${_include_DIR} )
+      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --variable=includedir OUTPUT_VARIABLE __include_DIR)
+      STRING(REPLACE "\n" "" ${_include_DIR} ${__include_DIR})
 
-      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --variable=libdir OUTPUT_VARIABLE ${_link_DIR} )
+      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --variable=libdir OUTPUT_VARIABLE __link_DIR)
+      STRING(REPLACE "\n" "" ${_link_DIR} ${__link_DIR})
 
-      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --libs OUTPUT_VARIABLE ${_link_FLAGS} )
+      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --libs OUTPUT_VARIABLE __link_FLAGS)
+      STRING(REPLACE "\n" "" ${_link_FLAGS} ${__link_FLAGS})
 
-      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --cflags OUTPUT_VARIABLE ${_cflags} )
+      EXEC_PROGRAM(${PKGCONFIG_EXECUTABLE} ARGS ${_msvc_mode} ${_package} --cflags OUTPUT_VARIABLE __cflags)
+      STRING(REPLACE "\n" "" ${_cflags} ${__cflags})
 
     ENDIF(NOT _return_VALUE)
 

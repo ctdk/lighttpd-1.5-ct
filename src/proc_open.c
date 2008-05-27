@@ -4,7 +4,7 @@
 #include <errno.h>
 #include "proc_open.h"
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <io.h>
 #include <fcntl.h>
 #else
@@ -39,7 +39,7 @@ static void pipe_close_child(pipe_t *p) {
 			(p->fd == 0 ? O_RDONLY : O_WRONLY)|O_BINARY);
 }
 /* }}} */
-#else /* WIN32 */
+#else /* _WIN32 */
 /* {{{ unix way */
 # define SHELLENV "SHELL"
 # define SECURITY_DC
@@ -60,13 +60,13 @@ static void pipe_close_child(pipe_t *p) {
 	p->fd = p->parent;
 }
 /* }}} */
-#endif /* WIN32 */
+#endif /* _WIN32 */
 
 /* {{{ pipe_close */
 static void pipe_close(pipe_t *p) {
 	close_descriptor(p->parent);
 	close_descriptor(p->child);
-#ifdef WIN32
+#ifdef _WIN32
 	close(p->fd);
 #endif
 }
@@ -128,7 +128,7 @@ static void proc_close_childs(proc_handler_t *proc) {
 }
 /* }}} */
 
-#ifdef WIN32
+#ifdef _WIN32
 /* {{{ proc_close */
 int proc_close(proc_handler_t *proc) {
 	proc_pid_t child = proc->child;
@@ -206,7 +206,7 @@ int proc_open(proc_handler_t *proc, const char *command) {
 	return 0;
 }
 /* }}} */
-#else /* WIN32 */
+#else /* _WIN32 */
 /* {{{ proc_close */
 int proc_close(proc_handler_t *proc) {
 	pid_t child = proc->child;
@@ -349,7 +349,7 @@ int main() {
 	return __LINE__ - 300; \
 } while (0)
 
-#ifdef WIN32
+#ifdef _WIN32
 #define CMD_CAT "pause"
 #else
 #define CMD_CAT "cat"

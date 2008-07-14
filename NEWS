@@ -29,6 +29,7 @@ NEWS
   * fix ssl error queue handling (#285) (CVE-2008-1531)
   * fix dependencies of the parser files in the Makefile
   * fix server.kbytes-per-second (#1102)
+  * let spawn-fcgi propagate exit code from spawned fcgi application
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -10,6 +10,11 @@
 # endif
 #endif
 
+#ifdef linux
+/* For pread()/pwrite() */
+#define _XOPEN_SOURCE 500
+#endif
+
 #include "settings.h"
 #include "network_backends.h"
 #ifdef USE_GTHREAD_AIO

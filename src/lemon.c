@@ -2287,10 +2287,10 @@ to follow the previous rule.");
 ** token is passed to the function "parseonetoken" which builds all
 ** the appropriate data structures in the global state vector "gp".
 */
+struct pstate ps;
 void Parse(gp)
 struct lemon *gp;
 {
-  struct pstate ps;
   FILE *fp;
   char *filebuf;
   size_t filesize;

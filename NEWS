@@ -34,6 +34,7 @@ NEWS
   * close connection after redirect in trigger_b4_dl
   * remove scons build system
   * fix memory leak on windows (#1371)
+  * do not add Accept-Ranges header if range-request is disabled (#1449)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

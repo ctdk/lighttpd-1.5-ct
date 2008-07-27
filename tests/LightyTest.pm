@@ -6,6 +6,7 @@ use IO::Socket;
 use Test::More;
 use Socket;
 use Cwd 'abs_path';
+use POSIX ":sys_wait_h";
 
 sub mtime {
 	my $file = shift;
@@ -30,12 +31,17 @@ sub new {
 
 
 	if (mtime($self->{BASEDIR}.'/src/lighttpd') > mtime($self->{BASEDIR}.'/build/lighttpd')) {
-		$self->{LIGHTTPD_PATH} = $self->{BASEDIR}.'/src/lighttpd';
-		$self->{MODULES_PATH} = $self->{BASEDIR}.'/src/.libs';
+		$self->{BINDIR} = $self->{BASEDIR}.'/src';
+		if (mtime($self->{BASEDIR}.'/src/.libs')) {
+			$self->{MODULES_PATH} = $self->{BASEDIR}.'/src/.libs';
+		} else {
+			$self->{MODULES_PATH} = $self->{BASEDIR}.'/src';
+		}
 	} else {
-		$self->{LIGHTTPD_PATH} = $self->{BASEDIR}.'/build/lighttpd';
+		$self->{BINDIR} = $self->{BASEDIR}.'/build';
 		$self->{MODULES_PATH} = $self->{BASEDIR}.'/build';
 	}
+	$self->{LIGHTTPD_PATH} = $self->{BINDIR}.'/lighttpd';
 	$self->{LIGHTTPD_PIDFILE} = $self->{TESTDIR}.'/tmp/lighttpd/lighttpd.pid';
 	$self->{PIDOF_PIDFILE} = $self->{TESTDIR}.'/tmp/lighttpd/pidof.pid';
 	$self->{PORT} = 2048;
@@ -66,13 +72,21 @@ sub listening_on {
 sub stop_proc {
 	my $self = shift;
 
-	open F, $self->{LIGHTTPD_PIDFILE} or return -1;
-	my $pid = <F>;
-	close F;
+#	open F, $self->{LIGHTTPD_PIDFILE} or return -1;
+#	my $pid = <F>;
+#	close F;
 
+#	if (defined $pid) {
+#		kill('TERM',$pid) or return -1;
+#		select(undef, undef, undef, 0.5);
+#	}
+
+	my $pid = $self->{LIGHTTPD_PID};
 	if (defined $pid) {
-		kill('TERM',$pid) or return -1;
-		select(undef, undef, undef, 0.5);
+		kill('TERM', $pid) or return -1;
+		return -1 if ($pid != waitpid($pid, 0));
+	} else {
+		diag("Nothing to kill\n");
 	}
 
 	return 0;
@@ -82,7 +96,7 @@ sub stop_proc {
 sub start_proc {
 	my $self = shift;
 	# kill old proc if necessary
-	$self->stop_proc;
+	#$self->stop_proc;
 
 	# pre-process configfile if necessary
 	#
@@ -91,24 +105,33 @@ sub start_proc {
 	$ENV{'PORT'} = $self->{PORT};
 
 	unlink($self->{LIGHTTPD_PIDFILE});
-	my $cmdargs = "-f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
+	my $cmdargs = " -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
 	my $cmdline = $self->{LIGHTTPD_PATH}." ".$cmdargs;
-	my $cmdline_nofork = $self->{LIGHTTPD_PATH}." -D ".$cmdargs;
 	if (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'strace') {
-		$cmdline = "strace -tt -s 512 -o strace $cmdline_nofork &";
+		$cmdline = "strace -tt -s 512 -o strace $cmdline &";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'truss') {
-		$cmdline = "truss -a -l -w all -v all -o strace $cmdline_nofork &";
+		$cmdline = "truss -a -l -w all -v all -o strace $cmdline &";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'gdb') {
-		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args $cmdline_nofork &";
+		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args $cmdline &";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'valgrind') {
-		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind $cmdline_nofork &";
+		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind $cmdline &";
 	}
 	# diag("starting lighttpd at :".$self->{PORT}.", cmdline: ".$cmdline );
-	system($cmdline) == 0 or die($?);
+	my $child = fork();
+	if (not defined $child) {
+		diag("Fork failed");
+		return -1;
+	}
+	if ($child == 0) {
+		exec $cmdline or die($?);
+	} else {
+		$self->{LIGHTTPD_PID} = $child;
+	}
+#	system($cmdline) == 0 or die($?);
 
 	select(undef, undef, undef, 0.1);
 	if (not -e $self->{LIGHTTPD_PIDFILE} or 0 == kill 0, `cat $self->{LIGHTTPD_PIDFILE}`) {
-		select(undef, undef, undef, 2);	
+		select(undef, undef, undef, 2);
 	}
 
 	unlink($self->{TESTDIR}."/tmp/cfg.file");
@@ -120,8 +143,9 @@ sub start_proc {
 	}
 
 	# the process is gone, we failed
-	if (0 == kill 0, `cat $self->{LIGHTTPD_PIDFILE}`) {
-		diag(sprintf('the process referenced by %s is not up', $self->{LIGHTTPD_PIDFILE}));
+	if (0 != waitpid($child, WNOHANG)) {
+	#if (0 == kill 0, `cat $self->{LIGHTTPD_PIDFILE}`) {
+		diag(sprintf('the process %i is not up', $child));
 		return -1;
 	}
 
@@ -157,9 +181,10 @@ sub handle_http {
 		s/\r//g;
 		s/\n/$EOL/g;
 
-		print $remote $_.$BLANK;	
+		print $remote $_.$BLANK;
 		diag("<< ".$_) if $is_debug;
 	}
+	shutdown($remote, 1); # I've stopped writing data
 	diag("... done") if $is_debug;
 
 	my $lines = "";
@@ -210,6 +235,11 @@ sub handle_http {
 					return -1;
 				}
 			}
+		}
+
+		if (not defined($resp_line)) {
+			diag(sprintf("empty response\n"));
+			return -1;
 		}
 
 		$t->{etag} = $resp_hdr{'etag'};
@@ -316,6 +346,32 @@ sub handle_http {
 
 	return 0;
 }
-    
-1;
 
+sub spawnfcgi {
+	my ($self, $binary, $port) = @_;
+	my $child = fork();
+	if (not defined $child) {
+		diag("Couldn't fork\n");
+		return -1;
+	}
+	if ($child == 0) {
+		my $cmd = $self->{BINDIR}.'/spawn-fcgi -n -p '.$port.' -f "'.$binary.'"';
+		exec $cmd;
+	} else {
+		select(undef, undef, undef, 0.5);
+		if (0 != waitpid($child, WNOHANG)) {
+			diag("Child died\n");
+			return -1;
+		}
+		return $child;
+	}
+}
+
+sub endspawnfcgi {
+	my ($self, $pid) = @_;
+	kill(2, $pid);
+	waitpid($pid, 0);
+	return 0;
+}
+
+1;

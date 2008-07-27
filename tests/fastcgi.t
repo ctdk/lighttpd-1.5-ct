@@ -12,12 +12,19 @@ use LightyTest;
 
 my $tf = LightyTest->new();
 
-my ($t, $php_child);
+my $t;
+my $php_child = -1;
 
-ok(-1 != ($php_child = $tf->spawnfcgi("/usr/bin/php-cgi", 1026)), "Spawning php");
+my $phpbin = (defined $ENV{'PHP'} ? $ENV{'PHP'} : '/usr/bin/php-cgi');
 
 SKIP: {
-	skip "no PHP running on port 1026", 29 unless $tf->listening_on(1026);
+	skip "PHP already running on port 1026", 1 if $tf->listening_on(1026);
+	skip "no php binary found", 1 unless -x $phpbin;
+	ok(-1 != ($php_child = $tf->spawnfcgi($phpbin, 1026)), "Spawning php");
+}
+
+SKIP: {
+	skip "no PHP running on port 1026", 30 unless $tf->listening_on(1026);
 
 	ok($tf->start_proc == 0, "Starting lighttpd") or goto cleanup;
 
@@ -213,7 +220,7 @@ EOF
 }
 
 SKIP: {
-	skip "PHP no started, cannot stop it", 1 unless $php_child != -1;
+	skip "PHP not started, cannot stop it", 1 unless $php_child != -1;
 	ok(0 == $tf->endspawnfcgi($php_child), "Stopping php");
 }
 

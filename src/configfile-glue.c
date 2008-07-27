@@ -202,11 +202,16 @@ int config_insert_values_global(server *srv, array *ca, const config_values_t cv
 }
 
 unsigned short sock_addr_get_port(sock_addr *addr) {
+	switch (addr->plain.sa_family) {
+	case AF_INET:
+		return ntohs(addr->ipv4.sin_port);
 #ifdef HAVE_IPV6
-	return ntohs(addr->plain.sa_family ? addr->ipv6.sin6_port : addr->ipv4.sin_port);
-#else
-	return ntohs(addr->ipv4.sin_port);
+	case AF_INET6:
+		return ntohs(addr->ipv6.sin6_port);
 #endif
+	default:
+		return 0;
+	}
 }
 
 static cond_result_t config_check_cond_cached(server *srv, connection *con, data_config *dc);

@@ -13,7 +13,6 @@ SET(T_FILES
 	mod-cgi.t
 	mod-compress.t
 	mod-fastcgi.t
-	mod-proxy.t
 	mod-redirect.t
 	mod-rewrite.t
 	mod-secdownload.t

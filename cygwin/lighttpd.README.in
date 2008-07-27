@@ -56,7 +56,6 @@ Files included in the binary distribution:
   /usr/lib/lighttpd/mod_compress.dll
   /usr/lib/lighttpd/mod_evhost.dll
   /usr/lib/lighttpd/mod_expire.dll
-  /usr/lib/lighttpd/mod_fastcgi.dll
   /usr/lib/lighttpd/mod_httptls.dll
   /usr/lib/lighttpd/mod_maps.dll
   /usr/lib/lighttpd/mod_proxy.dll

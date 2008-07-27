@@ -639,7 +639,7 @@ else
         no_build="$no_build $plugins"
 fi
 
-plugins="mod_cml"
+plugins="mod_magnet"
 if test ! "x$LUA_LIBS" = x; then
 	do_build="$do_build $plugins"
 else

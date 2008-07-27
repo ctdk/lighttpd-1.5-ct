@@ -348,7 +348,6 @@ server.modules
 				"mod_evhost",
 				"mod_userdir",
 				"mod_secdownload",
-				"mod_fastcgi",
 				"mod_proxy",
 				"mod_cgi",
                                 "mod_ssi",

@@ -9,14 +9,11 @@ SET(L_DOCS
 	authentication.txt
 	cgi.txt
 	CMakeLists.txt
-	cml.txt
 	compress.txt
 	configuration.txt
 	dirlisting.txt
 	evhost.txt
 	expire.txt
-	fastcgi-state.txt
-	fastcgi.txt
 	features.txt
 	performance.txt
 	plugins.txt

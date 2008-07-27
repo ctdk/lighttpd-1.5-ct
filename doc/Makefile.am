@@ -6,8 +6,6 @@ authentication.txt \
 cgi.txt \
 compress.txt \
 configuration.txt \
-fastcgi-state.txt \
-fastcgi.txt \
 features.txt \
 performance.txt \
 plugins.txt \
@@ -28,8 +26,6 @@ access.txt \
 traffic-shaping.txt \
 setenv.txt \
 status.txt \
-scgi.txt \
-cml.txt \
 trigger_b4_dl.txt \
 webdav.txt \
 expire.txt \
@@ -41,8 +37,6 @@ HTMLDOCS=accesslog.html \
 	 cgi.html \
 	 compress.html \
 	 configuration.html \
-	 fastcgi-state.html \
-	 fastcgi.html \
 	 features.html \
 	 performance.html \
 	 plugins.html \
@@ -63,8 +57,6 @@ HTMLDOCS=accesslog.html \
 	 traffic-shaping.html \
 	 setenv.html \
 	 status.html \
-	 scgi.html \
-	 cml.html \
 	 trigger_b4_dl.html \
 	 webdav.html \
 	 expire.html \
@@ -74,7 +66,7 @@ HTMLDOCS=accesslog.html \
 EXTRA_DIST=lighttpd.conf lighttpd.user \
 	rc.lighttpd rc.lighttpd.redhat sysconfig.lighttpd \
 	rrdtool-graph.sh \
-	state.dot fastcgi-state.dot \
+	state.dot \
 	spawn-php.sh \
 	newstyle.css \
 	oldstyle.css \

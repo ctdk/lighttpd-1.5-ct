@@ -93,7 +93,7 @@ opts.AddOptions(
 	BoolOption('with_openssl', 'enable memcache support', 'no'),
 	BoolOption('with_gzip', 'enable gzip compression', 'no'),
 	BoolOption('with_bzip2', 'enable bzip2 compression', 'no'),
-	BoolOption('with_lua', 'enable lua support for mod_cml', 'no'),
+	BoolOption('with_lua', 'enable lua support for mod_magnet', 'no'),
 	BoolOption('with_xattr', 'enable xattr support', 'no'),
 	BoolOption('with_uuid', 'enable LOCK support (requires uuid) for mod_webdav', 'no'),
 	BoolOption('with_ldap', 'enable ldap auth support', 'no'))

@@ -113,13 +113,6 @@ mod_evasive_la_SOURCES = mod_evasive.c
 mod_evasive_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_evasive_la_LIBADD = $(common_libadd)
 
-## legacy code
-lib_LTLIBRARIES += mod_fastcgi.la
-mod_fastcgi_la_SOURCES = mod_fastcgi.c
-mod_fastcgi_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_fastcgi_la_LIBADD = $(common_libadd)
-
-
 lib_LTLIBRARIES += mod_webdav.la
 mod_webdav_la_SOURCES = mod_webdav.c
 mod_webdav_la_CFLAGS = $(AM_CFLAGS) $(XML_CFLAGS) $(SQLITE_CFLAGS) 
@@ -315,7 +308,7 @@ hdr = server.h buffer.h network.h log.h keyvalue.h \
       network_backends.h configfile.h bitset.h \
       mod_ssi.h mod_ssi_expr.h inet_ntop_cache.h \
       configparser.h mod_ssi_exprparser.h \
-      sys-mmap.h sys-socket.h mod_cml.h mod_cml_funcs.h \
+      sys-mmap.h sys-socket.h \
       proc_open.h mod_sql_vhost_core.h \
       sys-files.h sys-process.h sys-strings.h  \
       iosocket.h array-static.h \

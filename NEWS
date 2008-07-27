@@ -33,6 +33,7 @@ NEWS
   * fix in/out statistics for connections
   * close connection after redirect in trigger_b4_dl
   * remove scons build system
+  * fix memory leak on windows (#1371)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

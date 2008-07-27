@@ -17,9 +17,6 @@ TESTS=\
 	cleanup.sh
 
 CONFS=fastcgi-10.conf \
-      fastcgi-auth.conf \
-      fastcgi-responder.conf \
-      fastcgi-13.conf \
       bug-06.conf \
       bug-12.conf \
       core-var-include.t \
@@ -35,7 +32,7 @@ CONFS=fastcgi-10.conf \
       mod-auth.t \
       mod-cgi.t \
       mod-compress.t \
-      mod-fastcgi.t \
+      fastcgi.t \
       mod-redirect.t \
       mod-userdir.t \
       mod-rewrite.t \

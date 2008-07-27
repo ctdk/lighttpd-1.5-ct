@@ -12,7 +12,7 @@ SET(T_FILES
 	mod-auth.t
 	mod-cgi.t
 	mod-compress.t
-	mod-fastcgi.t
+	fastcgi.t
 	mod-redirect.t
 	mod-rewrite.t
 	mod-secdownload.t

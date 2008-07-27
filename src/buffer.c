@@ -63,7 +63,7 @@ void buffer_reset(buffer *b) {
 
 /**
  *
- * allocate (if necessary) enough space for 'size' bytes and
+ * allocate (if necessary) enough space for 'size' (+1, if 'size' > 0) bytes and
  * set the 'used' counter to 0
  *
  */
@@ -74,12 +74,13 @@ int buffer_prepare_copy(buffer *b, size_t size) {
 	if (!b) return -1;
 
 	if ((0 == b->size) ||
-	    (size > b->size)) {
+	    (size >= b->size)) {
 		if (b->size) free(b->ptr);
 
 		b->size = size;
 
 		/* always allocate a multiple of BUFFER_PIECE_SIZE */
+		/* adds a least 1 byte */
 		b->size += BUFFER_PIECE_SIZE - (b->size % BUFFER_PIECE_SIZE);
 
 		b->ptr = malloc(b->size);
@@ -108,7 +109,7 @@ int buffer_prepare_append(buffer *b, size_t size) {
 		b->ptr = malloc(b->size);
 		b->used = 0;
 		assert(b->ptr);
-	} else if (b->used + size > b->size) {
+	} else if (b->used + size >= b->size) {
 		b->size += size;
 
 		/* always allocate a multiple of BUFFER_PIECE_SIZE */

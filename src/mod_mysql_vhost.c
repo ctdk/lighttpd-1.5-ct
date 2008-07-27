@@ -255,7 +255,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 		buffer_append_string_buffer(p->tmp_buf, p->conf.mysql_post);
 	}
    	if (mysql_query(p->conf.mysql, BUF_STR(p->tmp_buf))) {
-		ERROR("mysql_query(%s) failed: %s", BUF_STR(p->tmp_buf), mysql_error(p->conf.mysql));
+		ERROR("mysql_query(%s) failed: %s", SAFE_BUF_STR(p->tmp_buf), mysql_error(p->conf.mysql));
 
 		mysql_free_result(result);
 		return HANDLER_ERROR;

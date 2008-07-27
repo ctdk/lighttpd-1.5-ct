@@ -319,7 +319,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 
 		if (request_check_hostname(con->request.http_host)) {
 			if (srv->srvconf.log_request_header_on_error) {
-				TRACE("Host header is invalid (Status: 400), was %s", BUF_STR(con->request.http_host));
+				TRACE("Host header is invalid (Status: 400), was %s", SAFE_BUF_STR(con->request.http_host));
 			}
 			con->http_status = 400;
 			con->keep_alive = 0;
@@ -405,7 +405,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			if (r > SSIZE_MAX) {
 				con->http_status = 413;
 
-				ERROR("request-size too long: %s (Status: 413)", BUF_STR(ds->value));
+				ERROR("request-size too long: %s (Status: 413)", SAFE_BUF_STR(ds->value));
 
 				return 0;
 			}
@@ -434,7 +434,7 @@ int http_request_parse(server *srv, connection *con, http_req *req) {
 			}
 		} else if (cmp > 0 && 0 == (cmp = buffer_caseless_compare(CONST_BUF_LEN(ds->key), CONST_STR_LEN("Host")))) {
 			if (request_check_hostname(ds->value)) {
-				TRACE("Host header is invalid (Status: 400), was %s", BUF_STR(ds->value));
+				TRACE("Host header is invalid (Status: 400), was %s", SAFE_BUF_STR(ds->value));
 				con->http_status = 400;
 				con->keep_alive = 0;
 

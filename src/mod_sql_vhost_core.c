@@ -274,7 +274,7 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	    srv->cur_ts - vhost->added_ts >= p->conf.cache_ttl
 	    ) {                             /* 3. the cache value is old */
 		/* ask the backend for the data */
-		if (p->conf.debug) TRACE("cache-miss for %s", BUF_STR(con->uri.authority));
+		if (p->conf.debug) TRACE("cache-miss for %s", SAFE_BUF_STR(con->uri.authority));
 
 		if (HANDLER_GO_ON != p->conf.get_vhost(srv, con, p->conf.backend_data, p->docroot, p->host)) {
 			return HANDLER_GO_ON;
@@ -283,7 +283,7 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 		if (p->conf.cache_ttl > 0) {
 			/* check if the cache-ttl is > 0, otherwise we would always trash the cache-entry */
 			if (vhost) {
-				if (p->conf.debug) TRACE("refreshing %s: %s", BUF_STR(con->uri.authority), BUF_STR(p->docroot));
+				if (p->conf.debug) TRACE("refreshing %s: %s", SAFE_BUF_STR(con->uri.authority), SAFE_BUF_STR(p->docroot));
 				buffer_copy_string_buffer(vhost->docroot, p->docroot);
 				vhost->added_ts = srv->cur_ts;
 			} else {
@@ -296,7 +296,7 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	
 				key = buffer_init_buffer(con->uri.authority); 
 				
-				if (p->conf.debug) TRACE("adding %s: %s", BUF_STR(key), BUF_STR(vhost->docroot));
+				if (p->conf.debug) TRACE("adding %s: %s", SAFE_BUF_STR(key), SAFE_BUF_STR(vhost->docroot));
 	
 				g_hash_table_insert(p->conf.vhost_table, key, vhost);
 	
@@ -304,7 +304,7 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 			}
 		}
 	} else {
-		if (p->conf.debug) TRACE("cache-hit for %s: %s", BUF_STR(vhost->docroot), BUF_STR(con->uri.authority));
+		if (p->conf.debug) TRACE("cache-hit for %s: %s", SAFE_BUF_STR(vhost->docroot), SAFE_BUF_STR(con->uri.authority));
 		
 		buffer_copy_string_buffer(p->docroot, vhost->docroot);
 	}
@@ -315,12 +315,12 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 #endif
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, p->docroot, &sce)) {
-		ERROR("stat_cache_get_entry(%s) failed: %s", BUF_STR(p->docroot), strerror(errno));
+		ERROR("stat_cache_get_entry(%s) failed: %s", SAFE_BUF_STR(p->docroot), strerror(errno));
 
 		return HANDLER_GO_ON;
 	}
 	if (!S_ISDIR(sce->st.st_mode)) {
-		ERROR("%s is not a dir", BUF_STR(p->docroot));
+		ERROR("%s is not a dir", SAFE_BUF_STR(p->docroot));
 
 		return HANDLER_GO_ON;
 	}

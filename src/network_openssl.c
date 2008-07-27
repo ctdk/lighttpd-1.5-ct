@@ -253,7 +253,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 			int write_wait = 0;
 
 			if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
-				ERROR("stat_cache_get_entry(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+				ERROR("stat_cache_get_entry(%s) failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 				return NETWORK_STATUS_FATAL_ERROR;
 			}
@@ -270,7 +270,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 				if (toSend > LOCAL_SEND_BUFSIZE) toSend = LOCAL_SEND_BUFSIZE;
 
 				if (-1 == (ifd = open(BUF_STR(c->file.name), O_RDONLY))) {
-					ERROR("open(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("open(%s) failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}
@@ -280,7 +280,7 @@ NETWORK_BACKEND_WRITE(openssl) {
 				if (-1 == (toSend = read(ifd, local_send_buffer, toSend))) {
 					close(ifd);
 					
-					ERROR("read(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("read(%s) failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}

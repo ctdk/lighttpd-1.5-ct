@@ -36,7 +36,7 @@ int proxy_rewrite_set_regex(proxy_rewrite *rewrite, buffer *regex) {
 	if (NULL == (rewrite->regex = pcre_compile(BUF_STR(regex),
 		  0, &errptr, &erroff, NULL))) {
 
-		TRACE("regex compilation for %s failed at %s", BUF_STR(regex), errptr);
+		TRACE("regex compilation for %s failed at %s", SAFE_BUF_STR(regex), errptr);
 
 		return -1;
 	}

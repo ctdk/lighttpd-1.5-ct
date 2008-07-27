@@ -225,7 +225,7 @@ int plugins_load(server *srv) {
 		}
 
 		if (static_plugins[j].name == NULL) {
-			ERROR("the plugin '%s' is not compiled in", BUF_STR(d->value));
+			ERROR("the plugin '%s' is not compiled in", SAFE_BUF_STR(d->value));
 			return -1;
 		}
 #else
@@ -301,7 +301,7 @@ int plugins_load(server *srv) {
 		*(void **)(&init) = dlsym(p->lib, srv->tmp_buf->ptr);
 #endif
 		if ((error = dlerror()) != NULL)  {
-			ERROR("dlsym(%s) failed: %s", BUF_STR(srv->tmp_buf), error);
+			ERROR("dlsym(%s) failed: %s", SAFE_BUF_STR(srv->tmp_buf), error);
 
 			plugin_free(p);
 			return -1;
@@ -310,7 +310,7 @@ int plugins_load(server *srv) {
 #endif
 #endif
 		if ((*init)(p)) {
-			ERROR("plugin-init failed for %s", BUF_STR(d->value));
+			ERROR("plugin-init failed for %s", SAFE_BUF_STR(d->value));
 
 			plugin_free(p);
 			return -1;
@@ -359,10 +359,10 @@ int plugins_load(server *srv) {
 			case HANDLER_WAIT_FOR_EVENT:\
 			case HANDLER_WAIT_FOR_FD:\
 			case HANDLER_ERROR:\
-				if (con->conf.log_request_handling) TRACE("-- plugins_call_...: plugin '%s' returns %d", BUF_STR(p->name), r); \
+				if (con->conf.log_request_handling) TRACE("-- plugins_call_...: plugin '%s' returns %d", SAFE_BUF_STR(p->name), r); \
 				return r;\
 			default:\
-				ERROR("-- plugins_call_...: plugin '%s' returns %d (unexpected)", BUF_STR(p->name), r); \
+				ERROR("-- plugins_call_...: plugin '%s' returns %d (unexpected)", SAFE_BUF_STR(p->name), r); \
 				return HANDLER_ERROR;\
 			}\
 		}\

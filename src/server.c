@@ -699,7 +699,7 @@ int lighty_mainloop(server *srv) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_connection_idle) {
 								/* time - out */
 #if 0
-								TRACE("(connection process timeout) [%s]", BUF_STR(con->dst_addr_buf));
+								TRACE("(connection process timeout) [%s]", SAFE_BUF_STR(con->dst_addr_buf));
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
@@ -710,7 +710,7 @@ int lighty_mainloop(server *srv) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_read_idle) {
 								/* time - out */
 #if 0
-								TRACE("(initial read timeout) [%s]", BUF_STR(con->dst_addr_buf));
+								TRACE("(initial read timeout) [%s]", SAFE_BUF_STR(con->dst_addr_buf));
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;
@@ -719,7 +719,7 @@ int lighty_mainloop(server *srv) {
 							if (srv->cur_ts - con->read_idle_ts > con->conf.max_keep_alive_idle) {
 								/* time - out */
 #if 0
-								TRACE("(keep-alive read timeout) [%s]", BUF_STR(con->dst_addr_buf));
+								TRACE("(keep-alive read timeout) [%s]", SAFE_BUF_STR(con->dst_addr_buf));
 #endif
 								connection_set_state(srv, con, CON_STATE_ERROR);
 								changed = 1;

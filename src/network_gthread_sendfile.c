@@ -122,12 +122,12 @@ gpointer network_gthread_sendfile_read_thread(gpointer _srv) {
 					break;
 				case ENOSYS:
 					ERROR("sendfile(%s) is not implemented, use server.network-backend = \"writev\"", 
-						BUF_STR(c->file.name));
+						SAFE_BUF_STR(c->file.name));
 					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					break;
 				default:
 					ERROR("sendfile(%s) failed: %s (%d)", 
-						BUF_STR(c->file.name),
+						SAFE_BUF_STR(c->file.name),
 						strerror(errno), errno);
 					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					break;
@@ -196,7 +196,7 @@ NETWORK_BACKEND_WRITE(gthreadsendfile) {
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY /* | O_DIRECT */ | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
-					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("opening '%s' failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}

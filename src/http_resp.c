@@ -244,7 +244,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 		ret = PARSE_ERROR;
 
 		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+			TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 		} else {
 			TRACE("%s", "parsing failed ...");
 		}
@@ -254,13 +254,13 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	http_resp_parserFree(pParser, free);
 
 	if (!buffer_is_empty(context.errmsg)) {
-		TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+		TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 	}
 	if (context.ok == 0) {
 		/* we are missing the some tokens */
 
 		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+			TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 		}
 
 		if (ret == PARSE_UNSET) {

@@ -180,7 +180,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 			if (headers->type != TYPE_ARRAY) {
 				ERROR("%s = ( %s => <...> ) has to a array",
 					config_key,
-					BUF_STR(headers->key));
+					SAFE_BUF_STR(headers->key));
 
 				return HANDLER_ERROR;
 			}
@@ -188,7 +188,7 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 			if (headers->value->used > 1) {
 				ERROR("%s = ( %s => <...> ) has to a array with only one element",
 					config_key,
-					BUF_STR(headers->key));
+					SAFE_BUF_STR(headers->key));
 
 				return HANDLER_ERROR;
 
@@ -202,8 +202,8 @@ static handler_t mod_proxy_core_config_parse_rewrites(proxy_rewrites *dest, arra
 				if (rewrites->type != TYPE_STRING) {
 					ERROR("%s = ( \"%s\" => ( \"%s\" => <value> ) ) has to a string",
 						config_key,
-						BUF_STR(headers->key),
-						BUF_STR(rewrites->key));
+						SAFE_BUF_STR(headers->key),
+						SAFE_BUF_STR(rewrites->key));
 
 					return HANDLER_ERROR;
 				}
@@ -322,7 +322,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			if (NULL != (di = (data_integer *)array_get_element(p->possible_balancers, CONST_BUF_LEN(p->balance_buf)))) {
 				s->balancer = di->value;
 			} else {
-				ERROR("proxy.balance has to be one of 'round-robin', 'carp', 'sqf', 'static': got %s", BUF_STR(p->balance_buf));
+				ERROR("proxy.balance has to be one of 'round-robin', 'carp', 'sqf', 'static': got %s", SAFE_BUF_STR(p->balance_buf));
 				return HANDLER_ERROR;
 			}
 		}
@@ -332,8 +332,8 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			if (NULL == (protocol = proxy_get_protocol(p->protocol_buf))) {
 				ERROR("proxy.protocol has to be one of { %s } got %s, you might have to load 'mod_proxy_backend_%s'",
 						proxy_available_protocols(),
-						BUF_STR(p->protocol_buf),
-						BUF_STR(p->protocol_buf)
+						SAFE_BUF_STR(p->protocol_buf),
+						SAFE_BUF_STR(p->protocol_buf)
 						);
 				return HANDLER_ERROR;
 			}
@@ -578,7 +578,7 @@ handler_t proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *out
 	if(protocol && protocol->proxy_stream_decoder) {
 		return (protocol->proxy_stream_decoder)(srv, sess, out);
 	}
-	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+	ERROR("protocol '%s' is not supported yet", SAFE_BUF_STR(protocol->name));
 	return HANDLER_ERROR;
 }
 
@@ -592,7 +592,7 @@ handler_t proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in)
 	if(protocol && protocol->proxy_stream_encoder) {
 		return (protocol->proxy_stream_encoder)(srv, sess, in);
 	}
-	ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+	ERROR("protocol '%s' is not supported yet", SAFE_BUF_STR(protocol->name));
 	return HANDLER_ERROR;
 }
 
@@ -615,7 +615,7 @@ handler_t proxy_encode_request_headers(server *srv, proxy_session *sess, chunkqu
 	if (protocol == NULL) {
 		ERROR("protocol is not set: %s", "");
 	} else {
-		ERROR("protocol '%s' is not supported yet", BUF_STR(protocol->name));
+		ERROR("protocol '%s' is not supported yet", SAFE_BUF_STR(protocol->name));
 	}
 	return HANDLER_ERROR;
 }
@@ -691,14 +691,14 @@ handler_t proxy_handle_response_headers(server *srv, connection *con, plugin_dat
 						c->file.is_temp = 1;
 					} else {
 						if(unlink(BUF_STR(header->value)) < 0) {
-							ERROR("Failed to delete empty tempfile: file=%s, error: %s", BUF_STR(header->value), strerror(errno));
+							ERROR("Failed to delete empty tempfile: file=%s, error: %s", SAFE_BUF_STR(header->value), strerror(errno));
 						}
 					}
 					con->response.content_length = sce->st.st_size;
 					have_content_length = 1;
 					con->send->is_closed = 1;
 				} else {
-					ERROR("Failed to send tempfile: file=%s, error: %s", BUF_STR(header->value), strerror(errno));
+					ERROR("Failed to send tempfile: file=%s, error: %s", SAFE_BUF_STR(header->value), strerror(errno));
 				}
 			}
 
@@ -928,7 +928,7 @@ handler_t proxy_connection_connect(proxy_connection *con) {
 			con->sock->fd = -1;
 
 			ERROR("connect(%s) failed: %s (%d)", 
-				BUF_STR(con->address->name),
+				SAFE_BUF_STR(con->address->name),
 				strerror(errno), errno);
 			return HANDLER_ERROR;
 		}
@@ -1444,7 +1444,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 			sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
 
 			TRACE("connecting to address %s (%p) failed, disabling for 60 sec", 
-					BUF_STR(sess->proxy_con->address->name),
+					SAFE_BUF_STR(sess->proxy_con->address->name),
 					(void*) sess->proxy_con->address);
 			COUNTER_INC(sess->proxy_backend->requests_failed);
 
@@ -1536,7 +1536,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 					sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED;
 				}
 				TRACE("connect(%s) to failed: trying another backed", 
-						BUF_STR(sess->proxy_con->address->name));
+						SAFE_BUF_STR(sess->proxy_con->address->name));
 				return HANDLER_COMEBACK;
 			default:
 				ERROR("invalid connection-state: %d", sess->proxy_con->state);
@@ -2153,8 +2153,8 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 		con->send->is_closed = 1;
 
 		TRACE("proxy-core.backends is set, but proxy-core.protocol is not, can't handle '%s' for host '%s'", 
-				BUF_STR(con->uri.path), 
-				BUF_STR(con->uri.authority));
+				SAFE_BUF_STR(con->uri.path), 
+				SAFE_BUF_STR(con->uri.authority));
 		return HANDLER_FINISHED;
 	}
 
@@ -2170,7 +2170,7 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 
 	if (con->conf.log_request_handling) {
 		TRACE("handling it in mod_proxy_core: %s.path=%s",
-				file_match ? "physical" : "uri", BUF_STR(path));
+				file_match ? "physical" : "uri", SAFE_BUF_STR(path));
 	}
 	sess->p = p;
 	sess->remote_con = con;
@@ -2259,7 +2259,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			con->send->is_closed = 1;
 
 			if (sess->proxy_con) {
-				TRACE("connect to backend timed out: %s", BUF_STR(sess->proxy_con->address->name));
+				TRACE("connect to backend timed out: %s", SAFE_BUF_STR(sess->proxy_con->address->name));
 				/* if we are waiting for a proxy-connection right now, close it */
 				proxy_remove_backend_connection(srv, sess);
 			} else {
@@ -2291,7 +2291,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			 */
 			if (NULL == (sess->proxy_backend = proxy_backend_balancer(srv, con, sess))) {
 				if (p->conf.debug) TRACE("backlog: all backends are full or down, putting %s (%d) into the backlog, retry = %d", 
-						BUF_STR(con->uri.path), con->sock->fd, sess->sent_to_backlog + 1);
+						SAFE_BUF_STR(con->uri.path), con->sock->fd, sess->sent_to_backlog + 1);
 
 				/* no backends available right now. */
 				if (HANDLER_ERROR == mod_proxy_core_backlog_connection(srv, con, p, sess)) {
@@ -2314,7 +2314,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 			sess->proxy_backend->balancer = p->conf.balancer;
 			
 			if (p->conf.debug && sess->proxy_backend) {
-				TRACE("selected backend: %s, state: %d", BUF_STR(sess->proxy_backend->name), sess->proxy_backend->state);
+				TRACE("selected backend: %s, state: %d", SAFE_BUF_STR(sess->proxy_backend->name), sess->proxy_backend->state);
 			}
 
 			/**
@@ -2326,7 +2326,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				/* no addresses available for this backend right now. */
 				sess->proxy_backend->state = PROXY_BACKEND_STATE_DISABLED; /* disable backend */
 				TRACE("backlog: all addresses are down, putting %s (%d) into the backlog, retry = %d", 
-						BUF_STR(con->uri.path), con->sock->fd, sess->sent_to_backlog + 1);
+						SAFE_BUF_STR(con->uri.path), con->sock->fd, sess->sent_to_backlog + 1);
 
 				if (HANDLER_ERROR == mod_proxy_core_backlog_connection(srv, con, p, sess)) {
 					con->http_status = 504; /* gateway timeout */
@@ -2350,7 +2350,7 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 				/* all connections are busy. */
 				sess->proxy_backend->state = PROXY_BACKEND_STATE_FULL;
 
-				if (p->conf.debug) TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", BUF_STR(con->uri.path), con->sock->fd);
+				if (p->conf.debug) TRACE("backlog: the con-pool is full, putting %s (%d) into the backlog", SAFE_BUF_STR(con->uri.path), con->sock->fd);
 				if (HANDLER_ERROR == mod_proxy_core_backlog_connection(srv, con, p, sess)) {
 					con->http_status = 504; /* gateway timeout */
 					con->send->is_closed = 1;
@@ -2489,7 +2489,7 @@ static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_conf
 				}
 
 				TRACE("connect(%s) timed out, closing backend connection",
-						BUF_STR(proxy_con->address->name));
+						SAFE_BUF_STR(proxy_con->address->name));
 
 				/** timed out
 				 *

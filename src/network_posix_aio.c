@@ -98,14 +98,14 @@ static void posix_aio_completion_handler(union sigval foo) {
 		switch (res) {
 		case ECANCELED:
 			TRACE("aio-op was canceled, was asked for %s (fd = %d)",
-				BUF_STR(con->uri.path), con->sock->fd);
+				SAFE_BUF_STR(con->uri.path), con->sock->fd);
 			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 			break;
 		case 0:
 			break;
 		default:
 			TRACE("aio-op failed with %d (%s), was asked for %s (fd = %d)",
-				res, strerror(res), BUF_STR(con->uri.path), con->sock->fd);
+				res, strerror(res), SAFE_BUF_STR(con->uri.path), con->sock->fd);
 			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 			break;
 		}
@@ -114,7 +114,7 @@ static void posix_aio_completion_handler(union sigval foo) {
 			/* we have an error */
 
 			TRACE("aio-return returned %d (%s), was asked for %s (fd = %d)",
-				res, strerror(res), BUF_STR(con->uri.path), con->sock->fd);
+				res, strerror(res), SAFE_BUF_STR(con->uri.path), con->sock->fd);
 
 			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 		}
@@ -164,7 +164,7 @@ NETWORK_BACKEND_WRITE(posixaio) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY | /* O_DIRECT | */ (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 					if (errno == EMFILE) return NETWORK_STATUS_WAIT_FOR_FD;
 
-					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("opening '%s' failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}

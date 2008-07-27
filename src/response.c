@@ -284,7 +284,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "sanitizing URI");
-			TRACE("URI-path     : %s", BUF_STR(con->uri.path));
+			TRACE("URI-path     : %s", SAFE_BUF_STR(con->uri.path));
 		}
 
 		/**
@@ -401,8 +401,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "before doc_root");
-			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
-			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
+			TRACE("Doc-Root     : %s", SAFE_BUF_STR(con->physical.doc_root));
+			TRACE("Rel-Path     : %s", SAFE_BUF_STR(con->physical.rel_path));
 			TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 		}
 		/* the docroot plugin should set the doc_root and might also set the physical.path
@@ -457,9 +457,9 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "after doc_root");
-			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
-			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
-			TRACE("Path         : %s", BUF_STR(con->physical.path));
+			TRACE("Doc-Root     : %s", SAFE_BUF_STR(con->physical.doc_root));
+			TRACE("Rel-Path     : %s", SAFE_BUF_STR(con->physical.rel_path));
+			TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 		}
 
 		switch(r = plugins_call_handle_physical(srv, con)) {
@@ -479,9 +479,9 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "logical -> physical");
-			TRACE("Doc-Root     : %s", BUF_STR(con->physical.doc_root));
-			TRACE("Rel-Path     : %s", BUF_STR(con->physical.rel_path));
-			TRACE("Path         : %s", BUF_STR(con->physical.path));
+			TRACE("Doc-Root     : %s", SAFE_BUF_STR(con->physical.doc_root));
+			TRACE("Rel-Path     : %s", SAFE_BUF_STR(con->physical.rel_path));
+			TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 		}
 	}
 
@@ -500,7 +500,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "handling physical path");
-			TRACE("Path         : %s", BUF_STR(con->physical.path));
+			TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 		}
 
 		switch ((r = stat_cache_get_entry_async(srv, con, con->physical.path, &sce))) {
@@ -509,7 +509,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 			if (con->conf.log_request_handling) {
 				TRACE("-- %s", "file found");
-				TRACE("Path         : %s", BUF_STR(con->physical.path));
+				TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 			}
 
 #ifdef HAVE_LSTAT
@@ -518,7 +518,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 				if (con->conf.log_request_handling) {
 					TRACE("-- %s", "access denied due symlink restriction");
-					TRACE("Path         : %s", BUF_STR(con->physical.path));
+					TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -553,7 +553,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 				if (con->conf.log_request_handling) {
 					TRACE("-- %s", "access denied");
-					TRACE("Path         : %s", BUF_STR(con->physical.path));
+					TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -563,7 +563,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 				if (con->conf.log_request_handling) {
 					TRACE("-- %s", "file not found");
-					TRACE("Path         : %s", BUF_STR(con->physical.path));
+					TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -578,8 +578,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 				con->http_status = 500;
 
 				ERROR("checking file '%s' (%s) failed: %d (%s) -> sending status 500",
-					BUF_STR(con->uri.path),
-					BUF_STR(con->physical.path),
+					SAFE_BUF_STR(con->uri.path),
+					SAFE_BUF_STR(con->physical.path),
 					errno, strerror(errno));
 
 				buffer_reset(con->physical.path);
@@ -625,8 +625,8 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 				if (con->conf.log_file_not_found) {
 					TRACE("file not found: %s -> %s", 
-							BUF_STR(con->uri.path),
-							BUF_STR(con->physical.path));
+							SAFE_BUF_STR(con->uri.path),
+							SAFE_BUF_STR(con->physical.path));
 				}
 
 				buffer_reset(con->physical.path);
@@ -648,9 +648,9 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 			if (con->conf.log_request_handling) {
 				TRACE("-- %s", "after pathinfo check");
-				TRACE("Path         : %s", BUF_STR(con->physical.path));
-				TRACE("URI          : %s", BUF_STR(con->uri.path));
-				TRACE("Pathinfo     : %s", BUF_STR(con->request.pathinfo));
+				TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
+				TRACE("URI          : %s", SAFE_BUF_STR(con->uri.path));
+				TRACE("Pathinfo     : %s", SAFE_BUF_STR(con->request.pathinfo));
 			}
 			break;
 		default:
@@ -662,7 +662,7 @@ handler_t handle_get_backend(server *srv, connection *con) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("-- %s", "handling subrequest");
-			TRACE("Path         : %s", BUF_STR(con->physical.path));
+			TRACE("Path         : %s", SAFE_BUF_STR(con->physical.path));
 		}
 
 		/* call the handlers */

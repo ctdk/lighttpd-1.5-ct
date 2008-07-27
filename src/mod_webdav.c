@@ -458,7 +458,7 @@ URIHANDLER_FUNC(mod_webdav_uri_handler) {
 	if (!p->conf.enabled) {
 		if (con->conf.log_request_handling) {
 			TRACE("-- skipping %s in mod_webdav, not enabled", 
-				BUF_STR(con->uri.path));
+				SAFE_BUF_STR(con->uri.path));
 		}
 
 		return HANDLER_GO_ON;
@@ -466,7 +466,7 @@ URIHANDLER_FUNC(mod_webdav_uri_handler) {
 
 	if (con->conf.log_request_handling) {
 		TRACE("-- handling request in mod_webdav: %s", 
-			BUF_STR(con->uri.path));
+			SAFE_BUF_STR(con->uri.path));
 	}
 
 	switch (con->request.http_method) {
@@ -483,7 +483,7 @@ URIHANDLER_FUNC(mod_webdav_uri_handler) {
 	
 		if (con->conf.log_request_handling) {
 			TRACE("sending OPTIONS response for: %s", 
-				BUF_STR(con->uri.path));
+				SAFE_BUF_STR(con->uri.path));
 		}
 
 		break;
@@ -1036,13 +1036,13 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 			if (c->file.mmap.start == MAP_FAILED) {
 				if (-1 == c->file.fd &&  /* open the file if not already open */
 				    -1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY))) {
-					ERROR("open(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("open(%s) failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return -1;
 				}
 
 				if (MAP_FAILED == (c->file.mmap.start = mmap(0, c->file.length, PROT_READ, MAP_SHARED, c->file.fd, 0))) {
-					ERROR("mmap(%s) failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("mmap(%s) failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return -1;
 				}
@@ -1239,7 +1239,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 	if (con->conf.log_request_handling) {
 		TRACE("-- handling request in mod_webdav: %s", 
-			BUF_STR(con->uri.path));
+			SAFE_BUF_STR(con->uri.path));
 	}
 
 	if (!p->conf.enabled) return HANDLER_GO_ON;
@@ -1253,12 +1253,12 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 	if (con->conf.log_request_handling) {
 		TRACE("depth for %s: %d", 
-			BUF_STR(con->uri.path), depth);
+			SAFE_BUF_STR(con->uri.path), depth);
 	}
 
 	if (con->conf.log_request_handling) {
 		TRACE("method for %s: %s", 
-			BUF_STR(con->uri.path), get_http_method_name(con->request.http_method));
+			SAFE_BUF_STR(con->uri.path), get_http_method_name(con->request.http_method));
 	}
 
 	switch (con->request.http_method) {
@@ -1269,7 +1269,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		/* is there a content-body ? */
 		if (con->conf.log_request_handling) {
 			TRACE("path-name: %s", 
-				BUF_STR(con->physical.path));
+				SAFE_BUF_STR(con->physical.path));
 		}
 
 		switch (stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
@@ -1277,7 +1277,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			if (errno == ENOENT) {
 				if (con->conf.log_request_handling) {
 					TRACE("path-name: %s ... not found", 
-						BUF_STR(con->physical.path));
+						SAFE_BUF_STR(con->physical.path));
 				}
 
 				con->http_status = 404;
@@ -1528,11 +1528,11 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("sending XML: %s", 
-				BUF_STR(b));
+				SAFE_BUF_STR(b));
 		}
 
 		if (p->conf.log_xml) {
-			TRACE("XML-response-body: %s", BUF_STR(b));
+			TRACE("XML-response-body: %s", SAFE_BUF_STR(b));
 		}
 		con->send->is_closed = 1;
 

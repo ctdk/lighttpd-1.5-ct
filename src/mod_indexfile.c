@@ -166,7 +166,7 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 
 	if (con->conf.log_request_handling) {
 		TRACE("-- %s", "handling the request as Indexfile");
-		TRACE("URI          : %s", BUF_STR(con->uri.path));
+		TRACE("URI          : %s", SAFE_BUF_STR(con->uri.path));
 	}
 
 	/* indexfile */
@@ -220,8 +220,8 @@ URIHANDLER_FUNC(mod_indexfile_subrequest) {
 
 		if (con->conf.log_request_handling) {
 			TRACE("rewrite path to %s (%s)", 
-					BUF_STR(con->physical.path), 
-					BUF_STR(con->uri.path));
+					SAFE_BUF_STR(con->physical.path), 
+					SAFE_BUF_STR(con->uri.path));
 		}
 
 		/* need to reset condition cache since uri.path changed. */

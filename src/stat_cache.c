@@ -409,7 +409,7 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 	if (!con->conf.follow_symlink) {
 		if (stat_cache_lstat(srv, name, &lst)  == 0) {
 #ifdef DEBUG_STAT_CACHE
-			TRACE("found symlink in %s", BUF_STR(name));
+			TRACE("found symlink in %s", SAFE_BUF_STR(name));
 #endif
 			sce->is_symlink = 1;
 		}

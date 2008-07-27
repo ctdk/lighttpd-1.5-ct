@@ -64,7 +64,7 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 
 				if ((long)event[i].res <= 0) {
 					TRACE("async-read failed with %d (%s), was asked for %s (fd = %d)",
-						event[i].res, strerror(-event[i].res), BUF_STR(con->uri.path), con->sock->fd);
+						event[i].res, strerror(-event[i].res), SAFE_BUF_STR(con->uri.path), con->sock->fd);
 				}
 
 				/* free the iocb */
@@ -135,7 +135,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, mode))) {
 					if (errno == EMFILE) return NETWORK_STATUS_WAIT_FOR_FD;
 						
-					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("opening '%s' failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 
 					return NETWORK_STATUS_FATAL_ERROR;

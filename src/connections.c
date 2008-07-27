@@ -828,7 +828,7 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 			ERROR("we are in (CON_STATE_ERROR), but still get a FDEVENT_IN, removing event from fd = %d, %04x for (%s)",
 					con->sock->fd,
 					revents,
-					BUF_STR(con->uri.path));
+					SAFE_BUF_STR(con->uri.path));
 
 			fdevent_event_del(srv->ev, con->sock);
 
@@ -839,7 +839,7 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 					con->state,
 					con->sock->fd,
 					revents,
-					BUF_STR(con->uri.path));
+					SAFE_BUF_STR(con->uri.path));
 			break;
 		}
 	}
@@ -855,7 +855,7 @@ handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 ,
                                         con->sock->fd,
                                         revents,
-                                        BUF_STR(con->uri.path));
+                                        SAFE_BUF_STR(con->uri.path));
 
                         fdevent_event_del(srv->ev, con->sock);
 

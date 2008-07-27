@@ -758,7 +758,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, c->file.name, &sce)) {
 		ERROR("stat_cache_get_entry('%s') failed: %s",
-				BUF_STR(c->file.name), strerror(errno));
+				SAFE_BUF_STR(c->file.name), strerror(errno));
 		return -1;
 	}
 
@@ -766,7 +766,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 	
 	if (c->file.length + c->file.start > sce->st.st_size) {
 		ERROR("file '%s' was shrinked: was %ju, is %ju (%ju, %ju)", 
-				BUF_STR(c->file.name), (intmax_t) c->file.length + c->file.start, (intmax_t) sce->st.st_size,
+				SAFE_BUF_STR(c->file.name), (intmax_t) c->file.length + c->file.start, (intmax_t) sce->st.st_size,
 				(intmax_t) c->file.start, (intmax_t) c->offset);
 		
 		return -1;
@@ -824,7 +824,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 
 		if (-1 == c->file.fd) {  /* open the file if not already open */
 			if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY))) {
-				ERROR("open failed for '%s': %s", BUF_STR(c->file.name), strerror(errno));
+				ERROR("open failed for '%s': %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 				return -1;
 			}
 #ifdef FD_CLOEXEC
@@ -835,7 +835,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 		if (MAP_FAILED == (c->file.mmap.start = mmap(0, to_mmap, PROT_READ, MAP_SHARED, c->file.fd, c->file.mmap.offset))) {
 			/* close it here, otherwise we'd have to set FD_CLOEXEC */
 
-			ERROR("mmap failed for '%s' (%i): %s", BUF_STR(c->file.name), c->file.fd, strerror(errno));
+			ERROR("mmap failed for '%s' (%i): %s", SAFE_BUF_STR(c->file.name), c->file.fd, strerror(errno));
 			return -1;
 		}
 
@@ -847,7 +847,7 @@ static int mod_deflate_file_chunk(server *srv, connection *con, handler_ctx *hct
 		/* don't advise files < 64Kb */
 		if (c->file.mmap.length > (64 KByte) && 
 		    0 != madvise(c->file.mmap.start, c->file.mmap.length, MADV_WILLNEED)) {
-			ERROR("madvise failed for '%s' (%i): %s", BUF_STR(c->file.name), c->file.fd, strerror(errno));
+			ERROR("madvise failed for '%s' (%i): %s", SAFE_BUF_STR(c->file.name), c->file.fd, strerror(errno));
 		}
 #endif
 #endif
@@ -893,12 +893,12 @@ static int deflate_compress_cleanup(server *srv, connection *con, handler_ctx *h
 	rc = mod_deflate_stream_end(srv, con, hctx);
 	if(rc < 0) {
 		TRACE("error closing compressed stream for '%s', compressing with %d: %d", 
-			BUF_STR(con->uri.path_raw), hctx->compression_type, rc);
+			SAFE_BUF_STR(con->uri.path_raw), hctx->compression_type, rc);
 	}
 
 	if(p->conf.debug && hctx->bytes_in < hctx->out->bytes_in) {
 		TRACE("compressing uri '%s' increased the sent content-size from %jd to %jd",
-			BUF_STR(con->uri.path_raw), (intmax_t) hctx->bytes_in, (intmax_t) hctx->out->bytes_in);
+			SAFE_BUF_STR(con->uri.path_raw), (intmax_t) hctx->bytes_in, (intmax_t) hctx->out->bytes_in);
 	}
 
 	/* cleanup compression state */
@@ -1024,7 +1024,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 	if (end) {
 		hctx->out->is_closed = 1;
 		if(p->conf.debug) {
-			TRACE("finished uri: '%s', query: '%s'", BUF_STR(con->uri.path_raw), BUF_STR(con->uri.query));
+			TRACE("finished uri: '%s', query: '%s'", SAFE_BUF_STR(con->uri.path_raw), SAFE_BUF_STR(con->uri.query));
 		}
 	} else {
 		/* We have more data to compress. */
@@ -1206,13 +1206,13 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Content-Type")))) {
 		int found = 0;
 		if(p->conf.debug) {
-			TRACE("Content-Type: %s", BUF_STR(ds->value));
+			TRACE("Content-Type: %s", SAFE_BUF_STR(ds->value));
 		}
 		for (m = 0; m < p->conf.mimetypes->used; m++) {
 			data_string *mimetype = (data_string *)p->conf.mimetypes->data[m];
 
 			if(p->conf.debug) {
-				TRACE("mime-type: %s", BUF_STR(mimetype->value));
+				TRACE("mime-type: %s", SAFE_BUF_STR(mimetype->value));
 			}
 			if (strncmp(mimetype->value->ptr, ds->value->ptr, mimetype->value->used-1) == 0) {
 				/* mimetype found */
@@ -1222,7 +1222,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 		}
 		if(!found && p->conf.mimetypes->used > 0) {
 			if(p->conf.debug) {
-				TRACE("No compression for mimetype: %s", BUF_STR(ds->value));
+				TRACE("No compression for mimetype: %s", SAFE_BUF_STR(ds->value));
 			}
 			filter_chain_remove_filter(con->send_filters, fl);
 			return HANDLER_GO_ON;
@@ -1243,12 +1243,12 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 		if (NULL == strstr(ds->value->ptr, "Accept-Encoding")) {
 			buffer_append_string(ds->value, ",Accept-Encoding");
 			if (p->conf.debug) {
-				TRACE("appending ,Accept-Encoding for '%s'", BUF_STR(con->uri.path));
+				TRACE("appending ,Accept-Encoding for '%s'", SAFE_BUF_STR(con->uri.path));
 			}
 		}
 	} else {
 		if (p->conf.debug) {
-			TRACE("add Vary: Accept-Encoding for '%s'", BUF_STR(con->uri.path));
+			TRACE("add Vary: Accept-Encoding for '%s'", SAFE_BUF_STR(con->uri.path));
 		}
 		response_header_insert(srv, con, CONST_STR_LEN("Vary"),
 				CONST_STR_LEN("Accept-Encoding"));
@@ -1284,13 +1284,13 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 		/* no compression */
 	} else {
 		ERROR("Failed to initialize compression for '%s' with compression = %s", 
-			BUF_STR(con->uri.path),
+			SAFE_BUF_STR(con->uri.path),
 			value);
 	}
 
 	if (rc == -1 && compression_name) {
 		ERROR("Failed to initialize compression for '%s' with compression = %s", 
-				BUF_STR(con->uri.path),
+				SAFE_BUF_STR(con->uri.path),
 				compression_name);
 	}
 
@@ -1302,7 +1302,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 
 	if (p->conf.debug) {
 		TRACE("compressing '%s' with compression = %s", 
-				BUF_STR(con->uri.path),
+				SAFE_BUF_STR(con->uri.path),
 				compression_name);
 	}
 
@@ -1332,7 +1332,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	}
 
 	if (p->conf.debug) 
-		TRACE("end = %i for uri '%s'", end, BUF_STR(con->uri.path));
+		TRACE("end = %i for uri '%s'", end, SAFE_BUF_STR(con->uri.path));
 
 	rc = deflate_compress_response(srv, con, hctx, end);
 	/* check if we finished compressing all the content. */
@@ -1374,7 +1374,7 @@ handler_t mod_deflate_cleanup(server *srv, connection *con, void *p_d) {
 	if(hctx == NULL) return HANDLER_GO_ON;
 
 	if(p->conf.debug && hctx->stream_open) {
-		TRACE("stream open at cleanup. uri='%s', query='%s'", BUF_STR(con->uri.path_raw), BUF_STR(con->uri.query));
+		TRACE("stream open at cleanup. uri='%s', query='%s'", SAFE_BUF_STR(con->uri.path_raw), SAFE_BUF_STR(con->uri.query));
 	}
 
 	deflate_compress_cleanup(srv, con, hctx);

@@ -108,7 +108,7 @@ static handler_t parse_config_entry(server *UNUSED_PARAM(srv), plugin_config *s,
 			if (da->value->data[j]->type != TYPE_STRING) {
 				ERROR("unexpected type (%d) for value of %s[%s], expected 'string'", 
 					da->value->data[j]->type, option, 
-					BUF_STR(da->value->data[j]->key));
+					SAFE_BUF_STR(da->value->data[j]->key));
 
 				return HANDLER_ERROR;
 			}
@@ -117,7 +117,7 @@ static handler_t parse_config_entry(server *UNUSED_PARAM(srv), plugin_config *s,
 							    ((data_string *)(da->value->data[j]))->key->ptr,
 							    ((data_string *)(da->value->data[j]))->value->ptr)) {
 #ifdef HAVE_PCRE_H
-				ERROR("pcre-compile failed for: %s", BUF_STR(da->value->data[j]->key));
+				ERROR("pcre-compile failed for: %s", SAFE_BUF_STR(da->value->data[j]->key));
 #else
 				ERROR("pcre support is missing, please install libpcre and the headers%s", "");
 #endif
@@ -256,7 +256,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 
 		if (hctx->loops++ > 100) {
 			ERROR("ENDLESS LOOP IN rewrite-rule DETECTED ... aborting request after %d loops at %s", 
-					hctx->loops, BUF_STR(con->request.uri));
+					hctx->loops, SAFE_BUF_STR(con->request.uri));
 
 			con->http_status = 500;
 
@@ -293,7 +293,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 			con->http_status = 500;
 
 			ERROR("url.rewrite contains a regex for '%s' which leads to a URI without a leading slash: %s", 
-					BUF_STR(p->match_buf), BUF_STR(con->request.uri));
+					SAFE_BUF_STR(p->match_buf), SAFE_BUF_STR(con->request.uri));
 
 			return HANDLER_FINISHED;
 		}
@@ -301,7 +301,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 		return HANDLER_COMEBACK;
 	} else if (i != PCRE_ERROR_NOMATCH) {
 		ERROR("execution error while matching '%s' against '%s': %d", 
-				BUF_STR(p->match_buf), BUF_STR(con->request.uri), i);
+				SAFE_BUF_STR(p->match_buf), SAFE_BUF_STR(con->request.uri), i);
 		con->http_status = 500;
 
 		return HANDLER_FINISHED;

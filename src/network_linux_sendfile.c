@@ -76,7 +76,7 @@ NETWORK_BACKEND_WRITE(linuxsendfile) {
 					case EMFILE:
 						return NETWORK_STATUS_WAIT_FOR_FD;
 					default:
-						ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+						ERROR("opening '%s' failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 						return NETWORK_STATUS_FATAL_ERROR;
 					}
@@ -107,7 +107,7 @@ NETWORK_BACKEND_WRITE(linuxsendfile) {
 					return NETWORK_STATUS_CONNECTION_CLOSE;
 				case ENOSYS:
 					ERROR("sendfile(%s) is not implemented, use server.network-backend = \"writev\"", 
-						BUF_STR(c->file.name));
+						SAFE_BUF_STR(c->file.name));
 					return NETWORK_STATUS_FATAL_ERROR;
 				default:
 					log_error_write(srv, __FILE__, __LINE__, "ssd",

@@ -434,12 +434,12 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		if (NULL == (map_con_entry = connection_map_get_connection_entry(p->con_map, tracking_id))) {
 			connection_map_insert(p->con_map, tracking_id, con);
 		
-			if (p->conf.debug) TRACE("POST: connection is new, registered: %s", BUF_STR(tracking_id));
+			if (p->conf.debug) TRACE("POST: connection is new, registered: %s", SAFE_BUF_STR(tracking_id));
 		} else {
 			map_con_entry->timeout = 0;
 			map_con_entry->status = 0;
 			
-			if (p->conf.debug) TRACE("POST: connection is known, id: %s", BUF_STR(tracking_id));
+			if (p->conf.debug) TRACE("POST: connection is known, id: %s", SAFE_BUF_STR(tracking_id));
 		}
 
 		return HANDLER_GO_ON;
@@ -447,7 +447,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		/**
 		 * the status request for the current connection
 		 */
-		if (p->conf.debug) TRACE("(uploadprogress) urls %s == %s", BUF_STR(con->uri.path), BUF_STR(p->conf.progress_url));
+		if (p->conf.debug) TRACE("(uploadprogress) urls %s == %s", SAFE_BUF_STR(con->uri.path), SAFE_BUF_STR(p->conf.progress_url));
 
 		if (!buffer_is_equal(con->uri.path, p->conf.progress_url)) {
 			return HANDLER_GO_ON;
@@ -482,7 +482,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 			 * looks like we don't know the tracking id yet, GET and POST out of sync ? */
 			BUFFER_APPEND_STRING_CONST(b, "new Object({ 'state' : 'starting' })\r\n");
 			
-			if (p->conf.debug) TRACE("connection unknown: %s, sending: %s", BUF_STR(tracking_id), BUF_STR(b));
+			if (p->conf.debug) TRACE("connection unknown: %s, sending: %s", SAFE_BUF_STR(tracking_id), SAFE_BUF_STR(b));
 
 			return HANDLER_FINISHED;
 		}
@@ -505,7 +505,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		}
 		BUFFER_APPEND_STRING_CONST(b, "})\r\n");
 
-		if (p->conf.debug) TRACE("connection is known: %s, sending: %s", BUF_STR(tracking_id), BUF_STR(b));
+		if (p->conf.debug) TRACE("connection is known: %s, sending: %s", SAFE_BUF_STR(tracking_id), SAFE_BUF_STR(b));
 
 		return HANDLER_FINISHED;
 	default:
@@ -587,7 +587,7 @@ REQUESTDONE_FUNC(mod_uploadprogress_request_done) {
 
 	if (p->conf.debug) {
 		TRACE("upload is done, moving tracking-id to backlog: tracking-id=%s, http_status=%d",
-				BUF_STR(tracking_id),
+				SAFE_BUF_STR(tracking_id),
 				con->http_status);
 	}
 
@@ -596,7 +596,7 @@ REQUESTDONE_FUNC(mod_uploadprogress_request_done) {
 	 */
 	if (NULL == (cm = connection_map_get_connection_entry(p->con_map, tracking_id))) {
 		if (p->conf.debug) {
-			TRACE("tracking ID %s not found, can't set timeout", BUF_STR(tracking_id));
+			TRACE("tracking ID %s not found, can't set timeout", SAFE_BUF_STR(tracking_id));
 		}
 		return HANDLER_GO_ON;
 	}

@@ -165,8 +165,8 @@ URIHANDLER_FUNC(mod_access_uri_handler) {
 
 				if (con->conf.log_request_handling) {
 					TRACE("access denied for %s as %s matched %d chars, sending %d", 
-							BUF_STR(con->uri.path),
-							BUF_STR(ds->value),
+							SAFE_BUF_STR(con->uri.path),
+							SAFE_BUF_STR(ds->value),
 							ct_len,
 							con->http_status);
 				}

@@ -162,7 +162,7 @@ parse_status_t http_request_range_parse(buffer *hdr, http_req_range *ranges) {
 		ret = PARSE_ERROR;
 
 		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+			TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 		} else {
 			TRACE("%s", "parsing failed ...");
 		}
@@ -175,7 +175,7 @@ parse_status_t http_request_range_parse(buffer *hdr, http_req_range *ranges) {
 		/* we are missing the some tokens */
 
 		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+			TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 		}
 
 		if (ret == PARSE_UNSET) {

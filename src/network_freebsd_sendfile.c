@@ -86,7 +86,7 @@ NETWORK_BACKEND_WRITE(freebsdsendfile) {
 					case EMFILE:
 						return NETWORK_STATUS_WAIT_FOR_FD;
 					default:
-						ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+						ERROR("opening '%s' failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 						return NETWORK_STATUS_FATAL_ERROR;
 					}

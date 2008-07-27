@@ -193,7 +193,7 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 						c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					}
 				} else if (r == 0) {
-					ERROR("pread(%s) returned 0 ... not good", BUF_STR(c->file.name));
+					ERROR("pread(%s) returned 0 ... not good", SAFE_BUF_STR(c->file.name));
 	
 					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 				} else {
@@ -285,7 +285,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 			/* open file if not already opened */
 			if (-1 == c->file.fd) {
 				if (-1 == (c->file.fd = open(c->file.name->ptr, O_RDONLY /* | O_DIRECT */ | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
-					ERROR("opening '%s' failed: %s", BUF_STR(c->file.name), strerror(errno));
+					ERROR("opening '%s' failed: %s", SAFE_BUF_STR(c->file.name), strerror(errno));
 
 					return NETWORK_STATUS_FATAL_ERROR;
 				}

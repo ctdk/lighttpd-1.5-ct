@@ -50,7 +50,7 @@ void proxy_address_pool_add(proxy_address_pool *address_pool, proxy_address *add
 		proxy_address *pool_address = address_pool->ptr[i];
 
 		if (buffer_is_equal(address->name, pool_address->name)) {
-			/* TRACE("%s is already in the address-pool", BUF_STR(address->name)); */
+			/* TRACE("%s is already in the address-pool", SAFE_BUF_STR(address->name)); */
 
 			proxy_address_free(address);
 
@@ -58,7 +58,7 @@ void proxy_address_pool_add(proxy_address_pool *address_pool, proxy_address *add
 		}
 	}
 
-	/* TRACE("adding %s to the address-pool", BUF_STR(address->name)); */
+	/* TRACE("adding %s to the address-pool", SAFE_BUF_STR(address->name)); */
 
 	ARRAY_STATIC_PREPARE_APPEND(address_pool);
 
@@ -116,7 +116,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 		proxy_address_pool_add(address_pool, a);
 		return 0;
 #else
-		ERROR("unix: scheme is not supported for %s", BUF_STR(name));
+		ERROR("unix: scheme is not supported for %s", SAFE_BUF_STR(name));
 		return -1;
 #endif
 	} else if (name->ptr[0] == '[') {
@@ -135,7 +135,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 			buffer_copy_string(port, colon + 1);
 
 		} else {
-			ERROR("this is neither [<ipv6-address>] nor [<ipv6-address>]:<port>: %s", BUF_STR(name));
+			ERROR("this is neither [<ipv6-address>] nor [<ipv6-address>]:<port>: %s", SAFE_BUF_STR(name));
 
 			return -1;
 		}

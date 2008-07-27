@@ -268,7 +268,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 		ret = PARSE_ERROR;
 
 		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+			TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 		} else {
 			chunk *c;
 			buffer *hdr = buffer_init();
@@ -294,7 +294,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 		/* we are missing the some tokens */
 
 		if (!buffer_is_empty(context.errmsg)) {
-			TRACE("parsing failed: %s", BUF_STR(context.errmsg));
+			TRACE("parsing failed: %s", SAFE_BUF_STR(context.errmsg));
 		}
 
 		if (ret == PARSE_UNSET) {

@@ -222,7 +222,7 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 	/* check parent first */
 	if (dc->parent && dc->parent->context_ndx) {
 		if (con->conf.log_condition_handling) {
-			TRACE("checking if the parent (%s) evaluates to 'true'", BUF_STR(dc->parent->key));
+			TRACE("checking if the parent (%s) evaluates to 'true'", SAFE_BUF_STR(dc->parent->key));
 		}
 
 		switch (config_check_cond_cached(srv, con, dc->parent)) {
@@ -237,14 +237,14 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 
 	if (dc->prev) {
 		if (con->conf.log_condition_handling) {
-			TRACE("triggering eval of successors of (%s) [in else]", BUF_STR(dc->key));
+			TRACE("triggering eval of successors of (%s) [in else]", SAFE_BUF_STR(dc->key));
 		}
 
 		/* make sure prev is checked first */
 		config_check_cond_cached(srv, con, dc->prev);
 
 		if (con->conf.log_condition_handling) {
-			TRACE("(%s) [in else] -> %s", BUF_STR(dc->key), con->cond_cache[dc->context_ndx].result == COND_RESULT_FALSE ? "false" : "we will see");
+			TRACE("(%s) [in else] -> %s", SAFE_BUF_STR(dc->key), con->cond_cache[dc->context_ndx].result == COND_RESULT_FALSE ? "false" : "we will see");
 		}
 
 		switch (con->cond_cache[dc->context_ndx].result) {
@@ -259,7 +259,7 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 		if (con->conf.log_condition_handling) {
 			TRACE("is condition [%d] (%s) already valid ? %s", 
 					dc->comp, 
-					BUF_STR(dc->key),
+					SAFE_BUF_STR(dc->key),
 					con->conditional_is_valid[dc->comp] ? "yeah" : "nej");
 		}
 
@@ -454,9 +454,9 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 
 	if (con->conf.log_condition_handling) {
 		TRACE("'%s': '%s' is matched against '%s'", 
-				BUF_STR(dc->comp_key),
-				BUF_STR(l),
-				BUF_STR(dc->string));
+				SAFE_BUF_STR(dc->comp_key),
+				SAFE_BUF_STR(l),
+				SAFE_BUF_STR(dc->string));
 	}
 
 	switch(dc->cond) {

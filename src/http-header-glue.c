@@ -280,7 +280,7 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 						/* check if we can safely copy the string */
 						if (used_len >= sizeof(buf)) {
 							TRACE("last-mod check failed as timestamp was too long: %s: %zu, %zu",
-									BUF_STR(http_if_modified_since->value),
+									SAFE_BUF_STR(http_if_modified_since->value),
 									used_len, sizeof(buf) - 1);
 
 							con->http_status = 412;

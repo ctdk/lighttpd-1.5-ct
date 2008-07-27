@@ -232,7 +232,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 	 * try to connect the pg-server
 	 */
 	if (p->conf.conn == NULL) {
-		if (p->conf.core->debug) TRACE("connecting to postgres: %s", BUF_STR(p->conf.conninfo));
+		if (p->conf.core->debug) TRACE("connecting to postgres: %s", SAFE_BUF_STR(p->conf.conninfo));
 
 		if (NULL == (p->conf.conn = PQconnectdb(BUF_STR(p->conf.conninfo)))) {
 			ERROR("%s", "postgresql malloc failure");
@@ -250,7 +250,7 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 		if (CONNECTION_BAD == PQstatus(p->conf.conn)) {
 			/* Even if bad connection. maybe next time it can be fixed
 			*/
-			ERROR("Bad connection for '%s': %s", BUF_STR(p->conf.conninfo), PQerrorMessage(p->conf.conn));
+			ERROR("Bad connection for '%s': %s", SAFE_BUF_STR(p->conf.conninfo), PQerrorMessage(p->conf.conn));
 			
 			PQfinish(p->conf.conn);
 
@@ -291,12 +291,12 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 	 * result = PQsendQuery(p->conf.conn, p->tmp_buf->ptr);
 	 */
 	if (result == NULL) {
-		ERROR("PQexec(%s) failed: %s", BUF_STR(p->tmp_buf), PQerrorMessage(p->conf.conn));
+		ERROR("PQexec(%s) failed: %s", SAFE_BUF_STR(p->tmp_buf), PQerrorMessage(p->conf.conn));
 		return HANDLER_ERROR;
 	}
 
 	if (PQresultStatus(result) != PGRES_TUPLES_OK) {
-		ERROR("PQresultStatus(%s): %s", BUF_STR(p->tmp_buf), PQerrorMessage(p->conf.conn));
+		ERROR("PQresultStatus(%s): %s", SAFE_BUF_STR(p->tmp_buf), PQerrorMessage(p->conf.conn));
 
 		PQclear(result);
 

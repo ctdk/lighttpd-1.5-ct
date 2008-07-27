@@ -484,7 +484,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 				in->is_closed);
 
 
-		ERROR("looks like the fastcgi-backend (%s) terminated before it sent a FIN packet", BUF_STR(sess->request_uri));
+		ERROR("looks like the fastcgi-backend (%s) terminated before it sent a FIN packet", SAFE_BUF_STR(sess->request_uri));
 
 		return HANDLER_FINISHED;
 	}
@@ -641,9 +641,9 @@ PROXY_STREAM_DECODER_FUNC(proxy_fastcgi_stream_decoder_internal) {
 mod_proxy_backend_fastcgi.c.597: (trace) (stderr from 127.0.0.1:9090 for /trac/) SERVER_ADDR
 */
 			TRACE("(stderr from %s for %s) %s", 
-					BUF_STR(proxy_con->address->name),
-					BUF_STR(sess->remote_con->uri.path),
-					BUF_STR(b));
+					SAFE_BUF_STR(proxy_con->address->name),
+					SAFE_BUF_STR(sess->remote_con->uri.path),
+					SAFE_BUF_STR(b));
 			buffer_free(b);
 		}
 		rc = HANDLER_GO_ON;

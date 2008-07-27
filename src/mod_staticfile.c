@@ -163,7 +163,7 @@ static int http_response_parse_range(server *srv, connection *con, plugin_data *
 	}
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
-		SEGFAULT("stat_cache_get_entry(%s) returned %d", BUF_STR(con->physical.path), HANDLER_ERROR);
+		SEGFAULT("stat_cache_get_entry(%s) returned %d", SAFE_BUF_STR(con->physical.path), HANDLER_ERROR);
 	}
 
 	con->response.content_length = 0;
@@ -364,8 +364,8 @@ URIHANDLER_FUNC(mod_staticfile_subrequest) {
 		if (buffer_is_equal_right_len(con->physical.path, ds->value, ds->value->used - 1)) {
 			if (con->conf.log_request_handling) {
 				TRACE("'%s' matched exclude(%s), sending 403", 
-						BUF_STR(con->physical.path), 
-						BUF_STR(ds->value));
+						SAFE_BUF_STR(con->physical.path), 
+						SAFE_BUF_STR(ds->value));
 			}
 
 			con->http_status = 403;

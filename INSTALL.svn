@@ -17,9 +17,8 @@ Choose one of the build systems:
 1. build with autotools
 autotools (required for autogen.sh)
 
-2. build with scons:
-an text editor (for config.py)
-scons v0.96.91.D001 or newer (required for scons build)
+2. build with cmake
+see make.example
 
 Check out the source
 ------------
@@ -55,26 +54,6 @@ check configure options
   $ su -
   # make install
   # exit
-
-with scons
-------------
-copy and modify config.py for your own needs with your favorite editor:
-  $ cp config.py-sample config.py
-  $ $EDITOR config.py
-
-make sure your scons version is up to date, v0.96.91.D001 works. old version is known to have problem to build lighttpd.
-  $ scons --version
-  $ scons
-  $ scons check
-  $ src/lighttpd -Df your_test.conf
-  (Ctrl+C once or twice to terminate lighttpd)
-
-  $ su -
-  # scons install
-as scons make some file owned by root now, you have to do:
-  # chown yourusername:yourgroup -R .
-  # exit
-
 
 take look at the configfile in ./doc/lighttpd.conf,
 make your own copy of that file before modify it for your needs.

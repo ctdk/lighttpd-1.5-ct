@@ -293,9 +293,9 @@ static int connection_handle_response_header(server *srv, connection *con) {
 			buffer_append_string(con->physical.path, get_http_status_body_name(con->http_status));
 
 			if (HANDLER_ERROR != stat_cache_get_entry(srv, con, con->physical.path, &sce)) {
-				con->send->is_closed = 1;
-
 				chunkqueue_append_file(con->send, con->physical.path, 0, sce->st.st_size);
+				con->send->bytes_in += sce->st.st_size;
+				con->send->is_closed = 1;
 				response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(sce->content_type));
 			}
 		}

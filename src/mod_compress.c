@@ -616,7 +616,7 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 
 	const char *compression_name = NULL;
 	int compression_type = 0;
-	buffer *mtime;
+	buffer *mtime, *content_type;
 
 	if (con->conf.log_request_handling) TRACE("-- %s", "handling in mod_compress");
 
@@ -658,6 +658,14 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	}
 
 	/* check if mimetype is in compress-config */
+	content_type = 0;
+	if (sce->content_type->ptr) {
+		char *c;
+		if ( (c = strchr(BUF_STR(sce->content_type), ';')) != 0) {
+			content_type = buffer_init();
+			buffer_copy_string_len(content_type, BUF_STR(sce->content_type), c - BUF_STR(sce->content_type)); 
+		}
+	}
 	for (m = 0; m < p->conf.compress->used; m++) {
 		data_string *compress_ds = (data_string *)p->conf.compress->data[m];
 
@@ -667,10 +675,12 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 			return HANDLER_GO_ON;
 		}
 
-		if (buffer_is_equal(compress_ds->value, sce->content_type)) {
+		if (buffer_is_equal(compress_ds->value, sce->content_type)
+			|| (content_type && buffer_is_equal(compress_ds->value, content_type))) {
 			break;
 		}
 	}
+	buffer_free(content_type);
 
 	if (m == p->conf.compress->used) {
 		return HANDLER_GO_ON;

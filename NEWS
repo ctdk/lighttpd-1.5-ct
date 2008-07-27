@@ -35,6 +35,7 @@ NEWS
   * remove scons build system
   * fix memory leak on windows (#1371)
   * do not add Accept-Ranges header if range-request is disabled (#1449)
+  * mod_compress: match mime-type additionaly against the part before ";" (i.e. without encoding)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

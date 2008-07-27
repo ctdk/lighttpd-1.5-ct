@@ -502,9 +502,9 @@ static handler_t mod_status_handle_server_status_html(server *srv, connection *c
 
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"int bytes_written\">");
 
-		buffer_append_off_t(b, chunkqueue_written(c->send_raw));
+		buffer_append_off_t(b, c->send_raw->bytes_out);
 		BUFFER_APPEND_STRING_CONST(b, "/");
-		buffer_append_off_t(b, chunkqueue_length(c->send_raw));
+		buffer_append_off_t(b, c->send_raw->bytes_in);
 
 		BUFFER_APPEND_STRING_CONST(b, "</td><td class=\"string state\">");
 

@@ -153,7 +153,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 		port = buffer_init_string("80");
 	}
 
-	TRACE("resolving %s on port %s", BUF_STR(hostname), BUF_STR(port));
+	/* TRACE("resolving %s on port %s", SAFE_BUF_STR(hostname), SAFE_BUF_STR(port)); */
 
 	if (0 != (ret = getaddrinfo(BUF_STR(hostname), BUF_STR(port), &pref, &res))) {
 		ERROR("getaddrinfo failed: %s", gai_strerror(ret));

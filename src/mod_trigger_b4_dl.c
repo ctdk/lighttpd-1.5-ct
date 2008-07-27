@@ -426,6 +426,7 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 				response_header_insert(srv, con, CONST_STR_LEN("Location"), CONST_BUF_LEN(p->conf.deny_url));
 
 				con->http_status = 307;
+				con->send->is_closed = 1;
 
 				return HANDLER_FINISHED;
 			}
@@ -439,6 +440,7 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 
 				response_header_insert(srv, con, CONST_STR_LEN("Location"), CONST_BUF_LEN(p->conf.deny_url));
 				con->http_status = 307;
+				con->send->is_closed = 1;
 
 				if (p->conf.db) {
 					if (0 != gdbm_delete(p->conf.db, key)) {
@@ -489,6 +491,7 @@ URIHANDLER_FUNC(mod_trigger_b4_dl_uri_handler) {
 				response_header_insert(srv, con, CONST_STR_LEN("Location"), CONST_BUF_LEN(p->conf.deny_url));
 
 				con->http_status = 307;
+				con->send->is_closed = 1;
 
 				return HANDLER_FINISHED;
 			}

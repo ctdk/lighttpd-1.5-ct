@@ -31,6 +31,7 @@ NEWS
   * fix server.kbytes-per-second (#1102)
   * let spawn-fcgi propagate exit code from spawned fcgi application
   * fix in/out statistics for connections
+  * close connection after redirect in trigger_b4_dl
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

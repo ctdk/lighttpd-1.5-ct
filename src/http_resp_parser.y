@@ -25,25 +25,25 @@
 %token_destructor { buffer_free($$); }
 
 /* just headers + Status: ... */
-response_hdr ::= headers CRLF . {
+response_hdr ::= header headers CRLF . {
     http_resp *resp = ctx->resp;
     data_string *ds;
- 
+
     resp->protocol = HTTP_VERSION_UNSET;
 
     buffer_copy_string(resp->reason, ""); /* no reason */
 
-    if (NULL == (ds = (data_string *)array_get_element(resp->headers, CONST_STR_LEN("Status")))) { 
+    if (NULL == (ds = (data_string *)array_get_element(resp->headers, CONST_STR_LEN("Status")))) {
         resp->status = 0;
     } else {
         char *err;
         resp->status = strtol(ds->value->ptr, &err, 10);
-   
+
         if (*err != '\0' && *err != ' ' && *err != '\r') {
             buffer_copy_string(ctx->errmsg, "expected a number: ");
             buffer_append_string_buffer(ctx->errmsg, ds->value);
             buffer_append_string(ctx->errmsg, err);
-        
+
             ctx->ok = 0;
         }
     }
@@ -52,17 +52,17 @@ response_hdr ::= headers CRLF . {
 /* HTTP-Version SP Status-Code SP Reason-Phrase CRLF ... */
 response_hdr ::= protocol(B) number(C) reason(D) CRLF headers CRLF . {
     http_resp *resp = ctx->resp;
-    
+
     resp->status = C;
     resp->protocol = B;
     buffer_copy_string_buffer(resp->reason, D);
-    buffer_pool_append(ctx->unused_buffers, D); 
+    buffer_pool_append(ctx->unused_buffers, D);
 }
 
 /* HTTP-Version SP Status-Code CRLF ... */
 response_hdr ::= protocol(B) number(C) CRLF headers CRLF . {
     http_resp *resp = ctx->resp;
-    
+
     resp->status = C;
     resp->protocol = B;
     buffer_reset(resp->reason);
@@ -76,23 +76,23 @@ protocol(A) ::= STRING(B). {
     } else {
         buffer_copy_string(ctx->errmsg, "unknown protocol: ");
         buffer_append_string_buffer(ctx->errmsg, B);
-        
+
         ctx->ok = 0;
     }
-    buffer_pool_append(ctx->unused_buffers, B); 
+    buffer_pool_append(ctx->unused_buffers, B);
 }
 
 number(A) ::= STRING(B). {
     char *err;
     A = strtol(B->ptr, &err, 10);
-    
+
     if (*err != '\0') {
         buffer_copy_string(ctx->errmsg, "expected a number, got: ");
         buffer_append_string_buffer(ctx->errmsg, B);
-        
+
         ctx->ok = 0;
     }
-    buffer_pool_append(ctx->unused_buffers, B); 
+    buffer_pool_append(ctx->unused_buffers, B);
 }
 
 reason(A) ::= STRING(B). {
@@ -101,15 +101,15 @@ reason(A) ::= STRING(B). {
 
 reason(A) ::= reason(C) STRING(B). {
     A = C;
-    
+
     buffer_append_string(A, " ");
     buffer_append_string_buffer(A, B);
 
     buffer_pool_append(ctx->unused_buffers, B); 
 }
 
-headers ::= headers header. 
-headers ::= header. 
+headers ::= headers header.
+headers ::= .
 
 header(HDR) ::= STRING(A) COLON STRING(B) CRLF. {
     http_resp *resp = ctx->resp;
@@ -117,11 +117,11 @@ header(HDR) ::= STRING(A) COLON STRING(B) CRLF. {
     if (NULL == (HDR = (data_string *)array_get_unused_element(resp->headers, TYPE_STRING))) {
         HDR = data_response_init();
     }
-    
+
     buffer_copy_string_buffer(HDR->key, A);
-    buffer_copy_string_buffer(HDR->value, B);    
-    buffer_pool_append(ctx->unused_buffers, A); 
-    buffer_pool_append(ctx->unused_buffers, B); 
+    buffer_copy_string_buffer(HDR->value, B);
+    buffer_pool_append(ctx->unused_buffers, A);
+    buffer_pool_append(ctx->unused_buffers, B);
 
     array_insert_unique(resp->headers, (data_unset *)HDR);
 }
@@ -133,10 +133,10 @@ header(HDR) ::= STRING(A) COLON CRLF. {
     if (NULL == (HDR = (data_string *)array_get_unused_element(resp->headers, TYPE_STRING))) {
         HDR = data_response_init();
     }
-    
+
     buffer_copy_string_buffer(HDR->key, A);
-    buffer_copy_string(HDR->value, ""); 
-    buffer_pool_append(ctx->unused_buffers, A); 
+    buffer_copy_string(HDR->value, "");
+    buffer_pool_append(ctx->unused_buffers, A);
 
     array_insert_unique(resp->headers, (data_unset *)HDR);
 }

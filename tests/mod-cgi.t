@@ -8,7 +8,7 @@ BEGIN {
 
 use strict;
 use IO::Socket;
-use Test::More tests => 18;
+use Test::More tests => 19;
 use LightyTest;
 
 my $tf = LightyTest->new();
@@ -46,8 +46,6 @@ EOF
 $t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 502 } ];
 ok($tf->handle_http($t) == 0, 'NPH + perl, invalid status-code (#14)');
 
-TODO: {
-  local $TODO = "NPH current isn't working";
 $t->{REQUEST}  = ( <<EOF
 GET /nph-status.pl?304 HTTP/1.0
 EOF
@@ -61,6 +59,15 @@ EOF
  );
 $t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } ];
 ok($tf->handle_http($t) == 0, 'NPH + perl, setting status-code');
+
+TODO: {
+  local $TODO = "NPH current isn't working";
+$t->{REQUEST}  = ( <<EOF
+GET /nph-status.pl?textcontent HTTP/1.0
+EOF
+ );
+$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'HTTP-Content' => 'textcontent' } ];
+ok($tf->handle_http($t) == 0, 'NPH + perl, sending content without headers');
 }
 
 $t->{REQUEST} = ( <<EOF

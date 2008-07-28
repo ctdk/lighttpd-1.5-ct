@@ -284,6 +284,11 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	buffer_pool_free(context.unused_buffers);
 	buffer_free(context.errmsg);
 
+	if (resp->status && (resp->status < 100 || resp->status > 999)) {
+		ERROR("invalid status code %i", resp->status);
+		return PARSE_ERROR;
+	}
+
 	return ret;
 }
 

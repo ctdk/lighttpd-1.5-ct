@@ -39,6 +39,7 @@ NEWS
   * fix bug with IPv6 in mod_evasive (#1579)
   * fix mod_magnet: enable "request.method" and "request.protocol" in lighty.env (#1308)
   * mod_magnet: set con->mode if content was generated so lighty doesn't append error messages.
+  * fix #1574: check for symlinks after successful pathinfo matching
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

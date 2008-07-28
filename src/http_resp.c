@@ -220,6 +220,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	context.unused_buffers = buffer_pool_init();
 
 	array_reset(resp->headers);
+	resp->status = 0;
 
 	pParser = http_resp_parserAlloc( malloc );
 	token = buffer_pool_get(context.unused_buffers);

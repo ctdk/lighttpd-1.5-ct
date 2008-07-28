@@ -804,6 +804,12 @@ static handler_t magnet_attract(server *srv, connection *con, plugin_data *p, bu
 			con->http_status = 500;
 		}
 
+		if (chunkqueue_is_empty(con->send)) {
+			con->mode = DIRECT;
+		} else {
+			con->mode = p->id;
+		}
+
 		assert(lua_gettop(L) == 1); /* only the function should be on the stack */
 
 		/* we are finished */

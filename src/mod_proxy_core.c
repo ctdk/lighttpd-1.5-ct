@@ -2175,7 +2175,7 @@ static int mod_proxy_core_check_match(server *srv, connection *con, plugin_data 
 	sess->p = p;
 	sess->remote_con = con;
 
-	return HANDLER_GO_ON;
+	return HANDLER_FINISHED;
 }
 
 SUBREQUEST_FUNC(mod_proxy_core_match_url) {

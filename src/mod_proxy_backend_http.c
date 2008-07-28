@@ -105,6 +105,12 @@ static handler_t proxy_http_parse_response_headers(proxy_session *sess, chunkque
 	}
 	/* finished parsing response headers. */
 	sess->have_response_headers = 1;
+
+	switch (sess->resp->status) {
+	case 205: /* class: header only */
+	case 304:
+		sess->is_request_finished = 1;
+	}
 	return HANDLER_FINISHED;
 }
 
@@ -242,6 +248,8 @@ PROXY_STREAM_DECODER_FUNC(proxy_http_stream_decoder) {
 		handler_t rc = proxy_http_parse_response_headers(sess, in);
 		if (rc != HANDLER_FINISHED) return rc;
 	}
+
+	if (sess->is_request_finished) return HANDLER_FINISHED;
 
 	if (sess->is_chunked) {
 		return proxy_http_parse_chunked_stream(srv, sess, in, out);

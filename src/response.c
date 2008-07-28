@@ -67,6 +67,11 @@ int http_response_write_header(server *srv, connection *con, chunkqueue *raw) {
 	/* keep-alive needs Content-Length or chunked encoding. */
 	if (!allow_keep_alive) con->keep_alive = 0;
 
+	/* disable keep-alive if requested */
+	if (con->request_count > con->conf.max_keep_alive_requests) {
+		con->keep_alive = 0;
+	}
+
 	if (con->request.http_version != HTTP_VERSION_1_1 || con->keep_alive == 0) {
 		if (con->keep_alive) {
 			response_header_overwrite(srv, con, CONST_STR_LEN("Connection"), CONST_STR_LEN("keep-alive"));
@@ -230,12 +235,6 @@ handler_t handle_get_backend(server *srv, connection *con) {
 			TRACE("URI-authority: %s", SAFE_BUF_STR(con->uri.authority));
 			TRACE("URI-path     : %s", SAFE_BUF_STR(con->uri.path_raw));
 			TRACE("URI-query    : %s", SAFE_BUF_STR(con->uri.query));
-		}
-
-		/* disable keep-alive if requested */
-
-		if (con->request_count > con->conf.max_keep_alive_requests) {
-			con->keep_alive = 0;
 		}
 
 		if (srv->sockets_disabled) {

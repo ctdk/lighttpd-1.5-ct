@@ -1086,8 +1086,7 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 				buffer_reset(con->physical.path);
 				return HANDLER_FINISHED;
 			}
-			/* one handler is enough for the request */
-			break;
+			return HANDLER_FINISHED;
 		}
 	}
 
@@ -1098,6 +1097,7 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 			buffer_reset(con->physical.path);
 			return HANDLER_FINISHED;
 		}
+		return HANDLER_FINISHED;
 	}
 
 	return HANDLER_GO_ON;

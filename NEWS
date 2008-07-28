@@ -40,6 +40,7 @@ NEWS
   * fix mod_magnet: enable "request.method" and "request.protocol" in lighty.env (#1308)
   * mod_magnet: set con->mode if content was generated so lighty doesn't append error messages.
   * fix #1574: check for symlinks after successful pathinfo matching
+  * fix #1396: req-method OPTIONS: do not insert default response if request was denied 
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

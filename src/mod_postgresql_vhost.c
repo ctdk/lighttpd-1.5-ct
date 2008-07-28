@@ -161,16 +161,36 @@ SERVER_FUNC(mod_postgresql_vhost_set_defaults) {
 		 * "host=/tmp dbname=lighttpd user=lighttpd"
 		 * */
 
-		BUFFER_APPEND_STRING_CONST(s->conninfo, "host=");
-		buffer_append_string_buffer(s->conninfo, s->core->hostname);
+		if (!buffer_is_empty(s->core->hostname)) {
+			BUFFER_APPEND_STRING_CONST(s->conninfo, "host=");
+			buffer_append_string_buffer(s->conninfo, s->core->hostname);
+			if (s->core->port) {
+				BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
+				BUFFER_APPEND_STRING_CONST(s->conninfo, "port=");
+				buffer_append_long(s->conninfo, s->core->port);
+			}
+		} else if (!buffer_is_empty(s->core->sock)) {
+			BUFFER_APPEND_STRING_CONST(s->conninfo, "host=");
+			buffer_append_string_buffer(s->conninfo, s->core->sock);
+		}
 
-		BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
-		BUFFER_APPEND_STRING_CONST(s->conninfo, "dbname=");
-		buffer_append_string_buffer(s->conninfo, s->core->db);
+		if (!buffer_is_empty(s->core->db)) {
+			if (!buffer_is_empty(s->conninfo)) BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
+			BUFFER_APPEND_STRING_CONST(s->conninfo, "dbname=");
+			buffer_append_string_buffer(s->conninfo, s->core->db);
+		}
 
-		BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
-		BUFFER_APPEND_STRING_CONST(s->conninfo, "user=");
-		buffer_append_string_buffer(s->conninfo, s->core->user);
+		if (!buffer_is_empty(s->core->user)) {
+			if (!buffer_is_empty(s->conninfo)) BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
+			BUFFER_APPEND_STRING_CONST(s->conninfo, "user=");
+			buffer_append_string_buffer(s->conninfo, s->core->user);
+		}
+
+		if (!buffer_is_empty(s->core->pass)) {
+			if (!buffer_is_empty(s->conninfo)) BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
+			BUFFER_APPEND_STRING_CONST(s->conninfo, "password=");
+			buffer_append_string_buffer(s->conninfo, s->core->pass);
+		}
 
 	}
 	

@@ -45,6 +45,7 @@ NEWS
   * reset physical.path after mod_magnet request restart
   * fix mod-proxy-backend-http waiting for http body for 304 and 205 (#1178)
   * fixed sock_addr reading in mod_cgi.c (#1672)
+  * fixed postgresql-vhost module to use all options (#1694)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

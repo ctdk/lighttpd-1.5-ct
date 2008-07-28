@@ -618,6 +618,8 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	int compression_type = 0;
 	buffer *mtime, *content_type;
 
+	if (con->mode != DIRECT) return HANDLER_GO_ON;
+
 	if (con->conf.log_request_handling) TRACE("-- %s", "handling in mod_compress");
 
 	/* only GET and POST can get compressed */

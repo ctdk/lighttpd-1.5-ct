@@ -816,6 +816,7 @@ static handler_t magnet_attract(server *srv, connection *con, plugin_data *p, bu
 		return HANDLER_FINISHED;
 	} else if (MAGNET_RESTART_REQUEST == lua_return_value) {
 		assert(lua_gettop(L) == 1); /* only the function should be on the stack */
+		buffer_reset(con->physical.path);
 
 		return HANDLER_COMEBACK;
 	} else {

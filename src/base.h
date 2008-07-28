@@ -693,4 +693,6 @@ typedef struct server {
 
 int server_out_of_fds(server *srv, connection *con);
 
+LI_EXPORT unsigned short sock_addr_get_port(sock_addr *addr); /* configfile-glue.c */
+
 #endif

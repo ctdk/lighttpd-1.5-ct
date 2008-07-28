@@ -16,6 +16,7 @@
 #include "connections.h"
 #include "joblist.h"
 #include "fdevent.h"
+#include "inet_ntop_cache.h"
 
 #include "plugin.h"
 #include "http_resp.h"
@@ -658,12 +659,24 @@ static int cgi_env_add(char_array *env, const char *key, size_t key_len, const c
 	return 0;
 }
 
+static const char *sock_addr_to_p(server *srv, sock_addr *addr) {
+	switch (addr->plain.sa_family) {
+	case AF_INET:
+		return inet_ntoa(addr->ipv4.sin_addr);
+#ifdef HAVE_IPV6
+	case AF_INET6:
+		return inet_ntop_cache_get_ip(srv, addr);
+#endif
+#ifdef HAVE_SYS_UN_H
+	case AF_UNIX:
+		return addr->un.sun_path;
+#endif
+	}
+	return "";
+}
+
 static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *cgi_handler) {
 	pid_t pid;
-
-#ifdef HAVE_IPV6
-	char b2[INET6_ADDRSTRLEN + 1];
-#endif
 
 	int to_cgi_fds[2];
 	int from_cgi_fds[2];
@@ -742,18 +755,14 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 
 		cgi_env_add(&env, CONST_STR_LEN("SERVER_SOFTWARE"), CONST_STR_LEN(PACKAGE_NAME"/"PACKAGE_VERSION));
 
+		s = sock_addr_to_p(srv, &srv_sock->addr);
+		cgi_env_add(&env, CONST_STR_LEN("SERVER_ADDR"), s, strlen(s));
+		/* !!! careful: s maybe reused for SERVER_NAME !!! */
+
 		if (!buffer_is_empty(con->server_name)) {
 			cgi_env_add(&env, CONST_STR_LEN("SERVER_NAME"), CONST_BUF_LEN(con->server_name));
 		} else {
-#ifdef HAVE_IPV6
-			s = inet_ntop(srv_sock->addr.plain.sa_family,
-				      srv_sock->addr.plain.sa_family == AF_INET6 ?
-				      (const void *) &(srv_sock->addr.ipv6.sin6_addr) :
-				      (const void *) &(srv_sock->addr.ipv4.sin_addr),
-				      b2, sizeof(b2)-1);
-#else
-			s = inet_ntoa(srv_sock->addr.ipv4.sin_addr);
-#endif
+			/* use SERVER_ADDR */
 			cgi_env_add(&env, CONST_STR_LEN("SERVER_NAME"), s, strlen(s));
 		}
 		cgi_env_add(&env, CONST_STR_LEN("GATEWAY_INTERFACE"), CONST_STR_LEN("CGI/1.1"));
@@ -762,25 +771,8 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 
 		cgi_env_add(&env, CONST_STR_LEN("SERVER_PROTOCOL"), s, strlen(s));
 
-		LI_ltostr(buf,
-#ifdef HAVE_IPV6
-			ntohs(srv_sock->addr.plain.sa_family == AF_INET6 ? srv_sock->addr.ipv6.sin6_port : srv_sock->addr.ipv4.sin_port)
-#else
-			ntohs(srv_sock->addr.ipv4.sin_port)
-#endif
-			);
+		LI_ltostr(buf, sock_addr_get_port(&srv_sock->addr));
 		cgi_env_add(&env, CONST_STR_LEN("SERVER_PORT"), buf, strlen(buf));
-
-#ifdef HAVE_IPV6
-		s = inet_ntop(srv_sock->addr.plain.sa_family,
-			      srv_sock->addr.plain.sa_family == AF_INET6 ?
-			      (const void *) &(srv_sock->addr.ipv6.sin6_addr) :
-			      (const void *) &(srv_sock->addr.ipv4.sin_addr),
-			      b2, sizeof(b2)-1);
-#else
-		s = inet_ntoa(srv_sock->addr.ipv4.sin_addr);
-#endif
-		cgi_env_add(&env, CONST_STR_LEN("SERVER_ADDR"), s, strlen(s));
 
 		s = get_http_method_name(con->request.http_method);
 		cgi_env_add(&env, CONST_STR_LEN("REQUEST_METHOD"), s, strlen(s));
@@ -799,25 +791,10 @@ static int cgi_create_env(server *srv, connection *con, plugin_data *p, buffer *
 			cgi_env_add(&env, CONST_STR_LEN("REQUEST_URI"), CONST_BUF_LEN(con->request.orig_uri));
 		}
 
-
-#ifdef HAVE_IPV6
-		s = inet_ntop(con->dst_addr.plain.sa_family,
-			      con->dst_addr.plain.sa_family == AF_INET6 ?
-			      (const void *) &(con->dst_addr.ipv6.sin6_addr) :
-			      (const void *) &(con->dst_addr.ipv4.sin_addr),
-			      b2, sizeof(b2)-1);
-#else
-		s = inet_ntoa(con->dst_addr.ipv4.sin_addr);
-#endif
+		s = sock_addr_to_p(srv, &con->dst_addr);
 		cgi_env_add(&env, CONST_STR_LEN("REMOTE_ADDR"), s, strlen(s));
 
-		LI_ltostr(buf,
-#ifdef HAVE_IPV6
-			ntohs(con->dst_addr.plain.sa_family == AF_INET6 ? con->dst_addr.ipv6.sin6_port : con->dst_addr.ipv4.sin_port)
-#else
-			ntohs(con->dst_addr.ipv4.sin_port)
-#endif
-			);
+		LI_ltostr(buf, sock_addr_get_port(&con->dst_addr));
 		cgi_env_add(&env, CONST_STR_LEN("REMOTE_PORT"), buf, strlen(buf));
 
 		if (!buffer_is_empty(con->authed_user)) {

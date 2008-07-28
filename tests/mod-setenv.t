@@ -14,8 +14,6 @@ use LightyTest;
 my $tf = LightyTest->new();
 my $t;
  
-SKIP: {
-  skip "disabled for now", 6;
 ok($tf->start_proc == 0, "Starting lighttpd") or die();
 
 $t->{REQUEST} = ( <<EOF
@@ -51,4 +49,3 @@ $t->{RESPONSE}  = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'BAR'
 ok($tf->handle_http($t) == 0, 'query add-response-header');
 
 ok($tf->stop_proc == 0, "Stopping lighttpd");
-}

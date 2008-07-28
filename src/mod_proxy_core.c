@@ -2205,8 +2205,9 @@ REQUESTDONE_FUNC(mod_proxy_connection_close_callback) {
 		proxy_recycle_backend_connection(srv, p, sess);
 	} else {
 		/* if we have the connection in the backlog, remove it */
-		proxy_backlog_remove_connection(p->conf.backlog, con);
-		COUNTER_DEC(p->conf.backlog_size);
+		if (0 == proxy_backlog_remove_connection(p->conf.backlog, con)) {
+			COUNTER_DEC(p->conf.backlog_size);
+		}
 	}
 
 	/* cleanup proxy session */

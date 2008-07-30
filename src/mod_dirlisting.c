@@ -880,6 +880,16 @@ URIHANDLER_FUNC(mod_dirlisting_subrequest) {
 	buffer *mtime;
 	data_string *ds;
 
+	/* we only handle GET, POST and HEAD */
+	switch(con->request.http_method) {
+	case HTTP_METHOD_GET:
+	case HTTP_METHOD_POST:
+	case HTTP_METHOD_HEAD:
+		break;
+	default:
+		return HANDLER_GO_ON;
+	}
+
 	if (con->uri.path->used < 2) return HANDLER_GO_ON;
 	if (con->uri.path->ptr[con->uri.path->used - 2] != '/') return HANDLER_GO_ON;
 	if (con->physical.path->used == 0) return HANDLER_GO_ON;

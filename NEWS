@@ -49,6 +49,7 @@ NEWS
   * fixed #1565: mod_compress should check if the request is already handled, e.g. by fastcgi
   * merged from @1874: add ETag configuration (#1442)
   * case insensitive match for secdownload md5 token (#1710)
+  * handle only HEAD, GET and POST in mod_dirlisting (same as in staticfile) (#1687)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

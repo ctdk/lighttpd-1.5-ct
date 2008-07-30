@@ -99,6 +99,9 @@ static int config_insert(server *srv) {
 		{ "debug.log-timing",            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 51 */
 		{ "ssl.cipher-list",             NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 52 */
 		{ "ssl.use-sslv2",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 53 */
+		{ "etag.use-inode",              NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 54 */
+		{ "etag.use-mtime",              NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 55 */
+		{ "etag.use-size",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 56 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -180,6 +183,9 @@ static int config_insert(server *srv) {
 		s->kbytes_per_second = 0;
 		s->allow_http11  = 1;
 		s->range_requests = 1;
+		s->etag_use_inode = 1;
+		s->etag_use_mtime = 1;
+		s->etag_use_size  = 1;
 		s->force_lowercase_filenames = 0;
 		s->global_kbytes_per_second = 0;
 		s->global_bytes_per_second_cnt = 0;
@@ -226,6 +232,10 @@ static int config_insert(server *srv) {
 		cv[52].destination = s->ssl_cipher_list;
 		cv[53].destination = &(s->ssl_use_sslv2);
 
+		cv[54].destination = &(s->etag_use_inode);
+		cv[55].destination = &(s->etag_use_mtime);
+		cv[56].destination = &(s->etag_use_size);
+ 
 		srv->config_storage[i] = s;
 
 		if (0 != (ret = config_insert_values_global(srv, ((data_config *)srv->config_context->data[i])->value, cv))) {
@@ -297,6 +307,10 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(ssl_ca_file);
 	PATCH(ssl_cipher_list);
 	PATCH(ssl_use_sslv2);
+	PATCH(etag_use_inode);
+	PATCH(etag_use_mtime);
+	PATCH(etag_use_size);
+
 	return 0;
 }
 
@@ -352,6 +366,12 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(ssl_cipher_list);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.use-sslv2"))) {
 				PATCH(ssl_use_sslv2);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("etag.use-inode"))) {
+				PATCH(etag_use_inode);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("etag.use-mtime"))) {
+				PATCH(etag_use_mtime);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("etag.use-size"))) {
+				PATCH(etag_use_size);
 #ifdef HAVE_LSTAT
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.follow-symlink"))) {
 				PATCH(follow_symlink);
@@ -385,6 +405,12 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 			}
 		}
 	}
+
+
+	con->etag_flags = 
+		(con->conf.etag_use_mtime ? ETAG_USE_MTIME : 0) |
+		(con->conf.etag_use_inode ? ETAG_USE_INODE : 0) |
+		(con->conf.etag_use_size  ? ETAG_USE_SIZE  : 0);
 
 	return 0;
 }

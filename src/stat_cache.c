@@ -470,14 +470,14 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 				break;
 			}
 		}
-		etag_create(sce->etag, &(sce->st));
+		etag_create(sce->etag, &(sce->st), con->etag_flags);
 #ifdef HAVE_XATTR
 		if (con->conf.use_xattr && buffer_is_empty(sce->content_type)) {
 			stat_cache_attr_get(sce->content_type, name->ptr);
 		}
 #endif
 	} else if (S_ISDIR(st.st_mode)) {
-		etag_create(sce->etag, &(sce->st));
+		etag_create(sce->etag, &(sce->st), con->etag_flags);
 	}
 
 	*ret_sce = sce;

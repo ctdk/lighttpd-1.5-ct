@@ -33,6 +33,7 @@
 #include "fdevent.h"
 #include "sys-socket.h"
 #include "http_req.h"
+#include "etag.h"
 
 #if defined HAVE_LIBSSL && defined HAVE_OPENSSL_SSL_H
 # define USE_OPENSSL
@@ -303,6 +304,9 @@ typedef struct {
 	unsigned short use_ipv6;
 	unsigned short is_ssl;
 	unsigned short allow_http11;
+	unsigned short etag_use_inode;
+	unsigned short etag_use_mtime;
+	unsigned short etag_use_size;
 	unsigned short force_lowercase_filenames; /* if the FS is case-insensitive, force all files to lower-case */
 	unsigned int max_request_size;
 
@@ -443,6 +447,10 @@ typedef struct {
 	int in_error_handler;
 
 	void *srv_socket;   /* reference to the server-socket (typecast to server_socket) */
+
+	/* etag handling */
+	etag_flags_t etag_flags;
+
 
 #ifdef HAVE_GLIB_H
 	GTimeVal timestamps[TIME_LAST_ELEMENT]; /**< used by timing.h */

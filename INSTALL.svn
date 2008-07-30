@@ -26,12 +26,12 @@ Review which source you want to checkout at:
 http://trac.lighttpd.net/trac/browser
 http://trac.lighttpd.net/trac/browser/tags
 
-note the current lastest version is lighttpd-merge-1.4.x not trunk:
-http://trac.lighttpd.net/trac/browser/branches/lighttpd-merge-1.4.x
+the current latest version is trunk:
+http://trac.lighttpd.net/trac/browser/trunk
 
 and check it out by ::
 
-  svn co svn://svn.lighttpd.net/lighttpd/branches/lighttpd-merge-1.4.x
+  svn checkout svn://svn.lighttpd.net/lighttpd/trunk/
 
 
 Build, Test and Install
@@ -40,7 +40,7 @@ Build, Test and Install
 with autoconf
 ------------
 
-  $ cd lighttpd-1.x.x
+  $ cd trunk
   $ ./autogen.sh
 if you have problem with autogen.sh, check aclocal autoconf automake version
 

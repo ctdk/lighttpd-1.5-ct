@@ -303,7 +303,7 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 
 	buffer_copy_string_hex(p->md5, (char *)HA1, 16);
 
-	if (0 != strncmp(md5_str, p->md5->ptr, 32)) {
+	if (0 != strncasecmp(md5_str, p->md5->ptr, 32)) {
 		con->http_status = 403;
 
 		TRACE("MD5 didn't matched: %s == %s", md5_str, SAFE_BUF_STR(p->md5));

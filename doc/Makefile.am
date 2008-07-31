@@ -9,7 +9,6 @@ configuration.txt \
 features.txt \
 performance.txt \
 plugins.txt \
-proxy.txt \
 redirect.txt \
 rewrite.txt \
 secdownload.txt \

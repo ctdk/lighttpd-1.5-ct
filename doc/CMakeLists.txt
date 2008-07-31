@@ -17,7 +17,6 @@ SET(L_DOCS
 	features.txt
 	performance.txt
 	plugins.txt
-	proxy.txt
 	redirect.txt
 	rewrite.txt
 	rrdtool.txt

@@ -73,7 +73,7 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 		case FILE_CHUNK: {
 			ssize_t r;
 			off_t offset;
-			size_t toSend, written;
+			size_t toSend, written = 0;
 			sendfilevec_t fvec;
 			stat_cache_entry *sce = NULL;
 			int ifd;
@@ -108,6 +108,7 @@ NETWORK_BACKEND_WRITE(solarissendfilev) {
 			if (-1 == (r = sendfilev(sock->fd, &fvec, 1, &written))) {
 				switch (errno) {
 				case EAGAIN:
+				case EINTR:
 					break;
 				default:
 					ERROR("sendfilev() failed: %s (errno=%d)", strerror(errno), errno);

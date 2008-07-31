@@ -42,8 +42,6 @@ sub new {
 		$self->{MODULES_PATH} = $self->{BASEDIR}.'/build';
 	}
 	$self->{LIGHTTPD_PATH} = $self->{BINDIR}.'/lighttpd';
-	$self->{LIGHTTPD_PIDFILE} = $self->{TESTDIR}.'/tmp/lighttpd/lighttpd.pid';
-	$self->{PIDOF_PIDFILE} = $self->{TESTDIR}.'/tmp/lighttpd/pidof.pid';
 	$self->{PORT} = 2048;
 
 	my ($name, $aliases, $addrtype, $net) = gethostbyaddr(inet_aton("127.0.0.1"), AF_INET);
@@ -72,26 +70,34 @@ sub listening_on {
 sub stop_proc {
 	my $self = shift;
 
-#	open F, $self->{LIGHTTPD_PIDFILE} or return -1;
-#	my $pid = <F>;
-#	close F;
-
-#	if (defined $pid) {
-#		kill('TERM',$pid) or return -1;
-#		select(undef, undef, undef, 0.5);
-#	}
-
 	my $pid = $self->{LIGHTTPD_PID};
-	if (defined $pid) {
+	if (defined $pid && $pid != -1) {
 		kill('TERM', $pid) or return -1;
 		return -1 if ($pid != waitpid($pid, 0));
 	} else {
-		diag("Nothing to kill\n");
+		diag("Process not started, nothing to stop");
+		return -1;
 	}
 
 	return 0;
 }
 
+sub wait_for_port_with_proc {
+	my $self = shift;
+	my $port = shift;
+	my $child = shift;
+
+	while (0 == $self->listening_on($port)) {
+		select(undef, undef, undef, 0.1);
+
+		# the process is gone, we failed
+		if (0 != waitpid($child, WNOHANG)) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
 
 sub start_proc {
 	my $self = shift;
@@ -104,17 +110,15 @@ sub start_proc {
 	$ENV{'SRCDIR'} = $self->{BASEDIR}.'/tests';
 	$ENV{'PORT'} = $self->{PORT};
 
-	unlink($self->{LIGHTTPD_PIDFILE});
-	my $cmdargs = " -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
-	my $cmdline = $self->{LIGHTTPD_PATH}." ".$cmdargs;
+	my $cmdline = $self->{LIGHTTPD_PATH}." -D -f ".$self->{SRCDIR}."/".$self->{CONFIGFILE}." -m ".$self->{MODULES_PATH};
 	if (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'strace') {
-		$cmdline = "strace -tt -s 512 -o strace $cmdline &";
+		$cmdline = "strace -tt -s 512 -o strace ".$cmdline;
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'truss') {
-		$cmdline = "truss -a -l -w all -v all -o strace $cmdline &";
+		$cmdline = "truss -a -l -w all -v all -o strace ".$cmdline;
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'gdb') {
-		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args $cmdline &";
+		$cmdline = "gdb --batch --ex 'run' --ex 'bt' --args ".$cmdline." > gdb.out";
 	} elsif (defined $ENV{"TRACEME"} && $ENV{"TRACEME"} eq 'valgrind') {
-		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind $cmdline &";
+		$cmdline = "valgrind --tool=memcheck --show-reachable=yes --leak-check=yes --log-file=valgrind ".$cmdline;
 	}
 	# diag("starting lighttpd at :".$self->{PORT}.", cmdline: ".$cmdline );
 	my $child = fork();
@@ -124,30 +128,14 @@ sub start_proc {
 	}
 	if ($child == 0) {
 		exec $cmdline or die($?);
-	} else {
-		$self->{LIGHTTPD_PID} = $child;
-	}
-#	system($cmdline) == 0 or die($?);
-
-	select(undef, undef, undef, 0.1);
-	if (not -e $self->{LIGHTTPD_PIDFILE} or 0 == kill 0, `cat $self->{LIGHTTPD_PIDFILE}`) {
-		select(undef, undef, undef, 2);
 	}
 
-	unlink($self->{TESTDIR}."/tmp/cfg.file");
-
-	# no pidfile, we failed
-	if (not -e $self->{LIGHTTPD_PIDFILE}) {
-		diag(sprintf('Could not find pidfile: %s', $self->{LIGHTTPD_PIDFILE}));
+	if (0 != $self->wait_for_port_with_proc($self->{PORT}, $child)) {
+		diag(sprintf('The process %i is not up', $child));
 		return -1;
 	}
 
-	# the process is gone, we failed
-	if (0 != waitpid($child, WNOHANG)) {
-	#if (0 == kill 0, `cat $self->{LIGHTTPD_PIDFILE}`) {
-		diag(sprintf('the process %i is not up', $child));
-		return -1;
-	}
+	$self->{LIGHTTPD_PID} = $child;
 
 	0;
 }
@@ -225,8 +213,9 @@ sub handle_http {
 					(my $h = $1) =~ tr/[A-Z]/[a-z]/;
 
 					if (defined $resp_hdr{$h}) {
-						diag(sprintf("header '%s' is duplicated: '%s' and '%s'\n",
-						             $h, $resp_hdr{$h}, $2));
+# 						diag(sprintf("header '%s' is duplicated: '%s' and '%s'\n",
+# 						             $h, $resp_hdr{$h}, $2));
+						$resp_hdr{$h} .= ', '.$2;
 					} else {
 						$resp_hdr{$h} = $2;
 					}
@@ -356,11 +345,10 @@ sub spawnfcgi {
 	}
 	if ($child == 0) {
 		my $cmd = $self->{BINDIR}.'/spawn-fcgi -n -p '.$port.' -f "'.$binary.'"';
-		exec $cmd;
+		exec $cmd or die($?);
 	} else {
-		select(undef, undef, undef, 0.5);
-		if (0 != waitpid($child, WNOHANG)) {
-			diag("Child died\n");
+		if (0 != $self->wait_for_port_with_proc($port, $child)) {
+			diag(sprintf('The process %i is not up (port %i, %s)', $child, $port, $binary));
 			return -1;
 		}
 		return $child;
@@ -369,6 +357,7 @@ sub spawnfcgi {
 
 sub endspawnfcgi {
 	my ($self, $pid) = @_;
+	return -1 if (-1 == $pid);
 	kill(2, $pid);
 	waitpid($pid, 0);
 	return 0;

@@ -813,7 +813,7 @@ LI_EXPORT int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
 	p->data         = NULL;
 
 	ds = data_string_init();
-	buffer_copy_string(ds->value, CORE_PLUGIN);
+	buffer_copy_string_len(ds->value, CONST_STR_LEN(CORE_PLUGIN));
 	array_insert_unique(p->required_plugins, (data_unset *)ds);
 
 	return 0;

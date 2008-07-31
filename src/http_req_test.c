@@ -111,11 +111,11 @@ int main(void) {
 		"GE");
 
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, "T ");
+	buffer_copy_string_len(b, CONST_STR_LEN("T "));
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, "/foo");
+	buffer_copy_string_len(b, CONST_STR_LEN("/foo"));
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, "bar HTTP/1.0\r");
+	buffer_copy_string_len(b, CONST_STR_LEN("bar HTTP/1.0\r"));
 
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "\n"

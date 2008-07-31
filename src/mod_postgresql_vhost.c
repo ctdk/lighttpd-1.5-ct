@@ -162,33 +162,33 @@ SERVER_FUNC(mod_postgresql_vhost_set_defaults) {
 		 * */
 
 		if (!buffer_is_empty(s->core->hostname)) {
-			BUFFER_APPEND_STRING_CONST(s->conninfo, "host=");
+			buffer_append_string_len(s->conninfo, CONST_STR_LEN("host="));
 			buffer_append_string_buffer(s->conninfo, s->core->hostname);
 			if (s->core->port) {
-				BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
-				BUFFER_APPEND_STRING_CONST(s->conninfo, "port=");
+				buffer_append_string_len(s->conninfo, CONST_STR_LEN(" "));
+				buffer_append_string_len(s->conninfo, CONST_STR_LEN("port="));
 				buffer_append_long(s->conninfo, s->core->port);
 			}
 		} else if (!buffer_is_empty(s->core->sock)) {
-			BUFFER_APPEND_STRING_CONST(s->conninfo, "host=");
+			buffer_append_string_len(s->conninfo, CONST_STR_LEN("host="));
 			buffer_append_string_buffer(s->conninfo, s->core->sock);
 		}
 
 		if (!buffer_is_empty(s->core->db)) {
-			if (!buffer_is_empty(s->conninfo)) BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
-			BUFFER_APPEND_STRING_CONST(s->conninfo, "dbname=");
+			if (!buffer_is_empty(s->conninfo)) buffer_append_string_len(s->conninfo, CONST_STR_LEN(" "));
+			buffer_append_string_len(s->conninfo, CONST_STR_LEN("dbname="));
 			buffer_append_string_buffer(s->conninfo, s->core->db);
 		}
 
 		if (!buffer_is_empty(s->core->user)) {
-			if (!buffer_is_empty(s->conninfo)) BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
-			BUFFER_APPEND_STRING_CONST(s->conninfo, "user=");
+			if (!buffer_is_empty(s->conninfo)) buffer_append_string_len(s->conninfo, CONST_STR_LEN(" "));
+			buffer_append_string_len(s->conninfo, CONST_STR_LEN("user="));
 			buffer_append_string_buffer(s->conninfo, s->core->user);
 		}
 
 		if (!buffer_is_empty(s->core->pass)) {
-			if (!buffer_is_empty(s->conninfo)) BUFFER_APPEND_STRING_CONST(s->conninfo, " ");
-			BUFFER_APPEND_STRING_CONST(s->conninfo, "password=");
+			if (!buffer_is_empty(s->conninfo)) buffer_append_string_len(s->conninfo, CONST_STR_LEN(" "));
+			buffer_append_string_len(s->conninfo, CONST_STR_LEN("password="));
 			buffer_append_string_buffer(s->conninfo, s->core->pass);
 		}
 
@@ -353,7 +353,7 @@ int mod_postgresql_vhost_plugin_init(plugin *p) {
 
 	ds = data_string_init();
 
-	buffer_copy_string(ds->value, CORE_PLUGIN);
+	buffer_copy_string_len(ds->value, CONST_STR_LEN(CORE_PLUGIN));
 	array_insert_unique(p->required_plugins, (data_unset *)ds);
 
 	return 0;

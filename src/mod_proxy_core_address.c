@@ -182,7 +182,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 			a->name->ptr[0] = '[';
 			inet_ntop(cur->ai_family, &(a->addr.ipv6.sin6_addr), a->name->ptr + 1, a->name->size - 2);
 			a->name->used = strlen(a->name->ptr) + 1;
-			buffer_append_string(a->name, "]:");
+			buffer_append_string_len(a->name, CONST_STR_LEN("]:"));
 			buffer_append_long(a->name, ntohs(a->addr.ipv6.sin6_port));
 			break;
 #endif
@@ -190,7 +190,7 @@ int  proxy_address_pool_add_string(proxy_address_pool *address_pool, buffer *nam
 			inet_ntop(cur->ai_family, &(a->addr.ipv4.sin_addr), a->name->ptr, a->name->size - 1);
 			a->name->used = strlen(a->name->ptr) + 1;
 
-			buffer_append_string(a->name, ":");
+			buffer_append_string_len(a->name, CONST_STR_LEN(":"));
 			buffer_append_long(a->name, ntohs(a->addr.ipv4.sin_port));
 			break;
 		default:

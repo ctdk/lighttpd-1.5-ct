@@ -44,12 +44,12 @@ void proxy_protocols_register(proxy_protocol *protocol) {
 
 	/* append protocol name to list of names. */
 	if(!buffer_is_empty(protocol_names)) {
-		buffer_append_string(protocol_names, ", '");
+		buffer_append_string_len(protocol_names, CONST_STR_LEN(", '"));
 	} else {
-		buffer_append_string(protocol_names, "'");
+		buffer_append_string_len(protocol_names, CONST_STR_LEN("'"));
 	}
 	buffer_append_string(protocol_names, BUF_STR(protocol->name));
-	buffer_append_string(protocol_names, "'");
+	buffer_append_string_len(protocol_names, CONST_STR_LEN("'"));
 }
 
 proxy_protocol *proxy_get_protocol(buffer *name) {

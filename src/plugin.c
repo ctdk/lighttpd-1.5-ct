@@ -234,9 +234,9 @@ int plugins_load(server *srv) {
 		if (strlen(srv->srvconf.modules_dir->ptr) != 0) buffer_append_string(srv->tmp_buf, DIR_SEPERATOR_STR);
 		buffer_append_string(srv->tmp_buf, modules);
 #if defined(_WIN32) || defined(__CYGWIN__)
-		buffer_append_string(srv->tmp_buf, ".dll");
+		buffer_append_string_len(srv->tmp_buf, CONST_STR_LEN(".dll"));
 #else
-		buffer_append_string(srv->tmp_buf, ".so");
+		buffer_append_string_len(srv->tmp_buf, CONST_STR_LEN(".so"));
 #endif
 
 #ifdef _WIN32
@@ -272,7 +272,7 @@ int plugins_load(server *srv) {
 #endif
 		buffer_reset(srv->tmp_buf);
 		buffer_copy_string(srv->tmp_buf, modules);
-		buffer_append_string(srv->tmp_buf, "_plugin_init");
+		buffer_append_string_len(srv->tmp_buf, CONST_STR_LEN("_plugin_init"));
 
 #ifdef _WIN32
 		init = (int (*)(plugin *pl)) GetProcAddress(p->lib, srv->tmp_buf->ptr);

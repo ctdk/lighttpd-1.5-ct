@@ -218,7 +218,7 @@ static int proxy_scgi_get_env_request(server *srv, proxy_session *sess, buffer *
 		buffer_reset(p->tmp_buf);
 
 		if (0 != strcasecmp(ds->key->ptr, "CONTENT-TYPE")) {
-			BUFFER_COPY_STRING_CONST(p->tmp_buf, "HTTP_");
+			buffer_copy_string_len(p->tmp_buf, CONST_STR_LEN("HTTP_"));
 			p->tmp_buf->used--;
 		}
 
@@ -460,7 +460,7 @@ LI_EXPORT int mod_proxy_backend_scgi_plugin_init(plugin *p) {
 	p->data         = NULL;
 
 	ds = data_string_init();
-	buffer_copy_string(ds->value, CORE_PLUGIN);
+	buffer_copy_string_len(ds->value, CONST_STR_LEN(CORE_PLUGIN));
 	array_insert_unique(p->required_plugins, (data_unset *)ds);
 
 	return 0;

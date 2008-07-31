@@ -722,7 +722,7 @@ handler_t proxy_handle_response_headers(server *srv, connection *con, plugin_dat
 					if (NULL == (ds = (data_string *)array_get_unused_element(con->request.headers, TYPE_STRING))) {
 						ds = data_response_init();
 					}
-					buffer_copy_string(ds->key, "Host");
+					buffer_copy_string_len(ds->key, CONST_STR_LEN("Host"));
 					buffer_copy_string_buffer(ds->value, header->value);
 					array_insert_unique(con->request.headers, (data_unset *)ds);
 				}

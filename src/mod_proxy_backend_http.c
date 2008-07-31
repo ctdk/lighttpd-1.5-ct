@@ -337,15 +337,15 @@ PROXY_STREAM_ENCODER_FUNC(proxy_http_encode_request_headers) {
 
 	/* request line */
 	buffer_copy_string(b, get_http_method_name(con->request.http_method));
-	BUFFER_APPEND_STRING_CONST(b, " ");
+	buffer_append_string_len(b, CONST_STR_LEN(" "));
 
 	/* request uri */
 	buffer_append_string_buffer(b, sess->request_uri);
 
 	if (con->request.http_version == HTTP_VERSION_1_1) {
-		BUFFER_APPEND_STRING_CONST(b, " HTTP/1.1\r\n");
+		buffer_append_string_len(b, CONST_STR_LEN(" HTTP/1.1\r\n"));
 	} else {
-		BUFFER_APPEND_STRING_CONST(b, " HTTP/1.0\r\n");
+		buffer_append_string_len(b, CONST_STR_LEN(" HTTP/1.0\r\n"));
 	}
 
 	for (i = 0; i < sess->request_headers->used; i++) {
@@ -354,12 +354,12 @@ PROXY_STREAM_ENCODER_FUNC(proxy_http_encode_request_headers) {
 		ds = (data_string *)sess->request_headers->data[i];
 
 		buffer_append_string_buffer(b, ds->key);
-		BUFFER_APPEND_STRING_CONST(b, ": ");
+		buffer_append_string_len(b, CONST_STR_LEN(": "));
 		buffer_append_string_buffer(b, ds->value);
-		BUFFER_APPEND_STRING_CONST(b, "\r\n");
+		buffer_append_string_len(b, CONST_STR_LEN("\r\n"));
 	}
 
-	BUFFER_APPEND_STRING_CONST(b, "\r\n");
+	buffer_append_string_len(b, CONST_STR_LEN("\r\n"));
 
 	out->bytes_in += b->used - 1;
 
@@ -412,7 +412,7 @@ LI_EXPORT int mod_proxy_backend_http_plugin_init(plugin *p) {
 	p->data         = NULL;
 
 	ds = data_string_init();
-	buffer_copy_string(ds->value, CORE_PLUGIN);
+	buffer_copy_string_len(ds->value, CONST_STR_LEN(CORE_PLUGIN));
 	array_insert_unique(p->required_plugins, (data_unset *)ds);
 
 	return 0;

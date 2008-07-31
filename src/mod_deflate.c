@@ -1241,7 +1241,7 @@ PHYSICALPATH_FUNC(mod_deflate_handle_response_header) {
 	if (NULL != (ds = (data_string *)array_get_element(con->response.headers, CONST_STR_LEN("Vary")))) {
 		/* append Accept-Encoding to Vary header */
 		if (NULL == strstr(ds->value->ptr, "Accept-Encoding")) {
-			buffer_append_string(ds->value, ",Accept-Encoding");
+			buffer_append_string_len(ds->value, CONST_STR_LEN(",Accept-Encoding"));
 			if (p->conf.debug) {
 				TRACE("appending ,Accept-Encoding for '%s'", SAFE_BUF_STR(con->uri.path));
 			}

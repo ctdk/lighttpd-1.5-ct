@@ -111,11 +111,11 @@ int main(void) {
 		"HTTP");
 
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, "/1.0 ");
+	buffer_copy_string_len(b, CONST_STR_LEN("/1.0 "));
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, "30");
+	buffer_copy_string_len(b, CONST_STR_LEN("30"));
 	b = chunkqueue_get_append_buffer(cq);
-	buffer_copy_string(b, "4 Not Modified\r");
+	buffer_copy_string_len(b, CONST_STR_LEN("4 Not Modified\r"));
 
 	b = chunkqueue_get_append_buffer(cq);
 	buffer_copy_string(b, "\n"

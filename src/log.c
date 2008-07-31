@@ -218,18 +218,18 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 		}
 
 		buffer_copy_string_buffer(err->buf, err->cached_ts_str);
-		BUFFER_APPEND_STRING_CONST(err->buf, ": (");
+		buffer_append_string_len(err->buf, CONST_STR_LEN(": ("));
 		break;
 	case ERRORLOG_SYSLOG:
 		/* syslog is generating its own timestamps */
-		BUFFER_COPY_STRING_CONST(err->buf, "(");
+		buffer_copy_string_len(err->buf, CONST_STR_LEN("("));
 		break;
 	}
 
 	buffer_append_string(err->buf, filename);
-	BUFFER_APPEND_STRING_CONST(err->buf, ".");
+	buffer_append_string_len(err->buf, CONST_STR_LEN("."));
 	buffer_append_long(err->buf, line);
-	BUFFER_APPEND_STRING_CONST(err->buf, ") ");
+	buffer_append_string_len(err->buf, CONST_STR_LEN(") "));
 
 	for(va_start(ap, fmt); *fmt; fmt++) {
 		int d;
@@ -241,28 +241,28 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 		case 's':           /* string */
 			s = va_arg(ap, char *);
 			buffer_append_string(err->buf, s);
-			BUFFER_APPEND_STRING_CONST(err->buf, " ");
+			buffer_append_string_len(err->buf, CONST_STR_LEN(" "));
 			break;
 		case 'b':           /* buffer */
 			b = va_arg(ap, buffer *);
 			buffer_append_string_buffer(err->buf, b);
-			BUFFER_APPEND_STRING_CONST(err->buf, " ");
+			buffer_append_string_len(err->buf, CONST_STR_LEN(" "));
 			break;
 		case 'd':           /* int */
 			d = va_arg(ap, int);
 			buffer_append_long(err->buf, d);
-			BUFFER_APPEND_STRING_CONST(err->buf, " ");
+			buffer_append_string_len(err->buf, CONST_STR_LEN(" "));
 			break;
 		case 'o':           /* off_t */
 			o = va_arg(ap, off_t);
 			buffer_append_off_t(err->buf, o);
-			BUFFER_APPEND_STRING_CONST(err->buf, " ");
+			buffer_append_string_len(err->buf, CONST_STR_LEN(" "));
 			break;
 		case 'x':           /* int (hex) */
 			d = va_arg(ap, int);
-			BUFFER_APPEND_STRING_CONST(err->buf, "0x");
+			buffer_append_string_len(err->buf, CONST_STR_LEN("0x"));
 			buffer_append_long_hex(err->buf, d);
-			BUFFER_APPEND_STRING_CONST(err->buf, " ");
+			buffer_append_string_len(err->buf, CONST_STR_LEN(" "));
 			break;
 		case 'S':           /* string */
 			s = va_arg(ap, char *);
@@ -290,11 +290,11 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 
 	switch(err->mode) {
 	case ERRORLOG_FILE:
-		BUFFER_APPEND_STRING_CONST(err->buf, "\n");
+		buffer_append_string_len(err->buf, CONST_STR_LEN("\n"));
 		write(err->fd, err->buf->ptr, err->buf->used - 1);
 		break;
 	case ERRORLOG_STDERR:
-		BUFFER_APPEND_STRING_CONST(err->buf, "\n");
+		buffer_append_string_len(err->buf, CONST_STR_LEN("\n"));
 		write(STDERR_FILENO, err->buf->ptr, err->buf->used - 1);
 		break;
 #ifdef HAVE_SYSLOG_H
@@ -358,11 +358,11 @@ int log_trace(const char *fmt, ...) {
 	/* write b */
 	switch(err->mode) {
 	case ERRORLOG_FILE:
-		buffer_append_string(b, "\r\n");
+		buffer_append_string_len(b, CONST_STR_LEN("\r\n"));
 		write(err->fd, b->ptr, b->used - 1);
 		break;
 	case ERRORLOG_STDERR:
-		buffer_append_string(b, "\r\n");
+		buffer_append_string_len(b, CONST_STR_LEN("\r\n"));
 		write(STDERR_FILENO, b->ptr, b->used - 1);
 		break;
 #ifdef HAVE_SYSLOG_H

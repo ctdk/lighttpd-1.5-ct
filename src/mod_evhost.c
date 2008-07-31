@@ -185,7 +185,7 @@ static int mod_evhost_parse_host(connection *con,array *host) {
 	}
 
 	ds = data_string_init();
-	buffer_copy_string(ds->key,"%0");
+	buffer_copy_string_len(ds->key,CONST_STR_LEN("%0"));
 
 	/* if we stopped at a dot, skip the dot */
 	if (*ptr == '.') ptr++;
@@ -201,7 +201,7 @@ static int mod_evhost_parse_host(connection *con,array *host) {
 				if (ptr != colon - 1) {
 					/* is something between the dots */
 					ds = data_string_init();
-					buffer_copy_string(ds->key,"%");
+					buffer_copy_string_len(ds->key,CONST_STR_LEN("%"));
 					buffer_append_long(ds->key, i++);
 					buffer_copy_string_len(ds->value,ptr+1,colon-ptr-1);
 
@@ -214,7 +214,7 @@ static int mod_evhost_parse_host(connection *con,array *host) {
 		/* if the . is not the first charactor of the hostname */
 		if (colon != ptr) {
 			ds = data_string_init();
-			buffer_copy_string(ds->key,"%");
+			buffer_copy_string_len(ds->key,CONST_STR_LEN("%"));
 			buffer_append_long(ds->key, i++);
 			buffer_copy_string_len(ds->value,ptr,colon-ptr);
 
@@ -286,7 +286,7 @@ static handler_t mod_evhost_uri_handler(server *srv, connection *con, void *p_d)
 
 			if (*(ptr+1) == '%') {
 				/* %% */
-				BUFFER_APPEND_STRING_CONST(p->tmp_buf,"%");
+				buffer_append_string_len(p->tmp_buf,CONST_STR_LEN("%"));
 			} else if (NULL != (ds = (data_string *)array_get_element(parsed_host, CONST_BUF_LEN(p->conf.path_pieces[i])))) {
 				if (ds->value->used) {
 					buffer_append_string_buffer(p->tmp_buf,ds->value);

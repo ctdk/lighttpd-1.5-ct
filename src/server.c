@@ -1438,7 +1438,7 @@ int main (int argc, char **argv, char **envp) {
 	/* write pid file */
 	if (pid_fd != -1) {
 		buffer_copy_long(srv->tmp_buf, getpid());
-		buffer_append_string(srv->tmp_buf, "\n");
+		buffer_append_string_len(srv->tmp_buf, CONST_STR_LEN("\n"));
 		if (-1 == write(pid_fd, srv->tmp_buf->ptr, srv->tmp_buf->used - 1)) {
 			ERROR("writing to PID to '%s' failed: %s, ignored", "...", strerror(errno));
 		}

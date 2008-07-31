@@ -480,30 +480,30 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 		if (NULL == (post_con_entry = connection_map_get_connection_entry(p->con_map, tracking_id))) {
 			/**
 			 * looks like we don't know the tracking id yet, GET and POST out of sync ? */
-			BUFFER_APPEND_STRING_CONST(b, "new Object({ 'state' : 'starting' })\r\n");
+			buffer_append_string_len(b, CONST_STR_LEN("new Object({ 'state' : 'starting' })\r\n"));
 			
 			if (p->conf.debug) TRACE("connection unknown: %s, sending: %s", SAFE_BUF_STR(tracking_id), SAFE_BUF_STR(b));
 
 			return HANDLER_FINISHED;
 		}
 
-		BUFFER_COPY_STRING_CONST(b, "new Object({ 'state' : ");
+		buffer_copy_string_len(b, CONST_STR_LEN("new Object({ 'state' : "));
 	
 		if (post_con_entry->status == 413) {
 			/* the upload was too large */	
-			BUFFER_APPEND_STRING_CONST(b, "'error', 'status' : 413");
+			buffer_append_string_len(b, CONST_STR_LEN("'error', 'status' : 413"));
 		} else if (post_con_entry->con == NULL) {
 			/* the connection is already gone */
-			buffer_append_string(b, "'done'");
+			buffer_append_string_len(b, CONST_STR_LEN("'done'"));
 		} else {
 			/* the upload is already done, but the connection might be still open */
 			buffer_append_string(b, post_con_entry->con->recv->is_closed ? "'done'" : "'uploading'");
-			BUFFER_APPEND_STRING_CONST(b, ", 'received' : ");
+			buffer_append_string_len(b, CONST_STR_LEN(", 'received' : "));
 			buffer_append_off_t(b, post_con_entry->con->recv->bytes_in);
-			BUFFER_APPEND_STRING_CONST(b, ", 'size' : ");
+			buffer_append_string_len(b, CONST_STR_LEN(", 'size' : "));
 			buffer_append_off_t(b, post_con_entry->con->request.content_length == -1 ? 0 : post_con_entry->con->request.content_length);
 		}
-		BUFFER_APPEND_STRING_CONST(b, "})\r\n");
+		buffer_append_string_len(b, CONST_STR_LEN("})\r\n"));
 
 		if (p->conf.debug) TRACE("connection is known: %s, sending: %s", SAFE_BUF_STR(tracking_id), SAFE_BUF_STR(b));
 

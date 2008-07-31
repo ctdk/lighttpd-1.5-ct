@@ -15,49 +15,49 @@ int main(void) {
 	log_init();
 	plan_tests(7);
 
-	buffer_copy_string(b, "bytes=0-0");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=0-0"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "0-0");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);
 	}
 	http_request_range_reset(ranges);
 
-	buffer_copy_string(b, "bytes=1-2,3-4");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=1-2,3-4"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "1-2,3-4");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);
 	}
 	http_request_range_reset(ranges);
 
-	buffer_copy_string(b, "bytes=-0");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=-0"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "-0");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);
 	}
 	http_request_range_reset(ranges);
 
-	buffer_copy_string(b, "bytes=0-");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=0-"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "0-");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);
 	}
 	http_request_range_reset(ranges);
 
-	buffer_copy_string(b, "bytes=0-0,0-");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=0-0,0-"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "0-0,0-");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);
 	}
 	http_request_range_reset(ranges);
 
-	buffer_copy_string(b, "bytes=0-0,-0");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=0-0,-0"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "0-0,-0");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);
 	}
 	http_request_range_reset(ranges);
 
-	buffer_copy_string(b, "bytes=1-2,3-4,5-");
+	buffer_copy_string_len(b, CONST_STR_LEN("bytes=1-2,3-4,5-"));
 	ok(PARSE_SUCCESS == http_request_range_parse(b, ranges), "1-2,3-4,5-");
 	for (r = ranges; r; r = r->next) {
 		diag(".. %jd - %jd", (intmax_t) r->start, (intmax_t) r->end);

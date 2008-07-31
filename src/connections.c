@@ -309,15 +309,15 @@ static int connection_handle_response_header(server *srv, connection *con) {
 			b = chunkqueue_get_append_buffer(con->send);
 
 			/* build default error-page */
-			buffer_copy_string(b,
+			buffer_copy_string_len(b, CONST_STR_LEN(
 					   "<?xml version=\"1.0\" encoding=\"iso-8859-1\"?>\n"
 					   "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\"\n"
 					   "         \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n"
 					   "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\">\n"
 					   " <head>\n"
-					   "  <title>");
+					   "  <title>"));
 			buffer_append_long(b, con->http_status);
-			buffer_append_string(b, " - ");
+			buffer_append_string_len(b, CONST_STR_LEN(" - "));
 			buffer_append_string(b, get_http_status_name(con->http_status));
 
 			buffer_append_string(b,
@@ -326,7 +326,7 @@ static int connection_handle_response_header(server *srv, connection *con) {
 					     " <body>\n"
 					     "  <h1>");
 			buffer_append_long(b, con->http_status);
-			buffer_append_string(b, " - ");
+			buffer_append_string_len(b, CONST_STR_LEN(" - "));
 			buffer_append_string(b, get_http_status_name(con->http_status));
 
 			buffer_append_string(b,"</h1>\n"

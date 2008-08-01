@@ -263,6 +263,11 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 		t.last_token_id = token_id;
 	}
 
+	// Tokenizer failed
+	if (parser_ret == PARSER_ERROR) {
+		ret = PARSE_ERROR;
+	}
+
 	/* oops, the parser failed */
 	if (context.ok == 0) {
 		ret = PARSE_ERROR;
@@ -300,6 +305,8 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 		if (ret == PARSE_UNSET) {
 			ret = buffer_is_empty(context.errmsg) ? PARSE_NEED_MORE : PARSE_ERROR;
 		}
+	} else if (parser_ret == PARSER_EOF) { // didn't see CRLF CRLF, no other error till now
+		ret = PARSE_NEED_MORE;
 	} else {
 		chunk *c;
 

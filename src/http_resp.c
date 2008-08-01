@@ -94,8 +94,14 @@ static int http_resp_lookup_next_char(http_resp_tokenizer_t *t, unsigned char *c
 	return 0;
 }
 
+typedef enum {
+	PARSER_UNSET,
+	PARSER_OK,
+	PARSER_ERROR,
+	PARSER_EOF
+} http_resp_parser_t;
 
-static int http_resp_tokenizer(
+static http_resp_parser_t http_resp_tokenizer(
 	http_resp_tokenizer_t *t,
 	int *token_id,
 	buffer *token
@@ -130,8 +136,8 @@ static int http_resp_tokenizer(
 				t->is_statusline = 0;
 				t->is_key = 1;
 			} else {
-				fprintf(stderr, "%s.%d: CR with out LF\r\n", __FILE__, __LINE__);
-				return -1;
+				ERROR("CR with out LF at pos: %zu", t->offset);
+				return PARSER_ERROR;
 			}
 			break;
 		case '\n':
@@ -151,14 +157,14 @@ static int http_resp_tokenizer(
 						if (c == ':') break; /* the : is the splitter between key and value */
 					}
 				}
-				if (0 != http_resp_lookup_next_char(t, &c)) return -1;
+				if (0 != http_resp_lookup_next_char(t, &c)) return PARSER_EOF;
 			}
 
 			if (t->c == t->lookup_c &&
 				t->offset == t->lookup_offset + 1) {
 
-				fprintf(stderr, "%s.%d: invalid char in string\n", __FILE__, __LINE__);
-				return -1;
+				ERROR("invalid char (%d) at pos: %zu", c, t->offset);
+				return PARSER_ERROR;
 			}
 
 			tid = TK_STRING;
@@ -192,10 +198,10 @@ static int http_resp_tokenizer(
 	if (tid) {
 		*token_id = tid;
 
-		return 1;
+		return PARSER_OK;
 	}
 
-	return -1;
+	return PARSER_EOF;
 }
 
 parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
@@ -205,6 +211,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	buffer *token = NULL;
 	http_resp_ctx_t context;
 	parse_status_t ret = PARSE_UNSET;
+	http_resp_parser_t parser_ret;
 	int last_token_id = 0;
 
 	if(!cq->first) return PARSE_NEED_MORE;
@@ -228,7 +235,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	http_resp_parserTrace(stderr, "http-response: ");
 #endif
 
-	while((1 == http_resp_tokenizer(&t, &token_id, token)) && context.ok) {
+	while((PARSER_OK == (parser_ret = http_resp_tokenizer(&t, &token_id, token))) && context.ok) {
 		http_resp_parser(pParser, token_id, token, &context);
 
 		token = buffer_pool_get(context.unused_buffers);
@@ -238,6 +245,11 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 		    token_id == TK_CRLF) break;
 
 		last_token_id = token_id;
+	}
+
+	// Tokenizer failed
+	if (parser_ret == PARSER_ERROR) {
+		ret = PARSE_ERROR;
 	}
 
 	/* oops, the parser failed */
@@ -267,6 +279,8 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 		if (ret == PARSE_UNSET) {
 			ret = buffer_is_empty(context.errmsg) ? PARSE_NEED_MORE : PARSE_ERROR;
 		}
+	} else if (parser_ret == PARSER_EOF) { // didn't see CRLF CRLF, no other error till now
+		ret = PARSE_NEED_MORE;
 	} else {
 		chunk *c;
 

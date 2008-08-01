@@ -493,6 +493,57 @@ URIHANDLER_FUNC(mod_webdav_uri_handler) {
 
 	return HANDLER_GO_ON;
 }
+
+PHYSICALPATH_FUNC(mod_webdav_physical_handler) {
+	plugin_data *p = p_d;
+
+	if (con->mode != DIRECT) return HANDLER_GO_ON;
+
+	mod_webdav_patch_connection(srv, con, p);
+
+	if (!p->conf.enabled) {
+		if (con->conf.log_request_handling) {
+			TRACE("-- skipping %s in mod_webdav, not enabled", 
+				SAFE_BUF_STR(con->uri.path));
+		}
+
+		return HANDLER_GO_ON;
+	}
+
+	if (con->conf.log_request_handling) {
+		TRACE("-- handling request in mod_webdav: %s", 
+			SAFE_BUF_STR(con->uri.path));
+	}
+
+	/* physical path is setup */
+	if (con->physical.path->used == 0) {
+		TRACE("-- missing con->physical.path: %s", 
+			SAFE_BUF_STR(con->uri.path));
+		return HANDLER_GO_ON;
+	}
+
+	switch (con->request.http_method) {
+	case HTTP_METHOD_OPTIONS:
+		/* already handled */
+		break;
+	case HTTP_METHOD_PROPFIND:
+	case HTTP_METHOD_MKCOL:
+	case HTTP_METHOD_DELETE:
+	case HTTP_METHOD_PUT:
+	case HTTP_METHOD_MOVE:
+	case HTTP_METHOD_COPY:
+	case HTTP_METHOD_PROPPATCH:
+	case HTTP_METHOD_LOCK:
+	case HTTP_METHOD_UNLOCK:
+		con->mode = p->id;
+		return HANDLER_FINISHED;
+	default: break;
+	}
+
+	return HANDLER_GO_ON;
+}
+
+
 static int webdav_gen_prop_tag(server *srv, connection *con,
 		char *prop_name,
 		char *prop_ns,
@@ -573,10 +624,7 @@ static int webdav_delete_file(server *srv, connection *con, plugin_data *p, phys
 #ifdef USE_PROPPATCH
 		sqlite3_stmt *stmt = p->conf.stmt_delete_uri;
 
-		if (!stmt) {
-			status = 403;
-			webdav_gen_response_status_tag(srv, con, dst, status, b);
-		} else {
+		if (stmt) {
 			sqlite3_reset(stmt);
 
 			/* bind the values to the insert */
@@ -1238,13 +1286,9 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 	stat_cache_entry *sce = NULL;
 
 	if (con->conf.log_request_handling) {
-		TRACE("-- handling request in mod_webdav: %s", 
+		TRACE("-- handling request in mod_webdav: %s",
 			SAFE_BUF_STR(con->uri.path));
 	}
-
-	if (!p->conf.enabled) return HANDLER_GO_ON;
-	/* physical path is setup */
-	if (con->physical.path->used == 0) return HANDLER_GO_ON;
 
 	/* PROPFIND need them */
 	if (NULL != (ds = (data_string *)array_get_element(con->request.headers, CONST_STR_LEN("Depth")))) {
@@ -1281,6 +1325,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				}
 
 				con->http_status = 404;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 			break;
@@ -1291,7 +1336,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 #ifdef USE_PROPPATCH
 		/* any special requests or just allprop ? */
-		if (con->request.content_length) {
+		if (p->conf.sql && con->request.content_length > 0) {
 			xmlDocPtr xml;
 
 			if (1 == webdav_parse_chunkqueue(srv, con, p, con->recv, &xml)) {
@@ -1331,6 +1376,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 									free(req_props);
 
 									con->http_status = 400;
+									con->mode = DIRECT;
 									return HANDLER_FINISHED;
 								}
 
@@ -1375,6 +1421,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				ERROR("webdav_parse_chunkqueue() failed: %s", "");
 
 				con->http_status = 400;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 		}
@@ -1540,12 +1587,14 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 	case HTTP_METHOD_MKCOL:
 		if (p->conf.is_readonly) {
 			con->http_status = 403;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
-		if (con->request.content_length != 0) {
+		if (con->request.content_length > 0) {
 			/* we don't support MKCOL with a body */
 			con->http_status = 415;
+			con->mode = DIRECT;
 
 			return HANDLER_FINISHED;
 		}
@@ -1566,6 +1615,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				con->http_status = 405; /* not allowed */
 				break;
 			}
+			con->mode = DIRECT;
 		} else {
 			con->http_status = 201;
 			con->send->is_closed = 1;
@@ -1575,12 +1625,14 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 	case HTTP_METHOD_DELETE:
 		if (p->conf.is_readonly) {
 			con->http_status = 403;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
 		/* does the client have a lock for this connection ? */
 		if (!webdav_has_lock(srv, con, p, con->uri.path)) {
 			con->http_status = 423;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
@@ -1595,6 +1647,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				 con->http_status = 403;
 				 break;
 			}
+			con->mode = DIRECT;
 		} else if (S_ISDIR(st.st_mode)) {
 			buffer *multi_status_resp = buffer_init();
 
@@ -1630,8 +1683,10 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 						con->http_status = 501;
 						break;
 					}
+					con->mode = DIRECT;
 				} else {
 					con->http_status = 204;
+					con->send->is_closed = 1;
 				}
 			}
 
@@ -1648,8 +1703,10 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				con->http_status = 501;
 				break;
 			}
+			con->mode = DIRECT;
 		} else {
 			con->http_status = 204;
+			con->send->is_closed = 1;
 		}
 		return HANDLER_FINISHED;
 	case HTTP_METHOD_PUT: {
@@ -1660,17 +1717,24 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		if (p->conf.is_readonly) {
 			con->http_status = 403;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
 		/* is a exclusive lock set on the source */
 		if (!webdav_has_lock(srv, con, p, con->uri.path)) {
 			con->http_status = 423;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
 
-		assert(chunkqueue_length(cq) == (off_t)con->request.content_length);
+		if (chunkqueue_length(cq) != (off_t)con->request.content_length) {
+			ERROR("%s", "chunkqueue_length didn't match request.content_length");
+			con->http_status = 500;
+			con->mode = DIRECT;
+			return HANDLER_FINISHED;
+		}
 
 		/* RFC2616 Section 9.6 PUT requires us to send 501 on all Content-* we don't support
 		 * - most important Content-Range
@@ -1685,6 +1749,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 			if (0 != strncmp(num, "bytes ", 6)) {
 				con->http_status = 501; /* not implemented */
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -1698,6 +1763,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 			if (*num == '\0') {
 				con->http_status = 501; /* not implemented */
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -1710,12 +1776,14 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				 * conversion did a over- or underrun
 				 */
 				con->http_status = 501; /* not implemented */
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
 
 			if (*err != '-' || offset < 0) {
 				con->http_status = 501; /* not implemented */
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -1729,11 +1797,13 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 					con->http_status = 403; /* not found */
 					break;
 				}
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 
 			if (-1 == lseek(fd, offset, SEEK_SET)) {
 				con->http_status = 501; /* not implemented */
+				con->mode = DIRECT;
 
 				close(fd);
 
@@ -1749,6 +1819,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				    -1 == (fd = open(con->physical.path->ptr, O_WRONLY|O_CREAT|O_TRUNC|O_EXCL, WEBDAV_FILE_MODE))) {
 					/* we can't open the file */
 					con->http_status = 403;
+					con->mode = DIRECT;
 
 					return HANDLER_FINISHED;
 				} else {
@@ -1840,6 +1911,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		if (p->conf.is_readonly) {
 			con->http_status = 403;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
@@ -1847,6 +1919,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		if (con->request.http_method == HTTP_METHOD_MOVE) {
 			if (!webdav_has_lock(srv, con, p, con->uri.path)) {
 				con->http_status = 423;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 		}
@@ -1855,6 +1928,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			destination = ds->value;
 		} else {
 			con->http_status = 400;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
@@ -1863,6 +1937,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			    (ds->value->ptr[0] != 'F' &&
 			     ds->value->ptr[0] != 'T') )  {
 				con->http_status = 400;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 			overwrite = (ds->value->ptr[0] == 'F' ? 0 : 1);
@@ -1884,6 +1959,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		if (NULL == (sep = strstr(start, "://"))) {
 			con->http_status = 400;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 		buffer_copy_string_len(p->uri.scheme, start, sep - start);
@@ -1892,6 +1968,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 		if (NULL == (sep = strchr(start, '/'))) {
 			con->http_status = 400;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 		buffer_copy_string_len(p->uri.authority, start, sep - start);
@@ -1908,6 +1985,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		if (!buffer_is_equal(p->uri.authority, con->uri.authority)) {
 			/* not the same host */
 			con->http_status = 502;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
@@ -1947,24 +2025,31 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				 con->http_status = 403;
 				 break;
 			}
+			con->mode = DIRECT;
 		} else if (S_ISDIR(st.st_mode)) {
 			int r;
 			/* src is a directory */
 
+			con->http_status = 204;
+			con->send->is_closed = 1;
 			if (-1 == stat(p->physical.path->ptr, &st)) {
 				if (-1 == mkdir(p->physical.path->ptr, WEBDAV_DIR_MODE)) {
 					con->http_status = 403;
+					con->mode = DIRECT;
 					return HANDLER_FINISHED;
 				}
+				con->http_status = 201;
 			} else if (!S_ISDIR(st.st_mode)) {
 				if (overwrite == 0) {
 					/* copying into a non-dir ? */
 					con->http_status = 409;
+					con->mode = DIRECT;
 					return HANDLER_FINISHED;
 				} else {
 					unlink(p->physical.path->ptr);
 					if (-1 == mkdir(p->physical.path->ptr, WEBDAV_DIR_MODE)) {
 						con->http_status = 403;
+						con->mode = DIRECT;
 						return HANDLER_FINISHED;
 					}
 				}
@@ -1973,6 +2058,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			/* copy the content of src to dest */
 			if (0 != (r = webdav_copy_dir(srv, con, p, &(con->physical), &(p->physical), overwrite))) {
 				con->http_status = r;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 			if (con->request.http_method == HTTP_METHOD_MOVE) {
@@ -1982,8 +2068,6 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 				rmdir(con->physical.path->ptr);
 			}
-			con->http_status = 201;
-			con->send->is_closed = 1;
 		} else {
 			/* it is just a file, good */
 			int r;
@@ -1991,6 +2075,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			/* does the client have a lock for this connection ? */
 			if (!webdav_has_lock(srv, con, p, p->uri.path)) {
 				con->http_status = 423;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 
@@ -2014,14 +2099,17 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				switch(errno) {
 				case ENOTDIR:
 					con->http_status = 409;
+					con->mode = DIRECT;
 					return HANDLER_FINISHED;
 				}
 			} else if (overwrite == 0) {
 				/* destination exists, but overwrite is not set */
 				con->http_status = 412;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			} else {
 				con->http_status = 204; /* resource already existed */
+				con->send->is_closed = 1;
 			}
 
 			if (con->request.http_method == HTTP_METHOD_MOVE) {
@@ -2059,6 +2147,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 
 			if (0 != (r = webdav_copy_file(srv, con, p, &(con->physical), &(p->physical), overwrite))) {
 				con->http_status = r;
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -2075,11 +2164,13 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 	case HTTP_METHOD_PROPPATCH:
 		if (p->conf.is_readonly) {
 			con->http_status = 403;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
 		if (!webdav_has_lock(srv, con, p, con->uri.path)) {
 			con->http_status = 423;
+			con->mode = DIRECT;
 			return HANDLER_FINISHED;
 		}
 
@@ -2088,12 +2179,13 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 			switch(errno) {
 			case ENOENT:
 				con->http_status = 404;
+				con->mode = DIRECT;
 				break;
 			}
 		}
 
 #ifdef USE_PROPPATCH
-		if (con->request.content_length) {
+		if (p->conf.sql && con->request.content_length > 0) {
 			xmlDocPtr xml;
 
 			if (1 == webdav_parse_chunkqueue(srv, con, p, con->recv, &xml)) {
@@ -2193,6 +2285,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 						}
 
 						con->http_status = 400;
+						con->mode = DIRECT;
 					} else {
 						if (SQLITE_OK != sqlite3_exec(p->conf.sql, "COMMIT", NULL, NULL, &err)) {
 							log_error_write(srv, __FILE__, __LINE__, "ss", "can't commit transaction:", err);
@@ -2212,11 +2305,13 @@ propmatch_cleanup:
 				xmlFreeDoc(xml);
 			} else {
 				con->http_status = 400;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 		}
 #endif
 		con->http_status = 501;
+		con->mode = DIRECT;
 		return HANDLER_FINISHED;
 	case HTTP_METHOD_LOCK:
 		/**
@@ -2244,12 +2339,13 @@ propmatch_cleanup:
 
 		if (depth != 0 && depth != -1) {
 			con->http_status = 400;
+			con->mode = DIRECT;
 
 			return HANDLER_FINISHED;
 		}
 
 #ifdef USE_LOCKS
-		if (con->request.content_length) {
+		if (p->conf.sql && con->request.content_length > 0) {
 			xmlDocPtr xml;
 			buffer *hdr_if = NULL;
 
@@ -2260,6 +2356,7 @@ propmatch_cleanup:
 			/* we don't support Depth: Infinity on locks */
 			if (hdr_if == NULL && depth == -1) {
 				con->http_status = 409; /* Conflict */
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -2282,6 +2379,7 @@ propmatch_cleanup:
 									lockscope = value->name;
 								} else {
 									con->http_status = 400;
+									con->mode = DIRECT;
 
 									xmlFreeDoc(xml);
 									return HANDLER_FINISHED;
@@ -2294,6 +2392,7 @@ propmatch_cleanup:
 									locktype = value->name;
 								} else {
 									con->http_status = 400;
+									con->mode = DIRECT;
 
 									xmlFreeDoc(xml);
 									return HANDLER_FINISHED;
@@ -2331,10 +2430,12 @@ propmatch_cleanup:
 
 								if (strcmp(sql_lockscope, "exclusive")) {
 									con->http_status = 423;
+									con->mode = DIRECT;
 								} else if (0 == xmlStrcmp(lockscope, BAD_CAST "exclusive")) {
 									/* resourse is locked with a shared lock
 									 * client wants exclusive */
 									con->http_status = 423;
+									con->mode = DIRECT;
 								}
 							}
 							if (con->http_status == 423) {
@@ -2413,6 +2514,7 @@ propmatch_cleanup:
 				return HANDLER_FINISHED;
 			} else {
 				con->http_status = 400;
+				con->mode = DIRECT;
 				return HANDLER_FINISHED;
 			}
 		} else {
@@ -2424,6 +2526,7 @@ propmatch_cleanup:
 				/* remove the < > around the token */
 				if (locktoken->used < 6) {
 					con->http_status = 400;
+					con->mode = DIRECT;
 
 					return HANDLER_FINISHED;
 				}
@@ -2448,6 +2551,7 @@ propmatch_cleanup:
 			} else {
 				/* we need a lock-token to refresh */
 				con->http_status = 400;
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -2455,6 +2559,7 @@ propmatch_cleanup:
 		break;
 #else
 		con->http_status = 501;
+		con->mode = DIRECT;
 		return HANDLER_FINISHED;
 #endif
 	case HTTP_METHOD_UNLOCK:
@@ -2466,6 +2571,7 @@ propmatch_cleanup:
 			/* remove the < > around the token */
 			if (locktoken->used < 4) {
 				con->http_status = 400;
+				con->mode = DIRECT;
 
 				return HANDLER_FINISHED;
 			}
@@ -2499,19 +2605,23 @@ propmatch_cleanup:
 
 			if (0 == sqlite3_changes(p->conf.sql)) {
 				con->http_status = 401;
+				con->mode = DIRECT;
 			} else {
 				con->http_status = 204;
+				con->send->is_closed = 1;
 			}
 			return HANDLER_FINISHED;
 		} else {
 			/* we need a lock-token to unlock */
 			con->http_status = 400;
+			con->mode = DIRECT;
 
 			return HANDLER_FINISHED;
 		}
 		break;
 #else
 		con->http_status = 501;
+		con->mode = DIRECT;
 		return HANDLER_FINISHED;
 #endif
 	default:
@@ -2528,17 +2638,24 @@ propmatch_cleanup:
 CONNECTION_FUNC(mod_webdav_recv_request_content) {
 	chunkqueue *in = con->recv;
 	plugin_data *p = p_d;
+	handler_t res;
 
 	/**
 	 * is the content for webdav
 	 */
-	if (!p->conf.enabled) return HANDLER_GO_ON;
+	if (con->mode != p->id) return HANDLER_GO_ON;
 
 	if (!in->is_closed) return HANDLER_GO_ON;
 
 	/* we received all the content, let's call the webdav handler */
 
-	return mod_webdav_subrequest_handler(srv, con, p_d);
+	res = mod_webdav_subrequest_handler(srv, con, p_d);
+
+	/* mark body as read */
+	con->recv->bytes_out += chunkqueue_skip(con->recv, con->recv->bytes_in - con->recv->bytes_out);
+	chunkqueue_remove_finished_chunks(con->recv);
+
+	return res;
 }
 
 /* this function is called at dlopen() time and inits the callbacks */
@@ -2551,8 +2668,8 @@ int mod_webdav_plugin_init(plugin *p) {
 	p->handle_uri_clean  = mod_webdav_uri_handler; /* check if we handle this URL */
 #if 0
 	/* will get called when the content is received */
-	p->handle_physical   = mod_webdav_subrequest_handler;
 #endif
+	p->handle_physical   = mod_webdav_physical_handler;
 	p->handle_send_request_content = mod_webdav_recv_request_content; /* check if we received all the content */
 	p->set_defaults  = mod_webdav_set_defaults;
 	p->cleanup     = mod_webdav_free;

@@ -54,6 +54,7 @@ NEWS
   * fixed #1555: HTTP Request/Response only accept complete headers, i.e. ended with double CRLF
   * fixed url encoding to encode more characters (#266)
   * fixed dropping last character of evhost pattern (#161)
+  * Match headers case insensitive in response (removing of X-{Sendfile,LIGHTTPD-*}, catching Date/Server)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

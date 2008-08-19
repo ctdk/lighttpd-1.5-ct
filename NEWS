@@ -55,6 +55,7 @@ NEWS
   * fixed url encoding to encode more characters (#266)
   * fixed dropping last character of evhost pattern (#161)
   * Match headers case insensitive in response (removing of X-{Sendfile,LIGHTTPD-*}, catching Date/Server)
+  * fixed mem leak in ssi expression parser (#1753), thx Take5k
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

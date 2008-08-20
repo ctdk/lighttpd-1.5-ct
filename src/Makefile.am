@@ -15,36 +15,38 @@ lemon_SOURCES=lemon.c
 #simple_fcgi_LDADD=-lfcgi
 
 if CROSS_COMPILING
-configparser.c configparser.h: 
-mod_ssi_exprparser.c mod_ssi_exprparser.h: 
+configparser.c configparser.h:
+mod_ssi_exprparser.c mod_ssi_exprparser.h:
+http_req_parser.c http_req_parser.h:
+http_req_range_parser.c http_req_range_parser.h:
+mod_ssi_exprparser.c mod_ssi_exprparser.h:
 else
-
-configparser.c configparser.h: $(LEMON) $(srcdir)/configparser.y $(srcdir)/lempar.c
+configparser.c configparser.h: $(srcdir)/configparser.y $(srcdir)/lempar.c |  $(LEMON)
 	rm -f configparser.h
 	$(LEMON) -q $(srcdir)/configparser.y $(srcdir)/lempar.c
 
-http_resp_parser.c http_resp_parser.h: $(LEMON) $(srcdir)/http_resp_parser.y $(srcdir)/lempar.c
+http_resp_parser.c http_resp_parser.h: $(srcdir)/http_resp_parser.y $(srcdir)/lempar.c |  $(LEMON)
 	rm -f http_resp_parser.h
 	$(LEMON) -q $(srcdir)/http_resp_parser.y $(srcdir)/lempar.c
 
-http_req_parser.c http_req_parser.h: $(LEMON) $(srcdir)/http_req_parser.y $(srcdir)/lempar.c
+http_req_parser.c http_req_parser.h: $(srcdir)/http_req_parser.y $(srcdir)/lempar.c |  $(LEMON)
 	rm -f http_req_parser.h
 	$(LEMON) -q $(srcdir)/http_req_parser.y $(srcdir)/lempar.c
 
-http_req_range_parser.c http_req_range_parser.h: $(LEMON) $(srcdir)/http_req_range_parser.y $(srcdir)/lempar.c
+http_req_range_parser.c http_req_range_parser.h: $(srcdir)/http_req_range_parser.y $(srcdir)/lempar.c |  $(LEMON)
 	rm -f http_req_range_parser.h
 	$(LEMON) -q $(srcdir)/http_req_range_parser.y $(srcdir)/lempar.c
 
-mod_ssi_exprparser.c mod_ssi_exprparser.h: $(LEMON) $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
+mod_ssi_exprparser.c mod_ssi_exprparser.h: $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c |  $(LEMON)
 	rm -f mod_ssi_exprparser.h
 	$(LEMON) -q $(srcdir)/mod_ssi_exprparser.y $(srcdir)/lempar.c
 endif
 
-configfile.o: configparser.h
-mod_ssi_expr.o: mod_ssi_exprparser.h
-http_resp.o: http_resp_parser.h
-http_req.o: http_req_parser.h
-http_req_range.o: http_req_range_parser.h
+BUILT_SOURCES = configparser.c configparser.h \
+      http_resp_parser.c http_resp_parser.h \
+      http_req_parser.c http_req_parser.h \
+      http_req_range_parser.c http_req_range_parser.h \
+      mod_ssi_exprparser.c mod_ssi_exprparser.h
 
 common_src=buffer.c log.c \
       keyvalue.c chunk.c filter.c \

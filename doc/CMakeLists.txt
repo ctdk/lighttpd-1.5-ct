@@ -20,7 +20,6 @@ SET(L_DOCS
 	redirect.txt
 	rewrite.txt
 	rrdtool.txt
-	scgi.txt
 	secdownload.txt
 	security.txt
 	setenv.txt

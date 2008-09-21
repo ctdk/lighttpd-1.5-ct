@@ -270,7 +270,11 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 
 	if (!p->conf.rewrite) return HANDLER_GO_ON;
 
-	buffer_copy_string_buffer(p->match_buf, con->request.uri);
+	buffer_copy_string_buffer(p->match_buf, con->uri.path);
+	if (con->uri.query->used > 0) {
+		buffer_append_string_len(p->match_buf, CONST_STR_LEN("?"));
+		buffer_append_string_buffer(p->match_buf, con->uri.query);
+	}
 	i = config_exec_pcre_keyvalue_buffer(con, p->conf.rewrite, p->conf.context, p->match_buf, con->request.uri);
 
 	if (i >= 0) {

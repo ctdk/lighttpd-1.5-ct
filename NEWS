@@ -59,6 +59,7 @@ NEWS
   * decode url before matching in mod_rewrite (#1720)
   * fixed bug with case-insensitive filenames in mod_userdir (#1589), spotted by "anders1"
   * use decoded url for matching in mod_redirect (#1720)
+  * don't return HANDLER_ERROR from proxy-core content handling, produce 500 instead
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

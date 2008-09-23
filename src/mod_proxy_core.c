@@ -2417,7 +2417,12 @@ CONNECTION_FUNC(mod_proxy_core_start_backend) {
 		default:
 			TRACE("state: %d (error)", sess->state);
 			proxy_remove_backend_connection(srv, sess);
-			return HANDLER_ERROR;
+			/* only set 500 if not another error code is already set (like 502) */
+			if (con->http_status < 500 || con->http_status > 599) {
+				con->http_status = 500; /* Internal Server Error */
+			}
+			con->mode = DIRECT;
+			return HANDLER_GO_ON;
 		}
 	}
 

@@ -15,6 +15,7 @@ NEWS
   * add IdleServers and Scoreboard directives in ?auto mode for mod_status (#1507)
   * support letterhomes in mod_userdir (#1473)
   * mod_auth ldap rework, most important change is being able to startup if ldap server is down (#1535)
+  * Add possibility to disable methods in mod_compress (#1773)
   * fixed ECONNRESET handling in network-openssl
   * fixed log_write() for log-files > 4kbyte
   * fix sending source of cgi script instead of 500 error if fork fails

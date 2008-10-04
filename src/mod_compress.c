@@ -49,6 +49,7 @@ typedef struct {
 	buffer *compress_cache_dir;
 	array  *compress;
 	off_t   compress_max_filesize; /** max filesize in kb */
+	int     allowed_encodings;
 } plugin_config;
 
 typedef struct {
@@ -104,7 +105,7 @@ FREE_FUNC(mod_compress_free) {
 	return HANDLER_GO_ON;
 }
 
-// 0 on success, -1 for error
+/* 0 on success, -1 for error */
 static int mkdir_recursive(char *dir) {
 	char *p = dir;
 
@@ -120,13 +121,13 @@ static int mkdir_recursive(char *dir) {
 		}
 
 		*p++ = '/';
-		if (!*p) return 0; // Ignore trailing slash
+		if (!*p) return 0; /* Ignore trailing slash */
 	}
 
 	return (mkdir(dir, 0700) != 0) && (errno != EEXIST) ? -1 : 0;
 }
 
-// 0 on success, -1 for error
+/* 0 on success, -1 for error */
 static int mkdir_for_file(char *filename) {
 	char *p = filename;
 
@@ -160,6 +161,7 @@ SETDEFAULTS_FUNC(mod_compress_setdefaults) {
 		{ "compress.cache-dir",             NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },
 		{ "compress.filetype",              NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
 		{ "compress.max-filesize",          NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },
+		{ "compress.allowed-encodings",     NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },
 		{ NULL,                             NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -167,21 +169,57 @@ SETDEFAULTS_FUNC(mod_compress_setdefaults) {
 
 	for (i = 0; i < srv->config_context->used; i++) {
 		plugin_config *s;
+		array  *encodings_arr = array_init();
 
 		s = calloc(1, sizeof(plugin_config));
 		s->compress_cache_dir = buffer_init();
 		s->compress = array_init();
 		s->compress_max_filesize = 0;
+		s->allowed_encodings = 0;
 
 		cv[0].destination = s->compress_cache_dir;
 		cv[1].destination = s->compress;
 		cv[2].destination = &(s->compress_max_filesize);
+		cv[3].destination = encodings_arr; /* temp array for allowed encodings list */
 
 		p->config_storage[i] = s;
 
 		if (0 != config_insert_values_global(srv, ((data_config *)srv->config_context->data[i])->value, cv)) {
 			return HANDLER_ERROR;
 		}
+
+		if (encodings_arr->used) {
+			size_t j = 0;
+			for (j = 0; j < encodings_arr->used; j++) {
+				data_string *ds = (data_string *)encodings_arr->data[j];
+#ifdef USE_ZLIB
+				if (NULL != strstr(ds->value->ptr, "gzip"))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_GZIP;
+				if (NULL != strstr(ds->value->ptr, "deflate"))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_DEFLATE;
+				/*
+				if (NULL != strstr(ds->value->ptr, "compress"))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_COMPRESS;
+				*/
+#endif
+#ifdef USE_BZ2LIB
+				if (NULL != strstr(ds->value->ptr, "bzip2"))
+					s->allowed_encodings |= HTTP_ACCEPT_ENCODING_BZIP2;
+#endif
+			}
+		} else {
+			/* default encodings */
+			s->allowed_encodings = 0
+#ifdef USE_ZLIB
+				| HTTP_ACCEPT_ENCODING_GZIP | HTTP_ACCEPT_ENCODING_DEFLATE
+#endif
+#ifdef USE_BZ2LIB
+				| HTTP_ACCEPT_ENCODING_BZIP2
+#endif
+				;
+		}
+
+		array_free(encodings_arr);
 
 		if (!buffer_is_empty(s->compress_cache_dir)) {
 			struct stat st;
@@ -574,6 +612,7 @@ static int mod_compress_patch_connection(server *srv, connection *con, plugin_da
 	PATCH_OPTION(compress_cache_dir);
 	PATCH_OPTION(compress);
 	PATCH_OPTION(compress_max_filesize);
+	PATCH_OPTION(allowed_encodings);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -593,6 +632,8 @@ static int mod_compress_patch_connection(server *srv, connection *con, plugin_da
 				PATCH_OPTION(compress);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("compress.max-filesize"))) {
 				PATCH_OPTION(compress_max_filesize);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("compress.allowed-encodings"))) {
+				PATCH_OPTION(allowed_encodings);
 			}
 		}
 	}
@@ -608,7 +649,6 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	data_string *ds;
 	int accept_encoding = 0;
 	char *value;
-	int srv_encodings = 0;
 	int matched_encodings = 0;
 	const char *dflt_gzip = "gzip";
 	const char *dflt_deflate = "deflate";
@@ -721,23 +761,19 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 	value = ds->value->ptr;
 
 	/* get client side support encodings */
+#ifdef USE_ZLIB
 	if (NULL != strstr(value, "gzip")) accept_encoding |= HTTP_ACCEPT_ENCODING_GZIP;
 	if (NULL != strstr(value, "deflate")) accept_encoding |= HTTP_ACCEPT_ENCODING_DEFLATE;
 	if (NULL != strstr(value, "compress")) accept_encoding |= HTTP_ACCEPT_ENCODING_COMPRESS;
+#endif
+#ifdef USE_BZ2LIB
 	if (NULL != strstr(value, "bzip2")) accept_encoding |= HTTP_ACCEPT_ENCODING_BZIP2;
+#endif
 	if (NULL != strstr(value, "identity")) accept_encoding |= HTTP_ACCEPT_ENCODING_IDENTITY;
 
-	/* get server side supported ones */
-#ifdef USE_BZ2LIB
-	srv_encodings |= HTTP_ACCEPT_ENCODING_BZIP2;
-#endif
-#ifdef USE_ZLIB
-	srv_encodings |= HTTP_ACCEPT_ENCODING_GZIP;
-	srv_encodings |= HTTP_ACCEPT_ENCODING_DEFLATE;
-#endif
-
 	/* find matching entries */
-	if (0 == (matched_encodings = accept_encoding & srv_encodings)) {
+	matched_encodings = accept_encoding & p->conf.allowed_encodings;
+	if (0 == matched_encodings) {
 		if (con->conf.log_request_handling) TRACE("we don't support the requested encoding: %s", value);
 		return HANDLER_GO_ON;
 	}

@@ -18,6 +18,10 @@ run() {
 	$@ $ARGS
 }
 
+if test x`which which 2>/dev/null` = x; then
+  echo "which program not found, exiting"; exit 0
+fi
+
 ## jump out if one of the programs returns 'false'
 set -e
 

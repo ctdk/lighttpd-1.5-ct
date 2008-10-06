@@ -198,27 +198,29 @@ URIHANDLER_FUNC(mod_chunked_response_header) {
 	in = fl->prev->cq;
 
 	/* check if response needs chunked encoding. */
-	if(in->is_closed) {
-		con->response.content_length = chunkqueue_length(in);
-	}
-	if(con->response.content_length >= 0) {
-		if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%jd", (intmax_t) con->response.content_length);
-		use_chunked = 0;
-	} else if (con->request.http_method != HTTP_METHOD_HEAD) {
-		/* a HEAD request never gets a chunk-encoding, but might stay with keep-alive
-		 * in case the queue was closed already (above) we still have the content-length */
-		
-		/* we don't know the size of the content yet
-		 * - either enable chunking
-		 * - or disable keep-alive  */
-
-		if (con->request.http_version == HTTP_VERSION_1_1 && p->conf.encoding) {
-			use_chunked = 1;
-		} else {
-			if (p->conf.debug > 0)
-				TRACE("%s", "content length unknown and can't use chunked encoding.  disable keep-alive");
-			con->keep_alive = 0;
+	if (con->request.http_method != HTTP_METHOD_HEAD) {
+		if(in->is_closed) {
+			con->response.content_length = chunkqueue_length(in);
+		}
+		if(con->response.content_length >= 0) {
+			if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%jd", (intmax_t) con->response.content_length);
 			use_chunked = 0;
+		} else {
+			/* a HEAD request never gets a chunk-encoding, but might stay with keep-alive
+			* in case the queue was closed already (above) we still have the content-length */
+
+			/* we don't know the size of the content yet
+			* - either enable chunking
+			* - or disable keep-alive  */
+
+			if (con->request.http_version == HTTP_VERSION_1_1 && p->conf.encoding) {
+				use_chunked = 1;
+			} else {
+				if (p->conf.debug > 0)
+					TRACE("%s", "content length unknown and can't use chunked encoding.  disable keep-alive");
+				con->keep_alive = 0;
+				use_chunked = 0;
+			}
 		}
 	}
 

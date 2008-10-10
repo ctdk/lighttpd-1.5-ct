@@ -62,6 +62,7 @@ NEWS
   * use decoded url for matching in mod_redirect (#1720)
   * don't return HANDLER_ERROR from proxy-core content handling, produce 500 instead
   * do not modify content-length in mod_chunked.c for HEAD requests (produced false Content-Length: 0 headers)
+  * fix sending content-length for static HEAD requests
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

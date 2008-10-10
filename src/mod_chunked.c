@@ -197,11 +197,11 @@ URIHANDLER_FUNC(mod_chunked_response_header) {
 	}
 	in = fl->prev->cq;
 
+	if(in->is_closed && con->response.content_length < 0) {
+		con->response.content_length = chunkqueue_length(in);
+	}
 	/* check if response needs chunked encoding. */
 	if (con->request.http_method != HTTP_METHOD_HEAD) {
-		if(in->is_closed) {
-			con->response.content_length = chunkqueue_length(in);
-		}
 		if(con->response.content_length >= 0) {
 			if (p->conf.debug > 0) TRACE("response content length known, disabling chunked encoding.  len=%jd", (intmax_t) con->response.content_length);
 			use_chunked = 0;

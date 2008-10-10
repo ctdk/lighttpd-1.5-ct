@@ -7,12 +7,11 @@ SET(T_FILES
 	core-response.t
 	core.t
 	core-var-include.t
+	fastcgi.t
 	lowercase.t
 	mod-access.t
 	mod-auth.t
 	mod-cgi.t
-	mod-compress.t
-	fastcgi.t
 	mod-redirect.t
 	mod-rewrite.t
 	mod-secdownload.t
@@ -20,6 +19,7 @@ SET(T_FILES
 	mod-ssi.t
 	mod-userdir.t
 	request.t
+	symlink.t
 )
 
 FOREACH(it ${T_FILES})

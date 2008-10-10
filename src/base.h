@@ -694,6 +694,9 @@ typedef struct server {
 	GAsyncQueue *stat_queue; /* send a stat_job into this queue and joblist_queue will get a wakeup when the stat is finished */
 	GAsyncQueue *joblist_queue;
 	GAsyncQueue *aio_write_queue;
+
+	int wakeup_pipe[2];
+	iosocket *wakeup_iosocket;
 #endif
 	network_backend_t network_backend;
 	int is_shutdown;

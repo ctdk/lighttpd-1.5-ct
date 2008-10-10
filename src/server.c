@@ -516,7 +516,7 @@ static GCond  *joblist_queue_cond = NULL;
  * So ... we run g_async_queue_timed_pop() and fdevents_poll() at the same time. As long
  * as the poll() is running g_async_queue_timed_pop() running too.
  *
- * The one who finishes earlier fires a kill(getpid(), SIGUSR1); to interrupt
+ * The one who finishes earlier writes to wakeup_pipe[1] to interrupt
  * the other system call. We use mutexes to synchronize the two functions.
  *
  */
@@ -556,7 +556,7 @@ static void *joblist_queue_thread(void *_data) {
 			} while ((con = g_async_queue_try_pop(srv->joblist_queue)));
 
 			/* interrupt the poll() */
-			if (killme) kill(getpid(), SIGUSR1);
+			if (killme) write(srv->wakeup_pipe[1], " ", 1);
 		}
 
 		g_mutex_unlock(joblist_queue_mutex);
@@ -1022,6 +1022,18 @@ int lighty_mainloop(server *srv) {
 	return 0;
 }
 
+#ifdef USE_GTHREAD
+static handler_t wakeup_handle_fdevent(void *s, void *context, int revent) {
+	server     *srv = (server *)s;
+	connection *con = context;
+	char buf[16];
+	UNUSED(con);
+	UNUSED(revent);
+
+	(void) read(srv->wakeup_iosocket->fd, buf, sizeof(buf));
+	return HANDLER_GO_ON; 
+}
+#endif
 
 int main (int argc, char **argv, char **envp) {
 	server *srv = NULL;
@@ -1524,12 +1536,10 @@ int main (int argc, char **argv, char **envp) {
 	sigaction(SIGHUP,  &act, NULL);
 	sigaction(SIGALRM, &act, NULL);
 	sigaction(SIGCHLD, &act, NULL);
-	sigaction(SIGUSR1, &act, NULL);
 
 #elif defined(HAVE_SIGNAL)
 	/* ignore the SIGPIPE from sendfile() */
 	signal(SIGPIPE, SIG_IGN);
-	signal(SIGUSR1, signal_handler);
 	signal(SIGALRM, signal_handler);
 	signal(SIGTERM, signal_handler);
 	signal(SIGHUP,  signal_handler);
@@ -1623,6 +1633,24 @@ int main (int argc, char **argv, char **envp) {
 
 		return -1;
 	}
+
+#ifdef USE_GTHREAD
+	if (pipe(srv->wakeup_pipe) == -1) {
+		log_error_write(srv, __FILE__, __LINE__, "s", "pipe() failed");
+		return -1;
+	}
+	srv->wakeup_iosocket = iosocket_init();
+	srv->wakeup_iosocket->type = IOSOCKET_TYPE_PIPE;	
+	srv->wakeup_iosocket->fd = srv->wakeup_pipe[0];
+	fdevent_fcntl_set(srv->ev, srv->wakeup_iosocket);
+	/* block on write */
+#ifdef FD_CLOEXEC
+	/* close fd on exec (cgi) */
+	fcntl(srv->wakeup_pipe[1], F_SETFD, FD_CLOEXEC);
+#endif
+	fdevent_register(srv->ev, srv->wakeup_iosocket, wakeup_handle_fdevent, NULL);
+	fdevent_event_add(srv->ev, srv->wakeup_iosocket, FDEVENT_IN);
+#endif
 
 	/* might fail if user is using fam (not gamin) and famd isn't running */
 	if (NULL == (srv->stat_cache = stat_cache_init())) {

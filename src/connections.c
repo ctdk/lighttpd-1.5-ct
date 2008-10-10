@@ -282,6 +282,7 @@ static int connection_handle_response_header(server *srv, connection *con) {
 		if (con->mode != DIRECT) break;
 
 		con->send->is_closed = 0;
+		con->response.content_length = -1;
 
 		buffer_reset(con->physical.path);
 

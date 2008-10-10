@@ -197,7 +197,7 @@ URIHANDLER_FUNC(mod_chunked_response_header) {
 	}
 	in = fl->prev->cq;
 
-	if(in->is_closed && con->response.content_length < 0) {
+	if (in->is_closed && (con->response.content_length < 0 || con->request.http_method != HTTP_METHOD_HEAD)) {
 		con->response.content_length = chunkqueue_length(in);
 	}
 	/* check if response needs chunked encoding. */

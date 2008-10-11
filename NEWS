@@ -65,6 +65,7 @@ NEWS
   * fix sending content-length for static HEAD requests
   * removed distribution specific stuff (was outdated anyway)
   * use pipe-io instead of SIGUSR1 to wakeup main thread (fixes #1517)
+  * Fix ajp13 response header handling (fixes #1628)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

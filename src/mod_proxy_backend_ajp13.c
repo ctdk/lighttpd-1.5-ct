@@ -357,7 +357,15 @@ static int ajp13_decode_response_headers(http_resp *resp, ajp13_state_data *data
 #endif
 
 		if (key_len > 0 && value_len >= 0) {
-			array_append_key_value(resp->headers, key->ptr, key_len, value->ptr, value_len);
+			data_string *HDR;
+			if (NULL == (HDR = (data_string *)array_get_unused_element(resp->headers, TYPE_STRING))) {
+				HDR = data_response_init();
+			}
+
+			buffer_copy_string_len(HDR->key, key->ptr, key_len);
+			buffer_copy_string_len(HDR->value, value->ptr, value_len);
+
+			array_insert_unique(resp->headers, (data_unset *)HDR);
 #ifdef AJP13_DEBUG
 			TRACE("ajp13: header[%d]: %s = %s", i, key->ptr, value->ptr);
 #endif

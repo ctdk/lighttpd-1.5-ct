@@ -96,7 +96,7 @@ static int fdevent_linux_sysepoll_get_revents(fdevents *ev, size_t event_count, 
 		if (e & EPOLLHUP) events |= FDEVENT_HUP;
 		if (e & EPOLLPRI) events |= FDEVENT_PRI;
 
-		fdevent_revents_add(revents, ev->epoll_events[ndx].data.fd, e);
+		fdevent_revents_add(revents, ev->epoll_events[ndx].data.fd, events);
 	}
 
 	return 0;

@@ -16,6 +16,7 @@ cd "$builddir"
 cmake \
 				-D CMAKE_BUILD_TYPE:STRING=$buildtype \
 				-D WITH_LUA=ON \
+				-D WITH_OPENSSL=ON \
 				-D WITH_PCRE=ON \
 				-D WITH_ZLIB=ON \
 				.. \

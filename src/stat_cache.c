@@ -271,6 +271,19 @@ static int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
 	return 1;
 }
 
+static void stat_cache_remove_entry(stat_cache *sc, buffer *hash_key, stat_cache_entry *sce) {
+#ifdef HAVE_GLIB_H
+	gpointer orig_key;
+	if (!g_hash_table_lookup_extended(sc->files, hash_key, &orig_key, NULL))
+		return;
+	g_hash_table_remove(sc->files, hash_key);
+	stat_cache_entry_free(sce);
+	buffer_free((buffer*) orig_key);
+#else
+	stat_cache_entry_free(sce);
+#endif
+}
+
 /***
  *
  *
@@ -370,15 +383,18 @@ static handler_t stat_cache_get_entry_internal(server *srv, connection *con, buf
 	if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY | (srv->srvconf.use_noatime ? O_NOATIME : 0)))) {
 		if (srv->srvconf.use_noatime && errno == EPERM) {
 			if (-1 == (fd = open(name->ptr, O_NONBLOCK | O_RDONLY))) {
+				stat_cache_remove_entry(sc, sc->hash_key, sce);
 				return HANDLER_ERROR;
 			}
 		} else {
+			stat_cache_remove_entry(sc, sc->hash_key, sce);
 			return HANDLER_ERROR;
 		}
 	}
 
 	if (-1 == fstat(fd, &st)) {
 		close(fd);
+		stat_cache_remove_entry(sc, sc->hash_key, sce);
 		return HANDLER_ERROR;
 	}
 

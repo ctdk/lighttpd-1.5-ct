@@ -167,6 +167,12 @@ void chunkpool_free(void) {
 	if (!chunkpool) return;
 
 	/* free the pool */
+	while(chunkpool) {
+		chunk *c = chunkpool->next;
+		chunk_free(chunkpool);
+		chunkpool = c;
+	}
+	chunkpool_chunks = 0;
 }
 
 static chunk *chunkpool_get_unused_chunk(void) {

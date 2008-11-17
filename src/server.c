@@ -1801,7 +1801,7 @@ int main (int argc, char **argv, char **envp) {
 		free(srv->posix_aio_iocbs);
 	}
 #endif
-	if (srv->network_backend == NETWORK_BACKEND_GTHREAD_AIO) {
+	if (aio_write_threads != NULL) {
 		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
 			g_thread_join(aio_write_threads[i]);
 		}
@@ -1861,6 +1861,8 @@ int main (int argc, char **argv, char **envp) {
 #ifdef USE_GTHREAD
 	free(stat_cache_threads);
 #endif
+
+	chunkpool_free();
 
 	return 0;
 }

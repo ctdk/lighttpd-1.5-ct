@@ -56,6 +56,8 @@ typedef struct {
 	off_t  bytes_in, bytes_out;
 } chunkqueue;
 
+LI_API void chunkpool_free(void);
+
 LI_API chunkqueue* chunkqueue_init(void);
 LI_API int chunkqueue_set_tempdirs(chunkqueue *c, array *tempdirs);
 LI_API int chunkqueue_append_file(chunkqueue *c, buffer *fn, off_t offset, off_t len);

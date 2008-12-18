@@ -291,6 +291,7 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 						strncpy(buf, BUF_STR(http_if_modified_since->value), used_len);
 						buf[used_len] = '\0';
 
+						tm.tm_isdst = 0;
 						if (NULL == strptime(buf, "%a, %d %b %Y %H:%M:%S GMT", &tm)) {
 							con->http_status = 412;
 							return HANDLER_FINISHED;
@@ -342,6 +343,7 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 			strncpy(buf, BUF_STR(http_if_modified_since->value), used_len);
 			buf[used_len] = '\0';
 
+			tm.tm_isdst = 0;
 			if (NULL == strptime(buf, "%a, %d %b %Y %H:%M:%S GMT", &tm)) {
 				return HANDLER_GO_ON;
 			}

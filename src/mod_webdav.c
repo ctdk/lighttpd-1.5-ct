@@ -1211,6 +1211,8 @@ int webdav_lockdiscovery(server *srv, connection *con,
 	buffer_append_string_len(b,CONST_STR_LEN("</D:lockdiscovery>\n"));
 	buffer_append_string_len(b,CONST_STR_LEN("</D:prop>\n"));
 
+	con->send->bytes_in += b->used-1;
+
 	return 0;
 }
 /**
@@ -1581,6 +1583,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 		if (p->conf.log_xml) {
 			TRACE("XML-response-body: %s", SAFE_BUF_STR(b));
 		}
+		con->send->bytes_in += b->used-1;
 		con->send->is_closed = 1;
 
 		return HANDLER_FINISHED;
@@ -1670,6 +1673,7 @@ URIHANDLER_FUNC(mod_webdav_subrequest_handler) {
 				}
 
 				con->http_status = 207;
+				con->send->bytes_in += b->used-1;
 				con->send->is_closed = 1;
 			} else {
 				/* everything went fine, remove the directory */

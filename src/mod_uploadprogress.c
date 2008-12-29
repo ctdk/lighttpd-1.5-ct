@@ -495,6 +495,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 			buffer_append_off_t(b, post_con_entry->con->request.content_length == -1 ? 0 : post_con_entry->con->request.content_length);
 		}
 		buffer_append_string_len(b, CONST_STR_LEN("})\r\n"));
+		con->send->bytes_in += b->used-1;
 
 		if (p->conf.debug) TRACE("connection is known: %s, sending: %s", SAFE_BUF_STR(tracking_id), SAFE_BUF_STR(b));
 

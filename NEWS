@@ -69,6 +69,7 @@ NEWS
   * Enhance mod_uploadprogress to show uploaded size after upload is done (closes #1632) by icy
   * Fix memory leak in stat-cache (closes #1693), patch by peto
   * Fix shutdown leaks (fixes #1811), patch by peto
+  * Fix bogus send->bytes_in counter (problems with mod-deflate)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

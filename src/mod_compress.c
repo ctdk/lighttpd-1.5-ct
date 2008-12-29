@@ -596,6 +596,7 @@ static int deflate_file_to_buffer(server *srv, connection *con, plugin_data *p, 
 	chunkqueue_reset(con->send);
 	b = chunkqueue_get_append_buffer(con->send);
 	buffer_copy_memory(b, p->b->ptr, p->b->used + 1);
+	con->send->bytes_in += b->used-1;
 
 	buffer_reset(con->physical.path);
 

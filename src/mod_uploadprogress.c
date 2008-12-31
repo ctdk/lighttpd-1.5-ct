@@ -471,6 +471,7 @@ URIHANDLER_FUNC(mod_uploadprogress_uri_handler) {
 			/**
 			 * looks like we don't know the tracking id yet, GET and POST out of sync ? */
 			buffer_append_string_len(b, CONST_STR_LEN("new Object({ 'state' : 'starting' })\r\n"));
+			con->send->bytes_in += b->used-1;
 
 			if (p->conf.debug) TRACE("connection unknown: %s, sending: %s", SAFE_BUF_STR(tracking_id), SAFE_BUF_STR(b));
 

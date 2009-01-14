@@ -132,12 +132,11 @@ $t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, 'Conte
 ok($tf->handle_http($t) == 0, 'cgi-env: HTTP_HOST');
 
 $t->{REQUEST}  = ( <<EOF
-GET /get-header.pl?HTTP_HOST HTTP/1.1
+GET /get-header.pl?HTTP_HOST HTTP/1.0
 Host: www.example.org
-Connection: close
 EOF
  );
-$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.1', 'HTTP-Status' => 200, '+Content-Length' => '' } ];
+$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200, '+Content-Length' => '' } ];
 ok($tf->handle_http($t) == 0, 'cgi-env: HTTP_HOST');
 
 $t->{REQUEST}  = ( <<EOF

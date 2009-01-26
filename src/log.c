@@ -337,6 +337,8 @@ int log_trace(const char *fmt, ...) {
 		break;
 	case ERRORLOG_SYSLOG:
 		/* syslog is generating its own timestamps */
+		buffer_copy_string_len(b, CONST_STR_LEN(""));
+		timestrsize = b->used - 1;
 		break;
 	}
 
@@ -351,7 +353,7 @@ int log_trace(const char *fmt, ...) {
 		 */
 
 		if (l > -1 && ((unsigned int) l) < (b->size-timestrsize)) {
-			b->used += l + 1;
+			b->used += l;
 
 			break;
 		}
@@ -382,11 +384,11 @@ int log_trace(const char *fmt, ...) {
 	/* write b */
 	switch(err->mode) {
 	case ERRORLOG_FILE:
-		buffer_append_string_len(b, CONST_STR_LEN("\r\n"));
+		buffer_append_string_len(b, CONST_STR_LEN("\n"));
 		write(err->fd, b->ptr, b->used - 1);
 		break;
 	case ERRORLOG_STDERR:
-		buffer_append_string_len(b, CONST_STR_LEN("\r\n"));
+		buffer_append_string_len(b, CONST_STR_LEN("\n"));
 		write(STDERR_FILENO, b->ptr, b->used - 1);
 		break;
 #ifdef HAVE_SYSLOG_H

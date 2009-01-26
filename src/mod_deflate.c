@@ -1026,7 +1026,7 @@ static handler_t deflate_compress_response(server *srv, connection *con, handler
 		if(p->conf.debug) {
 			TRACE("finished uri: '%s', query: '%s'", SAFE_BUF_STR(con->uri.path_raw), SAFE_BUF_STR(con->uri.query));
 		}
-	} else {
+	} else if (hctx->in->first) {
 		/* We have more data to compress. */
 		joblist_append(srv, con);
 	}

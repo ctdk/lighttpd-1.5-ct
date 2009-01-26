@@ -681,23 +681,30 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		/* call the handlers */
 		switch(r = plugins_call_handle_start_backend(srv, con)) {
 		case HANDLER_GO_ON:
+			break;
 		case HANDLER_FINISHED:
-			/* if we are still here, no one wanted the file; status 403 is ok I think */
+		case HANDLER_COMEBACK:
+		case HANDLER_WAIT_FOR_EVENT:
+		case HANDLER_ERROR:
+			return r;
 
 		default:
-			if (con->conf.log_request_handling) {
-				TRACE("-- %s", "subrequest finished");
-			}
-
-			/* something strange happened */
+			ERROR("plugins_call_handle_start_backend() returned unexpected: %d", r);
 			return r;
+		}
+
+		if (con->conf.log_request_handling) {
+			TRACE("-- %s", "subrequest finished");
 		}
 	}
 
 	if (con->mode == DIRECT) {
+		/* if we are still here, no one wanted the file; status 403 is ok I think */
 		con->http_status = 403;
 
-		TRACE("%s", "aaaaaaah, sending 403");
+		if (con->conf.log_request_handling) {
+			TRACE("%s", "aaaaaaah, sending 403");
+		}
 
 		return HANDLER_FINISHED;
 	} else {

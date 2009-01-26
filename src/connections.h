@@ -15,6 +15,6 @@ LI_API int connection_close(server *srv, connection *con);
 LI_API int connection_set_state(server *srv, connection *con, connection_state_t state);
 LI_API const char * connection_get_state(connection_state_t state);
 LI_API const char * connection_get_short_state(connection_state_t state);
-LI_API int connection_state_machine(server *srv, connection *con);
+LI_API void connection_state_machine(server *srv, connection *con);
 
 #endif

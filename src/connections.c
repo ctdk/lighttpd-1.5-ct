@@ -151,8 +151,7 @@ int connection_close(server *srv, connection *con) {
 	fdevent_unregister(srv->ev, con->sock);
 
 	if (closesocket(con->sock->fd)) {
-		log_error_write(srv, __FILE__, __LINE__, "sds",
-				"(warning) close:", con->sock->fd, strerror(errno));
+		ERROR("close failed (%i): %s", con->sock->fd, strerror(errno));
 	}
 
 	connection_del(srv, con);
@@ -584,7 +583,7 @@ int connection_reset(server *srv, connection *con) {
 		if (!pd) continue;
 
 		if (con->plugin_ctx[pd->id] != NULL) {
-			log_error_write(srv, __FILE__, __LINE__, "sb", "missing cleanup in", p->name);
+			ERROR("missing cleanup in %s", SAFE_BUF_STR(p->name));
 		}
 
 		con->plugin_ctx[pd->id] = NULL;
@@ -761,9 +760,8 @@ handler_t connection_handle_read_request_content(server *srv, connection *con)  
 				 * Instead of sending 500 we send 413 and say the request is too large
 				 *  */
 
-				log_error_write(srv, __FILE__, __LINE__, "sbs",
-						"denying upload as opening to temp-file for upload failed:",
-						dst_c->file.name, strerror(errno));
+				ERROR("denying upload as opening to temp-file for upload failed: '%s': %s",
+					SAFE_BUF_STR(dst_c->file.name), strerror(errno));
 
 				con->http_status = 413; /* Request-Entity too large */
 				con->keep_alive = 0;
@@ -772,9 +770,8 @@ handler_t connection_handle_read_request_content(server *srv, connection *con)  
 
 			if (toRead != write(dst_c->file.fd, c->mem->ptr + c->offset, toRead)) {
 				/* write failed for some reason ... disk full ? */
-				log_error_write(srv, __FILE__, __LINE__, "sbs",
-						"denying upload as writing to file failed:",
-						dst_c->file.name, strerror(errno));
+				ERROR("denying upload as writing to file failed: '%s': %s",
+					SAFE_BUF_STR(dst_c->file.name), strerror(errno));
 
 				con->http_status = 413; /* Request-Entity too large */
 				con->keep_alive = 0;
@@ -920,8 +917,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 
 		/* ok, we have the connection, register it */
 #if 0
-		log_error_write(srv, __FILE__, __LINE__, "sd",
-				"appected()", cnt);
+		TRACE("appected() = %i", cnt);
 #endif
 		srv->con_opened++;
 
@@ -941,7 +937,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 		con->srv_socket = srv_socket;
 
 		if (-1 == (fdevent_fcntl_set(srv->ev, con->sock))) {
-			log_error_write(srv, __FILE__, __LINE__, "ss", "fcntl failed: ", strerror(errno));
+			ERROR("fcntl failed: %s", strerror(errno));
 			connection_close(srv, con);
 			return NULL;
 		}
@@ -950,7 +946,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 		/* connect FD to SSL */
 		if (srv_socket->is_ssl) {
 			if (NULL == (con->sock->ssl = SSL_new(srv_socket->ssl_ctx))) {
-				log_error_write(srv, __FILE__, __LINE__, "ss", "SSL:",
+				ERROR("SSL: %s",
 						ERR_error_string(ERR_get_error(), NULL));
 				connection_close(srv, con);
 				return NULL;
@@ -960,7 +956,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 			con->conf.is_ssl=1;
 
 			if (1 != (SSL_set_fd(con->sock->ssl, cnt))) {
-				log_error_write(srv, __FILE__, __LINE__, "ss", "SSL:",
+				ERROR("SSL: %s",
 						ERR_error_string(ERR_get_error(), NULL));
 				connection_close(srv, con);
 				return NULL;
@@ -971,7 +967,7 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 	}
 }
 
-int connection_state_machine(server *srv, connection *con) {
+void connection_state_machine(server *srv, connection *con) {
 	int done = 0, r;
 	off_t bytes_moved = 0;
 #ifdef USE_OPENSSL
@@ -979,10 +975,7 @@ int connection_state_machine(server *srv, connection *con) {
 #endif
 
 	if (srv->srvconf.log_state_handling) {
-		log_error_write(srv, __FILE__, __LINE__, "sds",
-				"state at start",
-				con->sock->fd,
-				connection_get_state(con->state));
+		TRACE("state at start for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 	}
 
 	while (done == 0) {
@@ -992,8 +985,7 @@ int connection_state_machine(server *srv, connection *con) {
 		switch (con->state) {
 		case CON_STATE_CONNECT:
 			if (srv->srvconf.log_state_handling) {
-				log_error_write(srv, __FILE__, __LINE__, "sds",
-						"state for fd", con->sock->fd, connection_get_state(con->state));
+				TRACE("state for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 			}
 
 			chunkqueue_reset(con->recv_raw); /* this is a new connection, trash the pipeline */
@@ -1004,8 +996,7 @@ int connection_state_machine(server *srv, connection *con) {
 		case CON_STATE_REQUEST_START:
 			/* init the request handling */
 			if (srv->srvconf.log_state_handling) {
-				log_error_write(srv, __FILE__, __LINE__, "sds",
-						"state for fd", con->sock->fd, connection_get_state(con->state));
+				TRACE("state for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 			}
 
 			con->request_start = srv->cur_ts; /* start of the request */
@@ -1041,7 +1032,8 @@ int connection_state_machine(server *srv, connection *con) {
 				default:
 					chunkqueue_remove_finished_chunks(con->recv_raw);
 					TRACE("%s", "(error)");
-					return HANDLER_ERROR;
+					connection_set_state(srv, con, CON_STATE_ERROR);
+					break;
 				}
 			} else {
 				connection_set_state(srv, con, CON_STATE_READ_REQUEST_HEADER);
@@ -1051,7 +1043,7 @@ int connection_state_machine(server *srv, connection *con) {
 		case CON_STATE_READ_REQUEST_HEADER:
 			/* read us much data as needed into the recv_raw-cq for a valid header */
 			if (srv->srvconf.log_state_handling) {
-				TRACE("state for fd=%d: %s", con->sock->fd, connection_get_state(con->state));
+				TRACE("state for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 			}
 
 			switch (connection_handle_read_request_header(srv, con)) {
@@ -1064,7 +1056,7 @@ int connection_state_machine(server *srv, connection *con) {
 				connection_set_state(srv, con, CON_STATE_WRITE_RESPONSE_HEADER);
 				break;
 			case HANDLER_WAIT_FOR_EVENT:
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			case HANDLER_ERROR:
 				TRACE("%s", "(error)");
 				connection_set_state(srv, con, CON_STATE_ERROR);
@@ -1103,8 +1095,7 @@ int connection_state_machine(server *srv, connection *con) {
 			 * find someone who wants to handle this request */
 
 			if (srv->srvconf.log_state_handling) {
-				log_error_write(srv, __FILE__, __LINE__, "sds",
-						"state for fd", con->sock->fd, connection_get_state(con->state));
+				TRACE("state for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 			}
 
 			switch (r = handle_get_backend(srv, con)) {
@@ -1168,12 +1159,9 @@ int connection_state_machine(server *srv, connection *con) {
 					/* error-handler is a 404 */
 
 					/* continue as normal, status is the same */
-					log_error_write(srv, __FILE__, __LINE__, "sb",
-							"Warning: Either the error-handler returned status 404 or the error-handler itself was not found:", con->request.uri);
-					log_error_write(srv, __FILE__, __LINE__, "sd",
-							"returning the original status", con->error_handler_saved_status);
-					log_error_write(srv, __FILE__, __LINE__, "s",
-							"If this is a rails app: check your production.log");
+					ERROR("Warning: Either the error-handler returned status 404 or the error-handler itself was not found: %s", SAFE_BUF_STR(con->request.uri));
+					ERROR("returning the original status: %i", con->error_handler_saved_status);
+					ERROR("%s", "If this is a rails app: check your production.log");
 					con->http_status = con->error_handler_saved_status;
 				}
 			} else if (con->in_error_handler) {
@@ -1236,7 +1224,7 @@ int connection_state_machine(server *srv, connection *con) {
 			case HANDLER_COMEBACK:
 				break;
 			case HANDLER_WAIT_FOR_EVENT:
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			default:
 				/* something strange happened */
 				TRACE("(error) plugins_call_handle_send_request_content(): r = %d", r);
@@ -1277,7 +1265,7 @@ int connection_state_machine(server *srv, connection *con) {
 				break;
 			case HANDLER_WAIT_FOR_EVENT:
 				/* need to wait for more data */
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			default:
 				/* something strange happened */
 				TRACE("%s", "(error)");
@@ -1314,7 +1302,7 @@ int connection_state_machine(server *srv, connection *con) {
 			case HANDLER_WAIT_FOR_EVENT:
 				if (!con->send->is_closed && con->send->bytes_in == con->send->bytes_out) {
 					/* need to wait for more data */
-					return HANDLER_WAIT_FOR_EVENT;
+					return;
 				}
 				break;
 			case HANDLER_GO_ON:
@@ -1338,7 +1326,7 @@ int connection_state_machine(server *srv, connection *con) {
 				break;
 			case HANDLER_WAIT_FOR_EVENT:
 				/* need to wait for more data */
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			default:
 				/* something strange happened */
 				TRACE("%s", "(error)");
@@ -1371,13 +1359,13 @@ int connection_state_machine(server *srv, connection *con) {
 
 			/* limit download speed. */
 			if (con->traffic_limit_reached) {
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			}
 
 			/* no response data available to send right now.  wait for more. */
 			if (!con->send_raw->is_closed && 
 			    con->send_raw->bytes_in == con->send_raw->bytes_out) {
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			}
 
 			switch(network_write_chunkqueue(srv, con, con->send_raw)) {
@@ -1399,7 +1387,7 @@ int connection_state_machine(server *srv, connection *con) {
 				} else {
 					/* still have data to send in send_raw queue */
 					fdevent_event_add(srv->ev, con->sock, FDEVENT_OUT);
-					return HANDLER_WAIT_FOR_EVENT;
+					return;
 				}
 				break;
 			case NETWORK_STATUS_FATAL_ERROR: /* error on our side */
@@ -1410,18 +1398,18 @@ int connection_state_machine(server *srv, connection *con) {
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			case NETWORK_STATUS_WAIT_FOR_AIO_EVENT:
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			case NETWORK_STATUS_WAIT_FOR_EVENT:
 				fdevent_event_add(srv->ev, con->sock, FDEVENT_OUT);
 
-				return HANDLER_WAIT_FOR_EVENT;
+				return;
 			case NETWORK_STATUS_WAIT_FOR_FD:
 				/* the backend received a EMFILE
 				 * - e.g. for a mmap() of /dev/zero */
 
 				server_out_of_fds(srv, con);
 
-				return HANDLER_WAIT_FOR_FD;
+				return;
 			case NETWORK_STATUS_INTERRUPTED:
 			case NETWORK_STATUS_UNSET:
 				break;
@@ -1433,8 +1421,7 @@ int connection_state_machine(server *srv, connection *con) {
 			/* log the request */
 
 			if (srv->srvconf.log_state_handling) {
-				log_error_write(srv, __FILE__, __LINE__, "sds",
-						"state for fd", con->sock->fd, connection_get_state(con->state));
+				TRACE("state for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 			}
 
 			plugins_call_handle_response_done(srv, con);
@@ -1454,7 +1441,7 @@ int connection_state_machine(server *srv, connection *con) {
 				case HANDLER_FINISHED:
 					break;
 				default:
-					log_error_write(srv, __FILE__, __LINE__, "sd", "unhandling return value", r);
+					ERROR("unhandled return value from plugins_call_handle_connection_close: %i", r);
 					break;
 				}
 
@@ -1468,19 +1455,16 @@ int connection_state_machine(server *srv, connection *con) {
 			break;
 		case CON_STATE_CLOSE:
 			if (srv->srvconf.log_state_handling) {
-				log_error_write(srv, __FILE__, __LINE__, "sds",
-						"state for fd", con->sock->fd, connection_get_state(con->state));
+				TRACE("state for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 			}
 
 			if (con->keep_alive) {
 				if (ioctl(con->sock->fd, FIONREAD, &b)) {
-					log_error_write(srv, __FILE__, __LINE__, "ss",
-							"ioctl() failed", strerror(errno));
+					ERROR("ioctl() failed: %s", strerror(errno));
 				}
 				if (b > 0) {
 					char buf[1024];
-					log_error_write(srv, __FILE__, __LINE__, "sdd",
-							"CLOSE-read()", con->sock->fd, b);
+					ERROR("CLOSE-read() for fd %i, %i bytes", con->sock->fd, b);
 
 					/* */
 					sockread(con->sock->fd, buf, sizeof(buf));
@@ -1497,8 +1481,7 @@ int connection_state_machine(server *srv, connection *con) {
 				connection_close(srv, con);
 
 				if (srv->srvconf.log_state_handling) {
-					log_error_write(srv, __FILE__, __LINE__, "sd",
-							"connection closed for fd", con->sock->fd);
+					TRACE("connection closed for fd %i", con->sock->fd);
 				}
 			}
 
@@ -1519,10 +1502,10 @@ int connection_state_machine(server *srv, connection *con) {
 					SSL_shutdown(con->sock->ssl);
 					break;
 				default:
-					log_error_write(srv, __FILE__, __LINE__, "sds", "SSL:",
+					ERROR("SSL (%i): %s",
 							SSL_get_error(con->sock->ssl, ret),
 							ERR_error_string(ERR_get_error(), NULL));
-					return -1;
+					break;
 				}
 			}
 #endif
@@ -1530,9 +1513,7 @@ int connection_state_machine(server *srv, connection *con) {
 			switch(con->mode) {
 			case DIRECT:
 #if 0
-				log_error_write(srv, __FILE__, __LINE__, "sd",
-						"emergency exit: direct",
-						con->sock->fd);
+				TRACE("emergency exit for fd %i: direct", con->sock->fd);
 #endif
 				break;
 			default:
@@ -1541,7 +1522,7 @@ int connection_state_machine(server *srv, connection *con) {
 				case HANDLER_FINISHED:
 					break;
 				default:
-					log_error_write(srv, __FILE__, __LINE__, "");
+					ERROR("unhandled return value from plugins_call_handle_connection_close: %i", r);
 					break;
 				}
 				break;
@@ -1556,8 +1537,7 @@ int connection_state_machine(server *srv, connection *con) {
 				connection_set_state(srv, con, CON_STATE_CLOSE);
 
 				if (srv->srvconf.log_state_handling) {
-					log_error_write(srv, __FILE__, __LINE__, "sd",
-							"shutdown for fd", con->sock->fd);
+					TRACE("shutdown for fd %i", con->sock->fd);
 				}
 			} else {
 				connection_close(srv, con);
@@ -1569,9 +1549,8 @@ int connection_state_machine(server *srv, connection *con) {
 
 			break;
 		default:
-			log_error_write(srv, __FILE__, __LINE__, "sdd",
-					"unknown state:", con->sock->fd, con->state);
-
+			ERROR("unknown state for fd %i: %i", con->sock->fd, con->state);
+			connection_set_state(srv, con, CON_STATE_ERROR);
 			break;
 		}
 
@@ -1583,11 +1562,8 @@ int connection_state_machine(server *srv, connection *con) {
 	}
 
 	if (srv->srvconf.log_state_handling) {
-		log_error_write(srv, __FILE__, __LINE__, "sds",
-				"state at exit:",
-				con->sock->fd,
-				connection_get_state(con->state));
+		TRACE("state at exit for fd %i: %s", con->sock->fd, connection_get_state(con->state));
 	}
 
-	return 0;
+	return;
 }

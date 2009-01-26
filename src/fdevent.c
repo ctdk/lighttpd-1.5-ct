@@ -352,10 +352,11 @@ int fdevent_get_revents(fdevents *ev, size_t event_count, fdevent_revents *reven
 	fdevent_revents_reset(revents);
 
 	ev->get_revents(ev, event_count, revents);
-	assert(revents->used == event_count);
+	/* select() reports more events, as it counts per event and per fd (e.g. READ+WRITE on one fd == two events) */
+	/* assert(revents->used == event_count); */
 
 	/* patch the event handlers */
-	for (i = 0; i < event_count; i++) {
+	for (i = 0; i < revents->used; i++) {
 		size_t fda_ndx;
 		fdevent_revent *r = revents->ptr[i];
 

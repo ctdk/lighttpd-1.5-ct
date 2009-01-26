@@ -218,7 +218,7 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 		}
 
 		buffer_copy_string_buffer(err->buf, err->cached_ts_str);
-		buffer_append_string_len(err->buf, CONST_STR_LEN(": ("));
+		buffer_append_string_len(err->buf, CONST_STR_LEN(" ("));
 		break;
 	case ERRORLOG_SYSLOG:
 		/* syslog is generating its own timestamps */
@@ -226,8 +226,8 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 		break;
 	}
 
-	buffer_append_string(err->buf, filename);
-	buffer_append_string_len(err->buf, CONST_STR_LEN("."));
+	buffer_append_string(err->buf, REMOVE_PATH(filename));
+	buffer_append_string_len(err->buf, CONST_STR_LEN(":"));
 	buffer_append_long(err->buf, line);
 	buffer_append_string_len(err->buf, CONST_STR_LEN(") "));
 
@@ -312,29 +312,53 @@ int log_trace(const char *fmt, ...) {
 	int l, tries = 0;
 	errorlog *err = myconfig;
 	va_list ap;
+	time_t t;
+	int timestrsize = 0;
 
 	b = buffer_init();
 	buffer_prepare_copy(b, 4096);
 
+	switch(err->mode) {
+	case ERRORLOG_FILE:
+	case ERRORLOG_STDERR:
+		/* cache the generated timestamp */
+		t = time(NULL);
+
+		if (t != err->cached_ts) {
+			buffer_prepare_copy(err->cached_ts_str, 255);
+			strftime(err->cached_ts_str->ptr, err->cached_ts_str->size - 1, "%Y-%m-%d %H:%M:%S", localtime(&(t)));
+			err->cached_ts_str->used = strlen(err->cached_ts_str->ptr) + 1;
+			err->cached_ts = t;
+		}
+
+		buffer_copy_string_buffer(b, err->cached_ts_str);
+		buffer_append_string_len(b, CONST_STR_LEN(" "));
+		timestrsize = b->used - 1;
+		break;
+	case ERRORLOG_SYSLOG:
+		/* syslog is generating its own timestamps */
+		break;
+	}
+
 	do {
 		errno = 0;
 		va_start(ap, fmt);
-		l = vsnprintf(b->ptr, b->size, fmt, ap);
+		l = vsnprintf(b->ptr+timestrsize, b->size-timestrsize, fmt, ap);
 		va_end(ap);
 
 		/* if 'l' is between -1 and size we are good,
 		 * otherwise we have to resize to size 
 		 */
 
-		if (l > -1 && ((unsigned int) l) < b->size) {
-			b->used = l + 1;
+		if (l > -1 && ((unsigned int) l) < (b->size-timestrsize)) {
+			b->used += l + 1;
 
 			break;
 		}
 
 		if (l > -1) {
 			/* C99: l is the mem-size we need */
-			buffer_prepare_copy(b, l + 1); /* allocate a bit more than we need */
+			buffer_prepare_append(b, l + 1 - (b->size - b->used)); /* allocate a bit more than we need */
 		} else if (tries++ >= 3) {
 			int e = errno;
 			/* glibc 2.0.6 and earlier return -1 if the output was truncated
@@ -351,7 +375,7 @@ int log_trace(const char *fmt, ...) {
 			}
 			break;
 		} else {
-			buffer_prepare_copy(b, b->size * 2);
+			buffer_prepare_append(b, b->size);
 		}
 	} while(1);
 

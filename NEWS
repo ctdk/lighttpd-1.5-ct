@@ -70,6 +70,7 @@ NEWS
   * Fix memory leak in stat-cache (closes #1693), patch by peto
   * Fix shutdown leaks (fixes #1811), patch by peto
   * Fix bogus send->bytes_in counter (problems with mod-deflate)
+  * Reformat log output (add timestamp to new log functions)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -23,14 +23,14 @@ LI_API const char *remove_path(const char *path);
 #define	__ATTRIBUTE_PRINTF_FORMAT(fmt, arg) __attribute__ ((__format__ (__printf__, fmt, arg)))
 
 #define ERROR(fmt, ...) \
-	log_trace("%s.%d: (error) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__)
+	log_trace("(error) (%s:%d) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__)
 
 #define TRACE(fmt, ...) \
-	log_trace("%s.%d: (trace) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__)
+	log_trace("(trace) (%s:%d) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__)
 
 #define SEGFAULT(fmt, ...) \
 	do { \
-		log_trace("%s.%d: (crashing) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__); \
+		log_trace("(crashing) (%s:%d) "fmt, REMOVE_PATH(__FILE__), __LINE__, __VA_ARGS__); \
 		VALGRIND_PRINTF_BACKTRACE(fmt, __VA_ARGS__);\
 		abort();\
        	} while(0)

@@ -101,12 +101,12 @@ FREE_FUNC(mod_rrd_free) {
 	return HANDLER_GO_ON;
 }
 
-int mod_rrd_create_pipe(server *srv, plugin_data *p) {
+static int mod_rrd_create_pipe(server *srv, plugin_data *p) {
+#ifdef HAVE_FORK
 	pid_t pid;
 
 	int to_rrdtool_fds[2];
 	int from_rrdtool_fds[2];
-#ifdef HAVE_FORK
 	if (pipe(to_rrdtool_fds)) {
 		log_error_write(srv, __FILE__, __LINE__, "ss",
 				"pipe failed: ", strerror(errno));
@@ -181,6 +181,11 @@ int mod_rrd_create_pipe(server *srv, plugin_data *p) {
 		p->read_fd = from_rrdtool_fds[0];
 		p->rrdtool_pid = pid;
 
+#ifdef FD_CLOEXEC
+		fcntl(p->write_fd, F_SETFD, FD_CLOEXEC);
+		fcntl(p->read_fd, F_SETFD, FD_CLOEXEC);
+#endif
+
 		break;
 	}
 	}
@@ -189,6 +194,47 @@ int mod_rrd_create_pipe(server *srv, plugin_data *p) {
 #else
 	return -1;
 #endif
+}
+
+/* read/write wrappers to catch EINTR */
+
+/* write to blocking socket; blocks until all data is sent, write returns 0 or an error (apart from EINTR) occurs. */
+static ssize_t safe_write(int fd, const void *buf, size_t count) {
+	ssize_t res, sum = 0;
+
+	for (;;) {
+		res = write(fd, buf, count);
+		if (res >= 0) {
+			sum += res;
+			/* do not try again if res == 0 */
+			if (res == 0 || (size_t) res == count) return sum;
+			count -= res;
+			buf = (const char*) buf + res;
+			continue;
+		}
+		switch (errno) {
+		case EINTR:
+			continue;
+		default:
+			return -1;
+		}
+	}
+}
+
+/* this assumes we get enough data on a successful read */
+static ssize_t safe_read(int fd, void *buf, size_t count) {
+	ssize_t res;
+
+	for (;;) {
+		res = read(fd, buf, count);
+		if (res >= 0) return res;
+		switch (errno) {
+		case EINTR:
+			continue;
+		default:
+			return -1;
+		}
+	}
 }
 
 static int mod_rrdtool_create_rrd(server *srv, plugin_data *p, plugin_config *s) {
@@ -208,24 +254,25 @@ static int mod_rrdtool_create_rrd(server *srv, plugin_data *p, plugin_config *s)
 
 		buffer_copy_string_len(p->cmd, CONST_STR_LEN("create "));
 		buffer_append_string_buffer(p->cmd, s->path_rrd);
-		buffer_append_string_len(p->cmd, CONST_STR_LEN(" --step 60 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("DS:InOctets:ABSOLUTE:600:U:U "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("DS:OutOctets:ABSOLUTE:600:U:U "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("DS:Requests:ABSOLUTE:600:U:U "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:AVERAGE:0.5:1:600 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:AVERAGE:0.5:6:700 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:AVERAGE:0.5:24:775 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:AVERAGE:0.5:288:797 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MAX:0.5:1:600 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MAX:0.5:6:700 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MAX:0.5:24:775 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MAX:0.5:288:797 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MIN:0.5:1:600 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MIN:0.5:6:700 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MIN:0.5:24:775 "));
-		buffer_append_string_len(p->cmd, CONST_STR_LEN("RRA:MIN:0.5:288:797\n"));
+		buffer_append_string_len(p->cmd, CONST_STR_LEN(
+			" --step 60 "
+			"DS:InOctets:ABSOLUTE:600:U:U "
+			"DS:OutOctets:ABSOLUTE:600:U:U "
+			"DS:Requests:ABSOLUTE:600:U:U "
+			"RRA:AVERAGE:0.5:1:600 "
+			"RRA:AVERAGE:0.5:6:700 "
+			"RRA:AVERAGE:0.5:24:775 "
+			"RRA:AVERAGE:0.5:288:797 "
+			"RRA:MAX:0.5:1:600 "
+			"RRA:MAX:0.5:6:700 "
+			"RRA:MAX:0.5:24:775 "
+			"RRA:MAX:0.5:288:797 "
+			"RRA:MIN:0.5:1:600 "
+			"RRA:MIN:0.5:6:700 "
+			"RRA:MIN:0.5:24:775 "
+			"RRA:MIN:0.5:288:797\n"));
 
-		if (-1 == (r = write(p->write_fd, p->cmd->ptr, p->cmd->used - 1))) {
+		if (-1 == (r = safe_write(p->write_fd, p->cmd->ptr, p->cmd->used - 1))) {
 			log_error_write(srv, __FILE__, __LINE__, "ss",
 				"rrdtool-write: failed", strerror(errno));
 
@@ -233,7 +280,7 @@ static int mod_rrdtool_create_rrd(server *srv, plugin_data *p, plugin_config *s)
 		}
 
 		buffer_prepare_copy(p->resp, 4096);
-		if (-1 == (r = read(p->read_fd, p->resp->ptr, p->resp->size))) {
+		if (-1 == (r = safe_read(p->read_fd, p->resp->ptr, p->resp->size))) {
 			log_error_write(srv, __FILE__, __LINE__, "ss",
 				"rrdtool-read: failed", strerror(errno));
 
@@ -383,7 +430,7 @@ TRIGGER_FUNC(mod_rrd_trigger) {
 		buffer_append_long(p->cmd, s->requests);
 		buffer_append_string_len(p->cmd, CONST_STR_LEN("\n"));
 
-		if (-1 == (r = write(p->write_fd, p->cmd->ptr, p->cmd->used - 1))) {
+		if (-1 == (r = safe_write(p->write_fd, p->cmd->ptr, p->cmd->used - 1))) {
 			p->rrdtool_running = 0;
 
 			log_error_write(srv, __FILE__, __LINE__, "ss",
@@ -393,7 +440,7 @@ TRIGGER_FUNC(mod_rrd_trigger) {
 		}
 
 		buffer_prepare_copy(p->resp, 4096);
-		if (-1 == (r = read(p->read_fd, p->resp->ptr, p->resp->size))) {
+		if (-1 == (r = safe_read(p->read_fd, p->resp->ptr, p->resp->size))) {
 			p->rrdtool_running = 0;
 
 			log_error_write(srv, __FILE__, __LINE__, "ss",
@@ -406,12 +453,15 @@ TRIGGER_FUNC(mod_rrd_trigger) {
 
 		if (p->resp->ptr[0] != 'O' ||
 		    p->resp->ptr[1] != 'K') {
-			p->rrdtool_running = 0;
+			/* don't fail on this error if we just started (graceful restart, the old one might have just updated too) */
+			if (!(strstr(p->resp->ptr, "(minimum one second step)") && (srv->cur_ts - srv->startup_ts < 3))) {
+				p->rrdtool_running = 0;
 
-			log_error_write(srv, __FILE__, __LINE__, "sbb",
+				log_error_write(srv, __FILE__, __LINE__, "sbb",
 					"rrdtool-response:", p->cmd, p->resp);
 
-			return HANDLER_ERROR;
+				return HANDLER_ERROR;
+			}
 		}
 		s->requests = 0;
 		s->bytes_written = 0;

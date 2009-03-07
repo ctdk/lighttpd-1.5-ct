@@ -76,6 +76,7 @@ NEWS
   * Fix DoS due to unhandled requests (results in hanging connections); return 403 instead of 200
     without mod_deflate/compressed requests they will eventually time out
   * Fix wrong format strings (fixes #1900, thx stepancheg)
+  * Port some mod_rrdtool fixes from 1.4.x (#604, #419 and more)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

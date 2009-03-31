@@ -22,4 +22,4 @@ typedef struct {
 
 LI_EXPORT int proc_close(proc_handler_t *ht);
 LI_EXPORT int proc_open(proc_handler_t *ht, const char *command);
-LI_EXPORT int proc_open_buffer(proc_handler_t *ht, const char *command, buffer *in, buffer *out, buffer *err);
+LI_EXPORT  int proc_open_buffer(const char *command, buffer *in, buffer *out, buffer *err);

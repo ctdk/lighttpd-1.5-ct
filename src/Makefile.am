@@ -6,7 +6,6 @@ sbin_PROGRAMS=lighttpd fcgi-stat-accel
 else
 sbin_PROGRAMS=lighttpd 
 endif
-bin_PROGRAMS=spawn-fcgi
 LEMON=$(top_builddir)/src/lemon
 
 lemon_SOURCES=lemon.c
@@ -74,9 +73,6 @@ common_src=buffer.c log.c \
       
 src = server.c response.c connections.c network.c \
       configfile.c configparser.c request.c proc_open.c
-
-spawn_fcgi_SOURCES=spawn-fcgi.c
-spawn_fcgi_LDADD = $(GTHREAD_LIBS)
 
 if CHECK_WITH_FASTCGI
 fcgi_stat_accel_SOURCES=fcgi-stat-accel.c

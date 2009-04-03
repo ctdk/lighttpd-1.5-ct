@@ -477,9 +477,6 @@ IF(HAVE_LIBFCGI)
   SET(L_INSTALL_TARGETS ${L_INSTALL_TARGETS} fcgi-stat-accel)
 ENDIF(HAVE_LIBFCGI)
 
-ADD_EXECUTABLE(spawn-fcgi spawn-fcgi.c)
-SET(L_INSTALL_TARGETS ${L_INSTALL_TARGETS} spawn-fcgi)
-
 ADD_EXECUTABLE(lighttpd
 	server.c
 	network.c

@@ -181,6 +181,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 			if (c->offset == 0 && we_want == we_have) {
 				/* we are copying the whole buffer, just steal it */
 				chunkqueue_steal_chunk(out, c);
+				/* c is an empty chunk now */
 			} else {
 				b = chunkqueue_get_append_buffer(out);
 				buffer_copy_string_len(b, c->mem->ptr + c->offset, we_want);
@@ -199,7 +200,7 @@ static handler_t proxy_http_parse_chunked_stream(server *srv, proxy_session *ses
 			data->chunk_parse_state = HTTP_CHUNK_END;
 		case HTTP_CHUNK_END:
 			/* discard CRLF.*/
-			for(ch = 0; (size_t)(c->offset) < (c->mem->used - 1) && ch != '\n' ;) {
+			for(ch = 0; c->mem->used > 0 && (size_t)(c->offset) < (c->mem->used - 1) && ch != '\n' ;) {
 				ch = c->mem->ptr[c->offset];
 				c->offset++;
 				in->bytes_out++;

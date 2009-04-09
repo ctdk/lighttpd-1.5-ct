@@ -175,13 +175,13 @@ int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 				if (fields->size == 0) {
 					fields->size = 16;
 					fields->used = 0;
-					fields->ptr = malloc(fields->size * sizeof(format_fields * ));
+					fields->ptr = malloc(fields->size * sizeof(format_field * ));
 				} else if (fields->used == fields->size) {
 					fields->size += 16;
-					fields->ptr = realloc(fields->ptr, fields->size * sizeof(format_fields * ));
+					fields->ptr = realloc(fields->ptr, fields->size * sizeof(format_field * ));
 				}
 
-				fields->ptr[fields->used] = malloc(sizeof(format_fields));
+				fields->ptr[fields->used] = malloc(sizeof(format_field));
 				fields->ptr[fields->used]->type = FIELD_STRING;
 				fields->ptr[fields->used]->string = buffer_init();
 
@@ -196,10 +196,10 @@ int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 			if (fields->size == 0) {
 				fields->size = 16;
 				fields->used = 0;
-				fields->ptr = malloc(fields->size * sizeof(format_fields * ));
+				fields->ptr = malloc(fields->size * sizeof(format_field * ));
 			} else if (fields->used == fields->size) {
 				fields->size += 16;
-				fields->ptr = realloc(fields->ptr, fields->size * sizeof(format_fields * ));
+				fields->ptr = realloc(fields->ptr, fields->size * sizeof(format_field * ));
 			}
 
 			/* search for the terminating command */
@@ -213,7 +213,7 @@ int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 
 					/* found key */
 
-					fields->ptr[fields->used] = malloc(sizeof(format_fields));
+					fields->ptr[fields->used] = malloc(sizeof(format_field));
 					fields->ptr[fields->used]->type = FIELD_FORMAT;
 					fields->ptr[fields->used]->field = fmap[j].type;
 					fields->ptr[fields->used]->string = NULL;
@@ -252,7 +252,7 @@ int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 
 					/* found key */
 
-					fields->ptr[fields->used] = malloc(sizeof(format_fields));
+					fields->ptr[fields->used] = malloc(sizeof(format_field));
 					fields->ptr[fields->used]->type = FIELD_FORMAT;
 					fields->ptr[fields->used]->field = fmap[j].type;
 					fields->ptr[fields->used]->string = buffer_init();
@@ -278,7 +278,7 @@ int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 
 					/* found key */
 
-					fields->ptr[fields->used] = malloc(sizeof(format_fields));
+					fields->ptr[fields->used] = malloc(sizeof(format_field));
 					fields->ptr[fields->used]->type = FIELD_FORMAT;
 					fields->ptr[fields->used]->field = fmap[j].type;
 					fields->ptr[fields->used]->string = NULL;
@@ -307,13 +307,13 @@ int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 		if (fields->size == 0) {
 			fields->size = 16;
 			fields->used = 0;
-			fields->ptr = malloc(fields->size * sizeof(format_fields * ));
+			fields->ptr = malloc(fields->size * sizeof(format_field * ));
 		} else if (fields->used == fields->size) {
 			fields->size += 16;
-			fields->ptr = realloc(fields->ptr, fields->size * sizeof(format_fields * ));
+			fields->ptr = realloc(fields->ptr, fields->size * sizeof(format_field * ));
 		}
 
-		fields->ptr[fields->used] = malloc(sizeof(format_fields));
+		fields->ptr[fields->used] = malloc(sizeof(format_field));
 		fields->ptr[fields->used]->type = FIELD_STRING;
 		fields->ptr[fields->used]->string = buffer_init();
 

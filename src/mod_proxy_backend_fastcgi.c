@@ -104,7 +104,11 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 	array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_SOFTWARE"), CONST_STR_LEN(PACKAGE_NAME"/"PACKAGE_VERSION));
 
 	if (con->server_name->used) {
-		array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_NAME"), CONST_BUF_LEN(con->server_name));
+		size_t len = con->server_name->used - 1;
+		char *colon = strchr(con->server_name->ptr, ':');
+		if (colon) len = colon - con->server_name->ptr;
+
+		array_set_key_value(sess->env_headers, CONST_STR_LEN("SERVER_NAME"), con->server_name->ptr, len);
 	} else {
 #ifdef HAVE_IPV6
 		s = inet_ntop(srv_sock->addr.plain.sa_family,

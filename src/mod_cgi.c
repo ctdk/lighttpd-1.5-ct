@@ -11,6 +11,7 @@
 #include <fcntl.h>
 
 #include "server.h"
+#include "stat_cache.h"
 #include "keyvalue.h"
 #include "log.h"
 #include "connections.h"
@@ -1038,6 +1039,7 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 	size_t k, s_len;
 	plugin_data *p = p_d;
 	buffer *fn = con->physical.path;
+	stat_cache_entry *sce = NULL;
 
 	if (fn->used == 0) return HANDLER_GO_ON;
 	
@@ -1050,6 +1052,9 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 	if (con->conf.log_request_handling) {
 		TRACE("-- checking request in mod_%s", "cgi");
 	}
+
+	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) return HANDLER_GO_ON;
+	if (!S_ISREG(sce->st.st_mode)) return HANDLER_GO_ON;
 
 	s_len = fn->used - 1;
 

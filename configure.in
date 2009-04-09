@@ -600,7 +600,7 @@ do_build="\
 	mod_evasive \
 	mod_expire \
 	mod_flv_streaming\
-	mod_indexfiles \
+	mod_indexfile \
 	mod_proxy_core \
 	mod_proxy_backend_http \
 	mod_proxy_backend_fastcgi \

@@ -85,6 +85,7 @@ NEWS
   * Fix segfault in mod_proxy_backend_http (fixes #1154)
   * merge: Fix base64 decoding in mod_auth (#1757)
   * merge: Compare address family in inet_ntop_cache
+  * Revert CVE-2008-4359 (#1720) fix "encoding+simplifying urls for rewrite/redirect": too many regressions.
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

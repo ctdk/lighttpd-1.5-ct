@@ -246,28 +246,6 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		}
 
 
-		/* build filename
-		 *
-		 * - decode url-encodings  (e.g. %20 -> ' ')
-		 * - remove path-modifiers (e.g. /../)
-		 */
-
-
-		if (con->request.http_method == HTTP_METHOD_OPTIONS &&
-		    con->uri.path_raw->ptr[0] == '*' && con->uri.path_raw->ptr[1] == '\0') {
-			/* OPTIONS * ... */
-			buffer_copy_string_buffer(con->uri.path, con->uri.path_raw);
-		} else {
-			buffer_copy_string_buffer(srv->tmp_buf, con->uri.path_raw);
-			buffer_urldecode_path(srv->tmp_buf);
-			buffer_path_simplify(con->uri.path, srv->tmp_buf);
-		}
-
-		if (con->conf.log_request_handling) {
-			TRACE("-- %s", "sanitizing URI");
-			TRACE("URI-path     : %s", SAFE_BUF_STR(con->uri.path));
-		}
-
 		/**
 		 *
 		 * call plugins
@@ -287,6 +265,29 @@ handler_t handle_get_backend(server *srv, connection *con) {
 		default:
 			ERROR("plugins_call_handle_uri_raw() returned unexpected: %d", r);
 			break;
+		}
+
+		/* build filename
+		 *
+		 * - decode url-encodings  (e.g. %20 -> ' ')
+		 * - remove path-modifiers (e.g. /../)
+		 */
+
+
+
+		if (con->request.http_method == HTTP_METHOD_OPTIONS &&
+		    con->uri.path_raw->ptr[0] == '*' && con->uri.path_raw->ptr[1] == '\0') {
+			/* OPTIONS * ... */
+			buffer_copy_string_buffer(con->uri.path, con->uri.path_raw);
+		} else {
+			buffer_copy_string_buffer(srv->tmp_buf, con->uri.path_raw);
+			buffer_urldecode_path(srv->tmp_buf);
+			buffer_path_simplify(con->uri.path, srv->tmp_buf);
+		}
+
+		if (con->conf.log_request_handling) {
+			TRACE("-- %s", "sanitizing URI");
+			TRACE("URI-path     : %s", SAFE_BUF_STR(con->uri.path));
 		}
 
 		/**

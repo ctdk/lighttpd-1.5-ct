@@ -791,7 +791,7 @@ int lighty_mainloop(server *srv) {
 			/* our server sockets are disabled, why ? */
 
 			if ((srv->fdwaitqueue->used == 0) &&
-			    (srv->conns->used < srv->max_conns * 0.9) &&
+			    (srv->conns->used <= srv->max_conns * 9 / 10) &&
 			    (0 == graceful_shutdown)) {
 				size_t i;
 
@@ -806,7 +806,7 @@ int lighty_mainloop(server *srv) {
 			}
 		} else {
 			if ((srv->fdwaitqueue->used) || /* looks like some cons are waiting for FDs*/
-			    (srv->conns->used > srv->max_conns) || /* out of connections */
+			    (srv->conns->used >= srv->max_conns) || /* out of connections */
 			    (graceful_shutdown)) { /* graceful_shutdown */
 				size_t i;
 
@@ -848,7 +848,7 @@ int lighty_mainloop(server *srv) {
 				} else if (srv->fdwaitqueue->used) {
 					TRACE("[note] out of FDs, server-socket get disabled for a while, we have %zu connections open and they are waiting for %zu FDs",
 					    srv->conns->used, srv->fdwaitqueue->used);
-				} else if (srv->conns->used > srv->max_conns) {
+				} else if (srv->conns->used >= srv->max_conns) {
 					TRACE("[note] we reached our connection limit of %zu connections. Disabling server-sockets for a while", srv->max_conns);
 				}
 

@@ -95,6 +95,7 @@ NEWS
   * merge: Create rrd file for empty rrdfile in mod_rrdtool (#1788)
   * merge: Strip trailing dot from "Host:" header
   * merge: Remove the optional port info from SERVER_NAME (thx Mr_Bond)
+  * merge: Rename configure.in to configure.ac, with small cleanups (#1932)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

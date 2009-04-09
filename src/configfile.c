@@ -168,7 +168,7 @@ static int config_insert(server *srv) {
 		s->server_tag    = buffer_init();
 		s->errorfile_prefix = buffer_init();
 		s->ssl_cipher_list = buffer_init();
-		s->ssl_use_sslv2 = 0;
+		s->ssl_use_sslv2 = 1;
 		s->max_keep_alive_requests = 16;
 		s->max_keep_alive_idle = 5;
 		s->max_read_idle = 60;

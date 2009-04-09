@@ -577,7 +577,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
 	UNUSED(srv);
 
 	/* no data ? */
-	if (!in->first) return HANDLER_GO_ON;
+	if (!in->first) return HANDLER_WAIT_FOR_EVENT;
 
 	/* parse the packet header. */
 	if(data->packet.offset < AJP13_FULL_HEADER_LEN) {
@@ -587,7 +587,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
 		/* make sure we have the full ajp13 header. */
 		if(we_need > 0) {
 			/* we need more data to parse the header. */
-			return HANDLER_GO_ON;
+			return HANDLER_WAIT_FOR_EVENT;
 		}
 		/* parse raw header. */
 		header = (AJP13_Header *)(data->buf->ptr);
@@ -614,7 +614,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
 			/* make sure we have the full ajp13 packet content. */
 			if(we_need > 0) {
 				/* we need more data to parse the content. */
-				return HANDLER_GO_ON;
+				return HANDLER_WAIT_FOR_EVENT;
 			}
 		}
 	}
@@ -639,7 +639,7 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder_internal) {
 			we_need = proxy_ajp13_fill_buffer(data, in, we_need);
 			if(we_need > 0) {
 				/* we need more data to parse the chunk length. */
-				return HANDLER_GO_ON;
+				return HANDLER_WAIT_FOR_EVENT;
 			}
 			/* parse chunk length */
 			data->chunk_len = ajp13_decode_int(data);
@@ -707,6 +707,11 @@ PROXY_STREAM_DECODER_FUNC(proxy_ajp13_stream_decoder) {
 		/* decode the packet */
 		res = proxy_ajp13_stream_decoder_internal(srv, sess, out);
 	} while (in->first && res == HANDLER_GO_ON);
+
+	if (res == HANDLER_WAIT_FOR_EVENT) {
+		if (in->is_closed) return HANDLER_ERROR;
+		return HANDLER_GO_ON;
+	}
 
 	return res;
 }

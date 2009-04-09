@@ -108,7 +108,10 @@ gpointer linux_aio_read_thread(gpointer );
 
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
 static void sigaction_handler(int sig, siginfo_t *si, void *context) {
+	static siginfo_t empty_siginfo;
 	UNUSED(context);
+
+	if (!si) si = &empty_siginfo;
 
 	switch (sig) {
 	case SIGTERM: 

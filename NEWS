@@ -91,6 +91,7 @@ NEWS
   * merge: Disable SSLv2 by default
   * merge: Use/enforce sane max-connection values (#1803)
   * merge: Fix max-connection limit handling/100% cpu usage (#1436)
+  * merge: Fix segfault if siginfo_t* is NULL in sigaction handler (#1926)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

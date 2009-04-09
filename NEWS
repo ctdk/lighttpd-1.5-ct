@@ -89,6 +89,7 @@ NEWS
   * merge: Fix wrong malloc sizes in mod_accesslog (probably nothing bad happened...) (#1855, thx ycheng)
   * merge: Some small buffer.c fixes (#1837)
   * merge: Disable SSLv2 by default
+  * merge: Use/enforce sane max-connection values (#1803)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

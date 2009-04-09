@@ -91,6 +91,17 @@
 #include "sys-process.h"
 #include "sys-socket.h"
 
+#ifdef HAVE_GETUID
+# ifndef HAVE_ISSETUGID
+
+static int l_issetugid() {
+	return (geteuid() != getuid() || getegid() != getgid());
+}
+
+#  define issetugid l_issetugid
+# endif
+#endif
+
 static volatile sig_atomic_t srv_shutdown = 0;
 static volatile sig_atomic_t graceful_shutdown = 0;
 static volatile sig_atomic_t graceful_restart = 0;
@@ -1177,7 +1188,7 @@ int main (int argc, char **argv, char **envp) {
 
 	/* UID handling */
 #ifdef HAVE_GETUID
-	if (!i_am_root && (geteuid() == 0 || getegid() == 0)) {
+	if (!i_am_root && issetugid()) {
 		/* we are setuid-root */
 
 		log_error_write(srv, __FILE__, __LINE__, "s",

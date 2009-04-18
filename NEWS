@@ -99,6 +99,7 @@ NEWS
   * merge: Add proper SUID bit detection (#416)
   * merge: Check for regular file in mod_cgi, so we don't try to start directories
   * merge: Include mmap.h from chunk.h to fix some problems with #define mmap mmap64 (#1923)
+  * merge: Fix segfault for appending matched parts if there was no regex matching (just give empty strings) (#1601)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -604,7 +604,7 @@ int connection_reset(server *srv, connection *con) {
  *
  * we get called by the state-engine and by the fdevent-handler
  */
-handler_t connection_handle_read_request_header(server *srv, connection *con)  {
+static handler_t connection_handle_read_request_header(server *srv, connection *con)  {
 	/* let's see if we need more data later */
 	fdevent_event_del(srv->ev, con->sock);
 
@@ -655,7 +655,7 @@ handler_t connection_handle_read_request_header(server *srv, connection *con)  {
 
 /* decode the HTTP/1.1 chunk encoding */
 
-handler_t connection_handle_read_request_content(server *srv, connection *con)  {
+static handler_t connection_handle_read_request_content(server *srv, connection *con)  {
 	/* read data from the socket and push it to the backend */
 
 	chunkqueue *in = con->recv_raw;
@@ -810,7 +810,7 @@ handler_t connection_handle_read_request_content(server *srv, connection *con)  
 	return HANDLER_GO_ON;
 }
 
-handler_t connection_handle_fdevent(void *s, void *context, int revents) {
+static handler_t connection_handle_fdevent(void *s, void *context, int revents) {
 	server     *srv = (server *)s;
 	connection *con = context;
 

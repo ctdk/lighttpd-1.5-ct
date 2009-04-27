@@ -5,7 +5,7 @@
 #include "sys-socket.h"
 #include "mod_proxy_core_address.h"
 
-proxy_address *proxy_address_init(void) {
+static proxy_address *proxy_address_init(void) {
 	proxy_address *address;
 
 	address = calloc(1, sizeof(*address));
@@ -16,7 +16,7 @@ proxy_address *proxy_address_init(void) {
 	return address;
 }
 
-void proxy_address_free(proxy_address *address) {
+static void proxy_address_free(proxy_address *address) {
 	if (!address) return;
 
 	buffer_free(address->name);

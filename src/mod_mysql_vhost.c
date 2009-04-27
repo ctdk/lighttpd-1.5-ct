@@ -173,8 +173,10 @@ SERVER_FUNC(mod_mysql_vhost_set_defaults) {
 
 #if MYSQL_VERSION_ID >= 50003
 			/* in mysql versions above 5.0.3 the reconnect flag is off by default */
-			my_bool reconnect = 1;
-			mysql_options(s->mysql, MYSQL_OPT_RECONNECT, &reconnect);
+			{
+				my_bool reconnect = 1;
+				mysql_options(s->mysql, MYSQL_OPT_RECONNECT, &reconnect);
+			}
 #endif
 
 #define FOO(x) (s->core->x->used ? s->core->x->ptr : NULL)
@@ -234,12 +236,11 @@ static int mod_mysql_vhost_patch_connection(server *srv, connection *con, plugin
  */
 SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 	plugin_data *p = p_d;
-
-	UNUSED(host);
-
 	unsigned  cols;
 	MYSQL_ROW row;
 	MYSQL_RES *result = NULL;
+
+	UNUSED(host);
 
 	/* no host specified? */
 	if (!con->uri.authority->used) return HANDLER_ERROR;
@@ -278,7 +279,8 @@ SQLVHOST_BACKEND_GETVHOST(mod_mysql_vhost_get_vhost) {
 }
 
 /* this function is called at dlopen() time and inits the callbacks */
-int mod_mysql_vhost_plugin_init(plugin *p) {
+LI_EXPORT int mod_mysql_vhost_plugin_init(plugin *p);
+LI_EXPORT int mod_mysql_vhost_plugin_init(plugin *p) {
 	data_string *ds;
 
 	p->version     = LIGHTTPD_VERSION_ID;
@@ -297,7 +299,8 @@ int mod_mysql_vhost_plugin_init(plugin *p) {
 }
 #else
 /* we don't have mysql support, this plugin does nothing */
-int mod_mysql_vhost_plugin_init(plugin *p) {
+LI_EXPORT int mod_mysql_vhost_plugin_init(plugin *p);
+LI_EXPORT int mod_mysql_vhost_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        			= buffer_init_string("mysql_vhost");
 

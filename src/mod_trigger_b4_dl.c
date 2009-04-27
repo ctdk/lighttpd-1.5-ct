@@ -570,6 +570,7 @@ TRIGGER_FUNC(mod_trigger_b4_dl_handle_trigger) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
+LI_EXPORT int mod_trigger_b4_dl_plugin_init(plugin *p);
 LI_EXPORT int mod_trigger_b4_dl_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("trigger_b4_dl");

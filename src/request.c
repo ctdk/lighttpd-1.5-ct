@@ -210,7 +210,7 @@ static int request_check_hostname(buffer *host) {
 #define DUMP_HEADER
 #endif
 
-int http_request_split_value(array *vals, buffer *b) {
+static int http_request_split_value(array *vals, buffer *b) {
 	char *s;
 	size_t i;
 	int state = 0;
@@ -270,14 +270,6 @@ int http_request_split_value(array *vals, buffer *b) {
 		}
 	}
 	return 0;
-}
-
-int request_uri_is_valid_char(unsigned char c) {
-	if (c <= 32) return 0;
-	if (c == 127) return 0;
-	if (c == 255) return 0;
-
-	return 1;
 }
 
 int http_request_parse(server *srv, connection *con, http_req *req) {

@@ -19,6 +19,7 @@
 #include "stat_cache.h"
 #include "fdevent.h"
 #include "etag.h"
+#include "server.h"
 
 #ifdef HAVE_ATTR_ATTRIBUTES_H
 #include <attr/attributes.h>
@@ -79,7 +80,7 @@ typedef struct {
 	void *con;
 } stat_job;
 
-stat_job *stat_job_init() {
+static stat_job *stat_job_init() {
 	stat_job *sj = calloc(1, sizeof(*sj));
 
 	sj->name = buffer_init();
@@ -87,7 +88,7 @@ stat_job *stat_job_init() {
 	return sj;
 }
 
-void stat_job_free(stat_job *sj) {
+static void stat_job_free(stat_job *sj) {
 	if (!sj) return;
 
 	buffer_free(sj->name);
@@ -137,13 +138,13 @@ gpointer stat_cache_thread(gpointer _srv) {
 #endif
 
 #ifdef HAVE_GLIB_H
-guint sc_key_hash(gconstpointer v) {
+static guint sc_key_hash(gconstpointer v) {
 	buffer *b = (buffer *)v;
 
 	return g_str_hash(b->ptr);
 }
 
-gboolean sc_key_equal(gconstpointer v1, gconstpointer v2) {
+static gboolean sc_key_equal(gconstpointer v1, gconstpointer v2) {
 	buffer *b1 = (buffer *)v1;
 	buffer *b2 = (buffer *)v2;
 
@@ -193,10 +194,10 @@ static void stat_cache_entry_free(void *data) {
 }
 
 #ifdef HAVE_GLIB_H
-gboolean stat_cache_free_hrfunc(gpointer _key, gpointer _value, gpointer _user_data) {
-	UNUSED(_user_data);
+static gboolean stat_cache_free_hrfunc(gpointer _key, gpointer _value, gpointer _user_data) {
 	stat_cache_entry *sce = _value;
 	buffer *b = _key;
+	UNUSED(_user_data);
 
 	buffer_free(b);
 	stat_cache_entry_free(sce);
@@ -522,7 +523,7 @@ handler_t stat_cache_get_entry(server *srv, connection *con, buffer *name, stat_
  */
 
 #ifdef HAVE_GLIB_H
-gboolean stat_cache_remove_old_entry(gpointer _key, gpointer _value, gpointer user_data) {
+static gboolean stat_cache_remove_old_entry(gpointer _key, gpointer _value, gpointer user_data) {
 	server *srv = user_data;
 	buffer *key = _key;
 	stat_cache_entry *sce = _value;

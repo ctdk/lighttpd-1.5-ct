@@ -17,7 +17,7 @@
  * each filter has a chunkqueue with content and 
  * a prev and a next pointer
  */
-filter *filter_init(void) {
+static filter *filter_init(void) {
 	filter *fl;
 
 	fl = calloc(1, sizeof(*fl));
@@ -33,7 +33,7 @@ filter *filter_init(void) {
 /**
  * free the filter  
  */
-void filter_free(filter *fl) {
+static void filter_free(filter *fl) {
 	filter *next, *prev;
 
 	/* free chunkqueue */
@@ -58,7 +58,7 @@ void filter_free(filter *fl) {
 /**
  * reset the filter  
  */
-void filter_reset(filter *fl) {
+static void filter_reset(filter *fl) {
 	/* reset chunkqueue */
 	if(fl->cq) {
 		chunkqueue_reset(fl->cq);

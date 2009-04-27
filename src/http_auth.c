@@ -815,8 +815,10 @@ static int http_auth_basic_password_compare(server *srv, mod_auth_plugin_data *p
 			return -1;
 		}
 
-		const int ldap_version = LDAP_VERSION3;
-		ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION, &ldap_version);
+		{
+			const int ldap_version = LDAP_VERSION3;
+			ret = ldap_set_option(ldap, LDAP_OPT_PROTOCOL_VERSION, &ldap_version);
+		}
 		if (ret != LDAP_OPT_SUCCESS) {
 			log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
 

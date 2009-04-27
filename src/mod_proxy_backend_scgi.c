@@ -79,11 +79,11 @@ static int proxy_scgi_get_env_scgi(server *srv, proxy_session *sess, buffer *env
 	scgi_env_add(env_headers, CONST_STR_LEN("SERVER_SOFTWARE"), CONST_STR_LEN(PACKAGE_NAME"/"PACKAGE_VERSION));
 
 	if (con->server_name->used) {
-		size_t len = con->server_name->used - 1;
+		size_t _len = con->server_name->used - 1;
 		char *colon = strchr(con->server_name->ptr, ':');
-		if (colon) len = colon - con->server_name->ptr;
+		if (colon) _len = colon - con->server_name->ptr;
 
-		scgi_env_add(env_headers, CONST_STR_LEN("SERVER_NAME"), con->server_name->ptr, len);
+		scgi_env_add(env_headers, CONST_STR_LEN("SERVER_NAME"), con->server_name->ptr, _len);
 	} else {
 #ifdef HAVE_IPV6
 		s = inet_ntop(srv_sock->addr.plain.sa_family,
@@ -452,6 +452,7 @@ FREE_FUNC(mod_proxy_backend_scgi_free) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_proxy_backend_scgi_plugin_init(plugin *p);
 LI_EXPORT int mod_proxy_backend_scgi_plugin_init(plugin *p) {
 	data_string *ds;
 

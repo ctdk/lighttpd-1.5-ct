@@ -26,4 +26,10 @@ LI_API void http_request_reset(http_req *req);
 
 LI_API parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *http_request);
 
+/* declare prototypes for the parser */
+void *http_req_parserAlloc(void *(*mallocProc)(size_t));
+void http_req_parserFree(void *p,  void (*freeProc)(void*));
+void http_req_parserTrace(FILE *TraceFILE, char *zTracePrompt);
+void http_req_parser(void *, int, buffer *, http_req_ctx_t *);
+
 #endif

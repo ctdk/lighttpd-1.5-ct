@@ -110,13 +110,6 @@ static volatile sig_atomic_t handle_sig_hup = 0;
 static volatile siginfo_t last_sigterm_info;
 static volatile siginfo_t last_sighup_info;
 
-#ifdef USE_GTHREAD
-gpointer stat_cache_thread(gpointer );
-gpointer network_gthread_aio_read_thread(gpointer );
-gpointer network_gthread_sendfile_read_thread(gpointer );
-gpointer linux_aio_read_thread(gpointer );
-#endif
-
 #if defined(HAVE_SIGACTION) && defined(SA_SIGINFO)
 static void sigaction_handler(int sig, siginfo_t *si, void *context) {
 	static siginfo_t empty_siginfo;
@@ -596,7 +589,7 @@ int server_out_of_fds(server *srv, connection *con) {
 	return 0;
 }
 
-int lighty_mainloop(server *srv) {
+static int lighty_mainloop(server *srv) {
 	fdevent_revents *revents = fdevent_revents_init();
 	int poll_errno;
 	size_t conns_user_at_sockets_disabled = 0;

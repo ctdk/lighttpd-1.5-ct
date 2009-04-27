@@ -163,7 +163,7 @@ INIT_FUNC(mod_accesslog_init) {
 	return p;
 }
 
-int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
+static int accesslog_parse_format(server *srv, format_fields *fields, buffer *format) {
 	size_t i, j, k = 0, start = 0;
 
 	for (i = 0; i < format->used - 1; i++) {
@@ -841,6 +841,7 @@ REQUESTDONE_FUNC(log_access_write) {
 }
 
 
+LI_EXPORT int mod_accesslog_plugin_init(plugin *p);
 LI_EXPORT int mod_accesslog_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("accesslog");

@@ -8,13 +8,13 @@
 
 
 #define SERVER_FUNC(x) \
-		LI_EXPORT handler_t x(server *srv, void *p_d)
+		static handler_t x(server *srv, void *p_d)
 
 #define CONNECTION_FUNC(x) \
-		LI_EXPORT handler_t x(server *srv, connection *con, void *p_d)
+		static handler_t x(server *srv, connection *con, void *p_d)
 
 #define INIT_FUNC(x) \
-		LI_EXPORT void * x(server *srv)
+		static void * x(server *srv)
 /*
  * The PATCH_OPTION() macro is used in the patch_connection() functions
  * of the modules to update the config object for the current request.

@@ -47,7 +47,7 @@ typedef struct {
 	int             is_complete;
 } fcgi_state_data;
 
-fcgi_state_data *fcgi_state_data_init(void) {
+static fcgi_state_data *fcgi_state_data_init(void) {
 	fcgi_state_data *data;
 
 	data = calloc(1, sizeof(*data));
@@ -56,12 +56,12 @@ fcgi_state_data *fcgi_state_data_init(void) {
 	return data;
 }
 
-void fcgi_state_data_free(fcgi_state_data *data) {
+static void fcgi_state_data_free(fcgi_state_data *data) {
 	buffer_free(data->buf);
 	free(data);
 }
 
-void fcgi_state_data_reset(fcgi_state_data *data) {
+static void fcgi_state_data_reset(fcgi_state_data *data) {
 	buffer_reset(data->buf);
 	data->packet.len = 0;
 	data->packet.offset = 0;
@@ -90,7 +90,7 @@ PROXY_CONNECTION_FUNC(proxy_fastcgi_cleanup) {
 	return 1;
 }
 
-int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+static int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	char buf[32];
 	const char *s;
 	server_socket *srv_sock = con->srv_socket;
@@ -234,7 +234,7 @@ int proxy_fastcgi_get_env_fastcgi(server *srv, connection *con, plugin_data *p, 
 /**
  * transform the HTTP-Request headers into CGI notation
  */
-int proxy_fastcgi_get_env_request(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+static int proxy_fastcgi_get_env_request(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	size_t i;
 
 	UNUSED(srv);
@@ -797,6 +797,7 @@ FREE_FUNC(mod_proxy_backend_fastcgi_free) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_proxy_backend_fastcgi_plugin_init(plugin *p);
 LI_EXPORT int mod_proxy_backend_fastcgi_plugin_init(plugin *p) {
 	data_string *ds;
 

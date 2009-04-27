@@ -343,7 +343,8 @@ SQLVHOST_BACKEND_GETVHOST(mod_postgresql_vhost_get_vhost) {
 }
 
 /* this function is called at dlopen() time and inits the callbacks */
-int mod_postgresql_vhost_plugin_init(plugin *p) {
+LI_EXPORT int mod_postgresql_vhost_plugin_init(plugin *p);
+LI_EXPORT int mod_postgresql_vhost_plugin_init(plugin *p) {
 	data_string *ds;
 	p->version	= LIGHTTPD_VERSION_ID;
 	p->name		= buffer_init_string("postgresql_vhost");
@@ -360,7 +361,8 @@ int mod_postgresql_vhost_plugin_init(plugin *p) {
 }
 #else
 /* we don't have postgresql support, this plugin does nothing */
-int mod_postgresql_vhost_plugin_init(plugin *p) {
+LI_EXPORT int mod_postgresql_vhost_plugin_init(plugin *p);
+LI_EXPORT int mod_postgresql_vhost_plugin_init(plugin *p) {
 	p->version	= LIGHTTPD_VERSION_ID;
 	p->name		= buffer_init_string("postgresql_vhost");
 

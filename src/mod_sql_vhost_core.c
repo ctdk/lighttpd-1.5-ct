@@ -78,15 +78,17 @@ SERVER_FUNC(mod_sql_vhost_core_cleanup) {
 }
 
 #ifdef HAVE_GLIB_H
-cached_vhost *cached_vhost_init(void) {
+#if 0
+static cached_vhost *cached_vhost_init(void) {
 	cached_vhost *vhost;
 
 	vhost = g_new0(cached_vhost, 1);
 
 	return vhost;
 }
+#endif
 
-void cached_vhost_free(cached_vhost *vhost) {
+static void cached_vhost_free(cached_vhost *vhost) {
 	if (!vhost) return;
 
 	if (vhost->docroot) buffer_free(vhost->docroot);
@@ -94,24 +96,24 @@ void cached_vhost_free(cached_vhost *vhost) {
 	g_free(vhost);
 }
 
-void cached_vhost_free_hash(gpointer vhost) {
+static void cached_vhost_free_hash(gpointer vhost) {
 	cached_vhost_free(vhost);
 }
 
-uint buffer_hash(gconstpointer key) {
+static uint buffer_hash(gconstpointer key) {
 	buffer *b = (buffer *)key;
 
 	return g_str_hash(b->ptr);
 }
 
-gboolean buffer_hash_equal(gconstpointer _a, gconstpointer _b) {
+static gboolean buffer_hash_equal(gconstpointer _a, gconstpointer _b) {
 	buffer *a = (buffer *)_a;
 	buffer *b = (buffer *)_b;
 
 	return buffer_is_equal(a, b);
 }
 
-void buffer_hash_free(gpointer d) {
+static void buffer_hash_free(gpointer d) {
 	buffer *b = d;
 
 	buffer_free(b);
@@ -331,12 +333,13 @@ CONNECTION_FUNC(mod_sql_vhost_core_handle_docroot) {
 	return HANDLER_GO_ON;
 }
 
+#if 0
 #ifdef HAVE_GLIB_H
 static gboolean cached_vhost_remove_expired(gpointer _key, gpointer _val, gpointer data) {
 //	buffer *key       = _key;
-	UNUSED(_key);
 	cached_vhost *val = _val;
 	server *srv       = data;
+	UNUSED(_key);
 
 	return (srv->cur_ts - val->added_ts > val->ttl);
 }
@@ -362,9 +365,11 @@ TRIGGER_FUNC(mod_sql_vhost_core_trigger) {
 
 	return HANDLER_GO_ON;
 }
+#endif
 
 /* this function is called at dlopen() time and inits the callbacks */
-int mod_sql_vhost_core_plugin_init(plugin *p) {
+LI_EXPORT int mod_sql_vhost_core_plugin_init(plugin *p);
+LI_EXPORT int mod_sql_vhost_core_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        			= buffer_init_string("mod_sql_vhost_core");
 

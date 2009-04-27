@@ -140,7 +140,7 @@ SETDEFAULTS_FUNC(mod_secdownload_set_defaults) {
  * @return if the supplied string is a valid MD5 string 1 is returned otherwise 0
  */
 
-int is_hex_len(const char *str, size_t len) {
+static int is_hex_len(const char *str, size_t len) {
 	size_t i;
 
 	if (NULL == str) return 0;
@@ -329,6 +329,7 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
+LI_EXPORT int mod_secdownload_plugin_init(plugin *p);
 LI_EXPORT int mod_secdownload_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("secdownload");

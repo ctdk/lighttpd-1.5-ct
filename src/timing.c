@@ -1,4 +1,5 @@
 #include "base.h"
+#include "timing.h"
 
 void timing_log(server *srv, connection *con, int field) {
 #ifdef HAVE_GLIB_H

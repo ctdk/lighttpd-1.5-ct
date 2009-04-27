@@ -150,7 +150,7 @@ typedef struct {
 	size_t	requested_bytes; /* backend requested we send this many bytes of the request content. */
 } ajp13_state_data;
 
-ajp13_state_data *ajp13_state_data_init(void) {
+static ajp13_state_data *ajp13_state_data_init(void) {
 	ajp13_state_data *data;
 
 	data = calloc(1, sizeof(*data));
@@ -159,12 +159,12 @@ ajp13_state_data *ajp13_state_data_init(void) {
 	return data;
 }
 
-void ajp13_state_data_free(ajp13_state_data *data) {
+static void ajp13_state_data_free(ajp13_state_data *data) {
 	buffer_free(data->buf);
 	free(data);
 }
 
-void ajp13_state_data_reset(ajp13_state_data *data) {
+static void ajp13_state_data_reset(ajp13_state_data *data) {
 	buffer_reset(data->buf);
 	data->packet.len = 0;
 	data->packet.offset = 0;
@@ -398,7 +398,7 @@ PROXY_CONNECTION_FUNC(proxy_ajp13_cleanup) {
 	return 1;
 }
 
-int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *sess, buffer *packet) {
+static int proxy_ajp13_forward_request(server *srv, connection *con, proxy_session *sess, buffer *packet) {
 	char buf[32];
 	const char *str;
 	server_socket *srv_sock = con->srv_socket;
@@ -814,6 +814,7 @@ FREE_FUNC(mod_proxy_backend_ajp13_free) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_proxy_backend_ajp13_plugin_init(plugin *p);
 LI_EXPORT int mod_proxy_backend_ajp13_plugin_init(plugin *p) {
 	data_string *ds;
 

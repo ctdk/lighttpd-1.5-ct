@@ -878,7 +878,8 @@ URIHANDLER_FUNC(mod_magnet_handle_response_header) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
-int mod_magnet_plugin_init(plugin *p) {
+LI_EXPORT int mod_magnet_plugin_init(plugin *p);
+LI_EXPORT int mod_magnet_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string(PLUGIN_NAME);
 
@@ -900,7 +901,8 @@ int mod_magnet_plugin_init(plugin *p) {
 }
 
 #else
-int mod_magnet_plugin_init(plugin *p) {
+LI_EXPORT int mod_magnet_plugin_init(plugin *p);
+LI_EXPORT int mod_magnet_plugin_init(plugin *p) {
 	UNUSED(p);
 	return -1;
 }

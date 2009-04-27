@@ -43,7 +43,7 @@
 
 static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_config *p_conf);
 
-int array_insert_int(array *a, const char *key, int val) {
+static int array_insert_int(array *a, const char *key, int val) {
 	data_integer *di;
 
 	if (NULL == (di = (data_integer *)array_get_unused_element(a, TYPE_INTEGER))) {
@@ -57,7 +57,7 @@ int array_insert_int(array *a, const char *key, int val) {
 	return 0;
 }
 
-proxy_protocol *mod_proxy_core_register_protocol(const char *name) {
+static proxy_protocol *mod_proxy_core_register_protocol(const char *name) {
 	proxy_protocol *protocol = proxy_protocol_init();
 
 	protocol->name         = buffer_init_string(name);
@@ -430,7 +430,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 }
 
 
-proxy_session *proxy_session_init(void) {
+static proxy_session *proxy_session_init(void) {
 	proxy_session *sess;
 
 	sess = calloc(1, sizeof(*sess));
@@ -454,7 +454,7 @@ proxy_session *proxy_session_init(void) {
 	return sess;
 }
 
-void proxy_session_reset(proxy_session *sess) {
+static void proxy_session_reset(proxy_session *sess) {
 	if (!sess) return;
 
 	buffer_reset(sess->request_uri);
@@ -491,7 +491,7 @@ void proxy_session_reset(proxy_session *sess) {
 	sess->proxy_backend = NULL;
 }
 
-void proxy_session_free(proxy_session *sess) {
+static void proxy_session_free(proxy_session *sess) {
 	if (!sess) return;
 
 	buffer_free(sess->request_uri);
@@ -510,7 +510,7 @@ void proxy_session_free(proxy_session *sess) {
 /**
  * Copy decoded response content to client connection.
  */
-int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
+static int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
 	chunk *c;
 	int we_have = 0;
 
@@ -544,7 +544,7 @@ int proxy_copy_response(server *srv, connection *con, proxy_session *sess) {
  * Initialize protocol stream.
  *
  */
-int proxy_stream_init(server *srv, proxy_session *sess) {
+static int proxy_stream_init(server *srv, proxy_session *sess) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_init) {
 		return (protocol->proxy_stream_init)(srv, sess->proxy_con);
@@ -556,7 +556,7 @@ int proxy_stream_init(server *srv, proxy_session *sess) {
  * Cleanup protocol state data.
  *
  */
-int proxy_stream_cleanup(server *srv, proxy_session *sess) {
+static int proxy_stream_cleanup(server *srv, proxy_session *sess) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_cleanup) {
 		return (protocol->proxy_stream_cleanup)(srv, sess->proxy_con);
@@ -573,7 +573,7 @@ int proxy_stream_cleanup(server *srv, proxy_session *sess) {
  * @param out chunkqueue for the plain content
  */
 
-handler_t proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *out) {
+static handler_t proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *out) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_decoder) {
 		return (protocol->proxy_stream_decoder)(srv, sess, out);
@@ -587,7 +587,7 @@ handler_t proxy_stream_decoder(server *srv, proxy_session *sess, chunkqueue *out
  *
  * @param in chunkqueue with the content to (no encoding)
  */
-handler_t proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in) {
+static handler_t proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_stream_encoder) {
 		return (protocol->proxy_stream_encoder)(srv, sess, in);
@@ -602,7 +602,7 @@ handler_t proxy_stream_encoder(server *srv, proxy_session *sess, chunkqueue *in)
  * @param in chunkqueue with the content to (no encoding)
  * @param out chunkqueue for the encoded, protocol specific data
  */
-handler_t proxy_encode_request_headers(server *srv, proxy_session *sess, chunkqueue *in) {
+static handler_t proxy_encode_request_headers(server *srv, proxy_session *sess, chunkqueue *in) {
 	proxy_protocol *protocol = (sess->proxy_backend) ? sess->proxy_backend->protocol : NULL;
 	if(protocol && protocol->proxy_encode_request_headers) {
 		/* reset proxy connection queues before we encode a new request.
@@ -620,7 +620,7 @@ handler_t proxy_encode_request_headers(server *srv, proxy_session *sess, chunkqu
 	return HANDLER_ERROR;
 }
 
-handler_t proxy_handle_response_headers(server *srv, connection *con, plugin_data *p,
+static handler_t proxy_handle_response_headers(server *srv, connection *con, plugin_data *p,
 	                                         proxy_session *sess, chunkqueue *out) {
 	int have_content_length = 0;
 	int do_x_rewrite = 0;
@@ -838,7 +838,7 @@ static int proxy_connection_enable_events(server *srv, proxy_connection *proxy_c
  * encode/decode stream data from backend connection.
  *
  */
-handler_t proxy_stream_encode_decode(server *srv, proxy_session *sess) {
+static handler_t proxy_stream_encode_decode(server *srv, proxy_session *sess) {
 	//proxy_connection *proxy_con = sess->proxy_con;
 	connection  *con  = sess->remote_con;
 
@@ -887,7 +887,7 @@ handler_t proxy_stream_encode_decode(server *srv, proxy_session *sess) {
 	return HANDLER_GO_ON;
 }
 
-handler_t proxy_connection_connect(proxy_connection *con) {
+static handler_t proxy_connection_connect(proxy_connection *con) {
 	int fd;
 #ifdef _WIN32
 	int io_ctl = 1;
@@ -1082,7 +1082,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 /**
  * Cleanup backend proxy connection.
  */
-int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
+static int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
 
 	if(!sess->proxy_con) return -1;
 
@@ -1122,7 +1122,7 @@ int proxy_remove_backend_connection(server *srv, proxy_session *sess) {
  * 2. or set the connection idling and wake up a backlogged request.
  *
  */
-int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session *sess) {
+static int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session *sess) {
 	proxy_request *req;
 	int reuse = 1;
 
@@ -1202,7 +1202,7 @@ int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_session 
  *
  * @returns HANDLER_ERROR in case we reach the max-connect-retry limit
  */
-handler_t mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+static handler_t mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	proxy_request *req;
 
 	/* connection pool is full, queue the request for now */
@@ -1226,7 +1226,7 @@ handler_t mod_proxy_core_backlog_connection(server *srv, connection *con, plugin
  * build the request-header array and call the backend specific request formater
  * to fill the chunkqueue
  */
-int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+static int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	/* request line */
 	const char *remote_ip;
 	size_t i;
@@ -1392,7 +1392,7 @@ int proxy_get_request_header(server *srv, connection *con, plugin_data *p, proxy
  * as soon as have read the response header we switch con->file_started and return HANDLER_GO_ON to
  * tell the core we are ready to stream out the content.
  *  */
-handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
+static handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	/* do we have a connection ? */
 
 	if (p->conf.debug > 0)
@@ -1755,7 +1755,7 @@ handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p, proxy
 	return HANDLER_GO_ON;
 }
 
-proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, buffer *name) {
+static proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, buffer *name) {
 	size_t i;
 
 	UNUSED(srv);
@@ -1776,7 +1776,7 @@ proxy_backend *proxy_find_backend(server *srv, connection *con, plugin_data *p, 
  * choose an available backend
  *
  */
-proxy_backend *proxy_backend_balancer(server *srv, connection *con, proxy_session *sess) {
+static proxy_backend *proxy_backend_balancer(server *srv, connection *con, proxy_session *sess) {
 	size_t i;
 	plugin_data *p = sess->p;
 	proxy_backends *backends = p->conf.backends;
@@ -1904,7 +1904,7 @@ proxy_backend *proxy_backend_balancer(server *srv, connection *con, proxy_sessio
  *
  * the backend has different balancers
  */
-proxy_address *proxy_address_balancer(server *srv, connection *con, proxy_session *sess) {
+static proxy_address *proxy_address_balancer(server *srv, connection *con, proxy_session *sess) {
 	size_t i;
 	proxy_backend *backend = sess->proxy_backend;
 	proxy_address_pool *address_pool = backend->address_pool;
@@ -2581,6 +2581,7 @@ TRIGGER_FUNC(mod_proxy_trigger) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_proxy_core_plugin_init(plugin *p);
 LI_EXPORT int mod_proxy_core_plugin_init(plugin *p) {
 	p->version      = LIGHTTPD_VERSION_ID;
 	p->name         = buffer_init_string("mod_proxy_core");

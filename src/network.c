@@ -219,7 +219,7 @@ handler_t network_server_handle_fdevent(void *s, void *context, int revents) {
 	return HANDLER_GO_ON;
 }
 
-int network_server_init(server *srv, buffer *host_token, specific_config *s) {
+static int network_server_init(server *srv, buffer *host_token, specific_config *s) {
 	int val;
 	socklen_t addr_len;
 	server_socket *srv_socket;

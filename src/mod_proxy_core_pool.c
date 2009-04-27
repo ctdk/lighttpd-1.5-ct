@@ -61,7 +61,7 @@ void proxy_connection_pool_free(proxy_connection_pool *pool) {
 	free(pool);
 }
 
-void proxy_connection_pool_add_connection(proxy_connection_pool *pool, proxy_connection *c) {
+static void proxy_connection_pool_add_connection(proxy_connection_pool *pool, proxy_connection *c) {
 	ARRAY_STATIC_PREPARE_APPEND(pool);
 
 	pool->ptr[pool->used++] = c;

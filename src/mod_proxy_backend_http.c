@@ -34,7 +34,7 @@ typedef struct {
 	buffer *buf;
 } protocol_state_data;
 
-protocol_state_data *protocol_state_data_init(void) {
+static protocol_state_data *protocol_state_data_init(void) {
 	protocol_state_data *data;
 
 	data = calloc(1, sizeof(*data));
@@ -44,12 +44,12 @@ protocol_state_data *protocol_state_data_init(void) {
 	return data;
 }
 
-void protocol_state_data_free(protocol_state_data *data) {
+static void protocol_state_data_free(protocol_state_data *data) {
 	buffer_free(data->buf);
 	free(data);
 }
 
-void protocol_state_data_reset(protocol_state_data *data) {
+static void protocol_state_data_reset(protocol_state_data *data) {
 	buffer_reset(data->buf);
 	data->chunk_parse_state = HTTP_CHUNK_LEN;
 }
@@ -401,6 +401,7 @@ FREE_FUNC(mod_proxy_backend_http_free) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_proxy_backend_http_plugin_init(plugin *p);
 LI_EXPORT int mod_proxy_backend_http_plugin_init(plugin *p) {
 	data_string *ds;
 

@@ -184,6 +184,7 @@ URIHANDLER_FUNC(mod_evasive_uri_handler) {
 }
 
 
+LI_EXPORT int mod_evasive_plugin_init(plugin *p);
 LI_EXPORT int mod_evasive_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("evasive");

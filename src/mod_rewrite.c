@@ -317,6 +317,7 @@ URIHANDLER_FUNC(mod_rewrite_uri_handler) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_rewrite_plugin_init(plugin *p);
 LI_EXPORT int mod_rewrite_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("rewrite");

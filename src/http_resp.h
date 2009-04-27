@@ -29,4 +29,10 @@ LI_API void http_response_reset(http_resp *resp);
 
 LI_API parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *http_response);
 
+/* declare prototypes for the parser */
+void *http_resp_parserAlloc(void *(*mallocProc)(size_t));
+void http_resp_parserFree(void *p,  void (*freeProc)(void*));
+void http_resp_parserTrace(FILE *TraceFILE, char *zTracePrompt);
+void http_resp_parser(void *, int, buffer *, http_resp_ctx_t *);
+
 #endif

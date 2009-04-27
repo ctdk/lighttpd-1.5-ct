@@ -26,4 +26,10 @@ LI_API void http_request_range_reset(http_req_range *range);
 
 LI_API parse_status_t http_request_range_parse(buffer *range_hdr, http_req_range *ranges);
 
+/* declare prototypes for the parser */
+void *http_req_range_parserAlloc(void *(*mallocProc)(size_t));
+void http_req_range_parserFree(void *p,  void (*freeProc)(void*));
+void http_req_range_parserTrace(FILE *TraceFILE, char *zTracePrompt);
+void http_req_range_parser(void *, int, buffer *, http_req_range_ctx_t *);
+
 #endif

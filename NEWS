@@ -101,6 +101,7 @@ NEWS
   * merge: Include mmap.h from chunk.h to fix some problems with #define mmap mmap64 (#1923)
   * merge: Fix segfault for appending matched parts if there was no regex matching (just give empty strings) (#1601)
   * merge: fixed wrong result of buffer_caseless_compare("a", "ab") (#1287)
+  * Fix many warnings
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -213,6 +213,7 @@ URIHANDLER_FUNC(mod_access_path_handler) {
 	return HANDLER_GO_ON;
 }
 
+LI_EXPORT int mod_access_plugin_init(plugin *p);
 LI_EXPORT int mod_access_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string(PLUGIN_NAME);

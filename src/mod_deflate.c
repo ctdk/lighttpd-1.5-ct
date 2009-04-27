@@ -1367,7 +1367,7 @@ CONNECTION_FUNC(mod_deflate_handle_filter_response_content) {
 	return ret;
 }
 
-handler_t mod_deflate_cleanup(server *srv, connection *con, void *p_d) {
+static handler_t mod_deflate_cleanup(server *srv, connection *con, void *p_d) {
 	plugin_data *p = p_d;
 	handler_ctx *hctx = con->plugin_ctx[p->id];
 
@@ -1382,7 +1382,8 @@ handler_t mod_deflate_cleanup(server *srv, connection *con, void *p_d) {
 	return HANDLER_GO_ON;
 }
 
-int mod_deflate_plugin_init(plugin *p) {
+LI_EXPORT int mod_deflate_plugin_init(plugin *p);
+LI_EXPORT int mod_deflate_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("deflate");
 	

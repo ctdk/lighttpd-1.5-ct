@@ -556,8 +556,10 @@ handler_t auth_ldap_init(server *srv, mod_auth_plugin_config *s) {
 					return HANDLER_ERROR;
 				}
 
-				const int ldap_version = LDAP_VERSION3;
-				ret = ldap_set_option(s->ldap->ldap, LDAP_OPT_PROTOCOL_VERSION, &ldap_version);
+				{
+					const int ldap_version = LDAP_VERSION3;
+					ret = ldap_set_option(s->ldap->ldap, LDAP_OPT_PROTOCOL_VERSION, &ldap_version);
+				}
 				if (ret != LDAP_OPT_SUCCESS) {
 					log_error_write(srv, __FILE__, __LINE__, "ss", "ldap:", ldap_err2string(ret));
 
@@ -655,6 +657,7 @@ void auth_ldap_cleanup(ldap_plugin_config *p) {
 }
 #endif
 
+LI_EXPORT int mod_auth_plugin_init(plugin *p);
 LI_EXPORT int mod_auth_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("auth");

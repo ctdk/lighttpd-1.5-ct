@@ -158,11 +158,6 @@ int chunk_is_done(chunk *c) {
 	}
 }
 
-void chunkpool_init(void) {
-	/* nothing to do */
-	return;
-}
-
 void chunkpool_free(void) {
 	if (!chunkpool) return;
 

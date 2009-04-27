@@ -358,6 +358,7 @@ URIHANDLER_FUNC(mod_expire_path_handler) {
 
 /* this function is called at dlopen() time and inits the callbacks */
 
+LI_EXPORT int mod_expire_plugin_init(plugin *p);
 LI_EXPORT int mod_expire_plugin_init(plugin *p) {
 	p->version     = LIGHTTPD_VERSION_ID;
 	p->name        = buffer_init_string("expire");

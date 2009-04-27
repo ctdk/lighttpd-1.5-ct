@@ -7,12 +7,6 @@
 #include "http_req_range.h"
 #include "http_req_range_parser.h"
 
-/* declare prototypes for the parser */
-void *http_req_range_parserAlloc(void *(*mallocProc)(size_t));
-void http_req_range_parserFree(void *p,  void (*freeProc)(void*));
-void http_req_range_parserTrace(FILE *TraceFILE, char *zTracePrompt);
-void http_req_range_parser(void *, int, buffer *, http_req_range_ctx_t *);
-
 typedef struct {
 	buffer *hdr;
 	size_t ndx;

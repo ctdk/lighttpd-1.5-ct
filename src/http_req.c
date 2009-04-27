@@ -7,12 +7,6 @@
 #include "http_req.h"
 #include "http_req_parser.h"
 
-/* declare prototypes for the parser */
-void *http_req_parserAlloc(void *(*mallocProc)(size_t));
-void http_req_parserFree(void *p,  void (*freeProc)(void*));
-void http_req_parserTrace(FILE *TraceFILE, char *zTracePrompt);
-void http_req_parser(void *, int, buffer *, http_req_ctx_t *);
-
 typedef struct {
 	chunkqueue *cq;
 

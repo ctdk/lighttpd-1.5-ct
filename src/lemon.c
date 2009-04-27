@@ -19,6 +19,7 @@ extern long strtol();
 extern void free();
 extern int access();
 extern int atoi();
+extern char *getenv();
 
 #ifndef __WIN32__
 #   if defined(_WIN32) || defined(WIN32)
@@ -26,8 +27,8 @@ extern int atoi();
 #   endif
 #endif
 
-/* #define PRIVATE static */
-#define PRIVATE
+#define PRIVATE static
+/* #define PRIVATE */
 
 #ifdef TEST
 #define MAXRHS 5       /* Set low to exercise exception code */
@@ -37,6 +38,8 @@ extern int atoi();
 
 char *msort();
 extern void *malloc();
+
+extern void memory_error();
 
 /******** From the file "action.h" *************************************/
 struct action *Action_new();
@@ -279,7 +282,6 @@ struct lemon {
 };
 
 #define MemoryCheck(X) if((X)==0){ \
-  extern void memory_error(); \
   memory_error(); \
 }
 
@@ -433,14 +435,16 @@ struct acttab {
 #define acttab_yylookahead(X,N)  ((X)->aAction[N].lookahead)
 
 /* Free all memory associated with the given acttab */
-void acttab_free(acttab *p){
+/*
+PRIVATE void acttab_free(acttab *p){
   free( p->aAction );
   free( p->aLookahead );
   free( p );
 }
+*/
 
 /* Allocate a new acttab structure */
-acttab *acttab_alloc(void){
+PRIVATE acttab *acttab_alloc(void){
   acttab *p = malloc( sizeof(*p) );
   if( p==0 ){
     fprintf(stderr,"Unable to allocate memory for a new acttab.");
@@ -452,7 +456,7 @@ acttab *acttab_alloc(void){
 
 /* Add a new action to the current transaction set
 */
-void acttab_action(acttab *p, int lookahead, int action){
+PRIVATE void acttab_action(acttab *p, int lookahead, int action){
   if( p->nLookahead>=p->nLookaheadAlloc ){
     p->nLookaheadAlloc += 25;
     p->aLookahead = realloc( p->aLookahead,
@@ -485,7 +489,7 @@ void acttab_action(acttab *p, int lookahead, int action){
 **
 ** Return the offset into the action table of the new transaction.
 */
-int acttab_insert(acttab *p){
+PRIVATE int acttab_insert(acttab *p){
   int i, j, k, n;
   assert( p->nLookahead>0 );
 
@@ -1326,7 +1330,6 @@ int main(argc,argv)
 int argc;
 char **argv;
 {
-  ( (void) argc ); // UNUSED(argc)
   static int version = 0;
   static int rpflag = 0;
   static int basisflag = 0;
@@ -1347,6 +1350,7 @@ char **argv;
   int i;
   struct lemon lem;
   char *def_tmpl_name = "lempar.c";
+  ( (void) argc ); // UNUSED(argc)
 
   OptInit(argv,options,stderr);
   if( version ){
@@ -2589,7 +2593,7 @@ struct lemon *lemp;
   }
 }
 
-void ConfigPrint(fp,cfp)
+PRIVATE void ConfigPrint(fp,cfp)
 FILE *fp;
 struct config *cfp;
 {
@@ -2643,7 +2647,7 @@ char *tag;
 /* Print an action to the given file descriptor.  Return FALSE if
 ** nothing was actually printed.
 */
-int PrintAction(struct action *ap, FILE *fp, int indent){
+PRIVATE int PrintAction(struct action *ap, FILE *fp, int indent){
   int result = 1;
   switch( ap->type ){
     case SHIFT:
@@ -2727,7 +2731,6 @@ int modemask;
   char *pathlist;
   char *path,*cp;
   char c;
-  extern int access();
 
 #ifdef __WIN32__
   cp = strrchr(argv0,'\\');
@@ -2741,7 +2744,6 @@ int modemask;
     if( path ) sprintf(path,"%s/%s",argv0,name);
     *cp = c;
   }else{
-    extern char *getenv();
     pathlist = getenv("PATH");
     if( pathlist==0 ) pathlist = ".:/bin:/usr/bin";
     path = (char *)malloc( strlen(pathlist)+strlen(name)+2 );
@@ -2880,7 +2882,7 @@ int *lineno;
 ** The following routine emits code for the destructor for the
 ** symbol sp
 */
-void emit_destructor_code(out,sp,lemp,lineno)
+PRIVATE void emit_destructor_code(out,sp,lemp,lineno)
 FILE *out;
 struct symbol *sp;
 struct lemon *lemp;
@@ -2918,7 +2920,7 @@ int *lineno;
 /*
 ** Return TRUE (non-zero) if the given symbol has a destructor.
 */
-int has_destructor(sp, lemp)
+PRIVATE int has_destructor(sp, lemp)
 struct symbol *sp;
 struct lemon *lemp;
 {
@@ -3019,7 +3021,7 @@ int *lineno;
 ** union, also set the ".dtnum" field of every terminal and nonterminal
 ** symbol.
 */
-void print_stack_union(out,lemp,plineno,mhflag)
+PRIVATE void print_stack_union(out,lemp,plineno,mhflag)
 FILE *out;                  /* The output stream */
 struct lemon *lemp;         /* The main info structure for this parser */
 int *plineno;               /* Pointer to the line number */
@@ -3670,7 +3672,6 @@ char *SetNew(){
   int i;
   s = (char*)malloc( global_size );
   if( s==0 ){
-    extern void memory_error();
     memory_error();
   }
   for(i=0; i<global_size; i++) s[i] = 0;

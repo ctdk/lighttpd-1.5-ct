@@ -26,6 +26,19 @@ OPTION(WITH_LIBAIO "with libaio for the linux [default: off]")
 OPTION(WITH_LIBFCGI "with libfcgi for fcgi-stat-accel [default: off]")
 OPTION(WITH_LUA "with lua 5.1 for mod_magnet [default: off]")
 OPTION(WITH_GLIB "with glib support for internal caches [default: on]" ON)
+
+IF(CMAKE_COMPILER_IS_GNUCC)
+	OPTION(BUILD_EXTRA_WARNINGS "extra warnings")
+
+	IF(BUILD_EXTRA_WARNINGS)
+		SET(WARN_FLAGS "-g -O2 -g2 -Wall -Wmissing-declarations -Wdeclaration-after-statement -Wcast-align -Winline -Wsign-compare -Wnested-externs -Wpointer-arith -Wformat-security")
+		# -Wl,--as-needed
+		# -Werror -Wbad-function-cast -Wmissing-prototypes
+	ELSE(BUILD_EXTRA_WARNINGS)
+		SET(WARN_FLAGS "")
+	ENDIF(BUILD_EXTRA_WARNINGS)
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
+
 OPTION(BUILD_STATIC "build a static lighttpd with all modules added")
 IF(BUILD_STATIC)
   SET(LIGHTTPD_STATIC 1)
@@ -592,7 +605,7 @@ IF(HAVE_ZLIB_H)
 ENDIF(HAVE_ZLIB_H)
 
 IF(CMAKE_COMPILER_IS_GNUCC)
-  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -g -Wshadow -W -pedantic")
+  SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 -Wall -g -Wshadow -W -pedantic ${WARN_FLAGS}")
   SET(CMAKE_C_FLAGS_RELEASE        "${CMAKE_C_FLAGS_RELEASE}     -O2")
   SET(CMAKE_C_FLAGS_DEBUG          "${CMAKE_C_FLAGS_DEBUG}       -O0")
   SET(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_WITHDEBINFO} -O2")

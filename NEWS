@@ -102,6 +102,7 @@ NEWS
   * merge: Fix segfault for appending matched parts if there was no regex matching (just give empty strings) (#1601)
   * merge: fixed wrong result of buffer_caseless_compare("a", "ab") (#1287)
   * Fix many warnings
+  * Fix SERVER_NAME port stripping (fixes #1968)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

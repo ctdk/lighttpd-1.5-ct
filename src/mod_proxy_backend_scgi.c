@@ -43,9 +43,10 @@ static int scgi_env_add(buffer *env, const char *key, size_t key_len, const char
 
 	buffer_prepare_append(env, len);
 
-	/* include the NUL */
-	buffer_append_memory(env, key, key_len + 1);
-	buffer_append_memory(env, val, val_len + 1);
+	buffer_append_memory(env, key, key_len);
+	env->ptr[env->used++] = '\0';
+	buffer_append_memory(env, val, val_len);
+	env->ptr[env->used++] = '\0';
 
 	return 0;
 }

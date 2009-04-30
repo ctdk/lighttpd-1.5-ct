@@ -1,6 +1,8 @@
 #ifndef _HTTP_RESP_H_
 #define _HTTP_RESP_H_
 
+#include <stdio.h>
+
 #include "buffer.h"
 #include "array.h"
 #include "array-static.h"

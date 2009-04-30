@@ -1,6 +1,8 @@
 #ifndef _HTTP_REQ_RANGE_H_
 #define _HTTP_REQ_RANGE_H_
 
+#include <stdio.h>
+
 #include "array.h"
 #include "chunk.h"
 #include "http_parser.h"

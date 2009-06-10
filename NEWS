@@ -108,6 +108,7 @@ NEWS
   * Allow using pcre with cross-compiling (pcre-config got fixed; fixes #1986)
   * Fix segfault with openssl (DoS, fixes #2003)
   * Improve chunkqueue cleanup (remove empty chunks after ssl failures)
+  * Add "lighty.req_env" table to mod_magnet for setting/getting environment values for cgi (fixes #1967, thx presbrey)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

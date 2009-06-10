@@ -67,6 +67,7 @@ FREE_FUNC(mod_ssi_free) {
 			plugin_config *s = p->config_storage[i];
 
 			array_free(s->ssi_extension);
+			buffer_free(s->content_type);
 
 			free(s);
 		}
@@ -98,6 +99,7 @@ SETDEFAULTS_FUNC(mod_ssi_set_defaults) {
 
 	config_values_t cv[] = {
 		{ "ssi.extension",              NULL, T_CONFIG_ARRAY, T_CONFIG_SCOPE_CONNECTION },       /* 0 */
+		{ "ssi.content-type",           NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_CONNECTION },      /* 1 */
 		{ NULL,                         NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -110,8 +112,10 @@ SETDEFAULTS_FUNC(mod_ssi_set_defaults) {
 
 		s = calloc(1, sizeof(plugin_config));
 		s->ssi_extension  = array_init();
+		s->content_type = buffer_init();
 
 		cv[0].destination = s->ssi_extension;
+		cv[1].destination = s->content_type;
 
 		p->config_storage[i] = s;
 
@@ -1002,7 +1006,11 @@ static int mod_ssi_handle_request(server *srv, connection *con, plugin_data *p) 
 	con->file_started  = 1;
 	con->send->is_closed = 1;
 
-	response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
+	if (p->conf.content_type->used <= 1) {
+		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
+	} else {
+		response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(p->conf.content_type));
+	}
 
 	/* reset physical.path */
 	buffer_reset(con->physical.path);
@@ -1015,6 +1023,7 @@ static int mod_ssi_patch_connection(server *srv, connection *con, plugin_data *p
 	plugin_config *s = p->config_storage[0];
 
 	PATCH_OPTION(ssi_extension);
+	PATCH_OPTION(content_type);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -1030,6 +1039,8 @@ static int mod_ssi_patch_connection(server *srv, connection *con, plugin_data *p
 
 			if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssi.extension"))) {
 				PATCH_OPTION(ssi_extension);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssi.content-type"))) {
+				PATCH_OPTION(content_type);
 			}
 		}
 	}

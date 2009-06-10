@@ -109,6 +109,7 @@ NEWS
   * Fix segfault with openssl (DoS, fixes #2003)
   * Improve chunkqueue cleanup (remove empty chunks after ssl failures)
   * Add "lighty.req_env" table to mod_magnet for setting/getting environment values for cgi (fixes #1967, thx presbrey)
+  * Fix segfault in mod_expire after failed config parsing (fixes #1992)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

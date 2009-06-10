@@ -32,6 +32,7 @@ CONFS=fastcgi-10.conf \
       mod-auth.t \
       mod-cgi.t \
       mod-compress.t \
+      mod-compress.conf \
       fastcgi.t \
       mod-redirect.t \
       mod-userdir.t \

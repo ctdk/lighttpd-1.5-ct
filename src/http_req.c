@@ -274,7 +274,7 @@ parse_status_t http_request_parse_cq(chunkqueue *cq, http_req *req) {
 			
 			for (c = cq->first; c; c = c->next) {
 				if (c == cq->first) {
-					buffer_append_string_len(hdr, c->mem->ptr + t.c->offset, c->mem->used - 1 - t.c->offset);
+					buffer_append_string_len(hdr, c->mem->ptr + c->offset, c->mem->used - 1 - c->offset);
 				} else {
 					buffer_append_string_buffer(hdr, c->mem);
 				}

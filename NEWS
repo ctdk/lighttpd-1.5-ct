@@ -106,6 +106,7 @@ NEWS
   * Fix mod_cgi environment keys mangling (fixes #1969)
   * Fix max-age value in mod_expire for 'modification' (fixes #1978)
   * Allow using pcre with cross-compiling (pcre-config got fixed; fixes #1986)
+  * Fix segfault with openssl (DoS, fixes #2003)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

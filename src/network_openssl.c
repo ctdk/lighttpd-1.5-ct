@@ -58,10 +58,10 @@ NETWORK_BACKEND_READ(openssl) {
 			int r, ssl_err;
 
 			oerrno = errno; /* store the errno for SSL_ERROR_SYSCALL */
+			chunkqueue_remove_empty_last_chunk(cq);
 
 			switch ((r = SSL_get_error(sock->ssl, len))) {
 			case SSL_ERROR_WANT_READ:
-				chunkqueue_remove_empty_last_chunk(cq);
 				return read_something ? NETWORK_STATUS_SUCCESS : NETWORK_STATUS_WAIT_FOR_EVENT;
 			case SSL_ERROR_SYSCALL:
 				/**

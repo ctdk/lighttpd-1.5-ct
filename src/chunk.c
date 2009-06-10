@@ -683,28 +683,23 @@ void chunkqueue_remove_empty_last_chunk(chunkqueue *cq) {
 	if (!cq->last) return;
 	if (!cq->first) return;
 
+	if (cq->last->type != MEM_CHUNK || cq->last->mem->used != 0) return;
+
 	if (cq->first == cq->last) {
 		c = cq->first;
 
-		if (c->type != MEM_CHUNK) return;
-		if (c->mem->used == 0) {
-			chunk_free(c);
-			cq->first = cq->last = NULL;
-		}
-		return;
-	}
+		chunk_free(c);
+		cq->first = cq->last = NULL;
+	} else {
+		for (c = cq->first; c->next; c = c->next) {
+			if (c->next == cq->last) {
+				cq->last = c;
 
-	for (c = cq->first; c->next; c = c->next) {
-		if (c->type != MEM_CHUNK) continue;
-		if (c->mem->used != 0) continue;
+				chunk_free(c->next);
+				c->next = NULL;
 
-		if (c->next == cq->last) {
-			cq->last = c;
-
-			chunk_free(c->next);
-			c->next = NULL;
-
-			return;
+				return;
+			}
 		}
 	}
 }

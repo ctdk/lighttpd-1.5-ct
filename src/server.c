@@ -551,6 +551,8 @@ static GCond  *joblist_queue_cond = NULL;
 static void *joblist_queue_thread(void *_data) {
 	server *srv = _data;
 
+	g_mutex_lock(joblist_queue_mutex);
+
 	while (!srv_shutdown) {
 		GTimeVal ts;
 		connection *con;
@@ -558,11 +560,8 @@ static void *joblist_queue_thread(void *_data) {
 		g_cond_wait(joblist_queue_cond, joblist_queue_mutex);
 		/* wait for getting signaled */
 
-		if (srv_shutdown) {
-			g_mutex_unlock(joblist_queue_mutex);
-
+		if (srv_shutdown)
 			break;
-		}
 
 		/* wait one second as the poll() */
 		g_get_current_time(&ts);
@@ -585,9 +584,9 @@ static void *joblist_queue_thread(void *_data) {
 			/* interrupt the poll() */
 			if (killme) write(srv->wakeup_pipe[1], " ", 1);
 		}
-
-		g_mutex_unlock(joblist_queue_mutex);
 	}
+
+	g_mutex_unlock(joblist_queue_mutex);
 
 	return NULL;
 }

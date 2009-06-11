@@ -121,6 +121,9 @@ gpointer stat_cache_thread(gpointer _srv) {
 		g_time_val_add(&ts, 500 * 1000); 
 
 		if ((sj = g_async_queue_timed_pop(inq, &ts))) {
+			if(sj == (stat_job *) 1)
+				continue; /* just notifying us that srv->is_shutdown changed */
+
 			/* don't care about the return code for now */
 			stat(sj->name->ptr, &st);
 

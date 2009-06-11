@@ -894,6 +894,7 @@ static int lighty_mainloop(server *srv) {
 			/* we are in graceful shutdown phase and all connections are closed
 			 * we are ready to terminate without harming anyone */
 			srv_shutdown = 1;
+			continue;
 		}
 
 		/* we still have some fds to share */
@@ -1851,6 +1852,10 @@ int main (int argc, char **argv, char **envp) {
 	}
 
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
+                g_async_queue_push(srv->stat_queue, (void *) 1);
+	}
+
+	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
 		g_thread_join(stat_cache_threads[i]);
 	}
 
@@ -1860,7 +1865,10 @@ int main (int argc, char **argv, char **envp) {
 	g_mutex_unlock(joblist_queue_mutex);
 	g_cond_signal(joblist_queue_cond);
 
-	if (joblist_queue_thread_id) g_thread_join(joblist_queue_thread_id);
+	if (joblist_queue_thread_id) {
+		g_async_queue_push(srv->joblist_queue, (void *) 1);
+		g_thread_join(joblist_queue_thread_id);
+	}
 
 #if 0
 	g_mutex_lock(joblist_queue_mutex);

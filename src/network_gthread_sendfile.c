@@ -99,10 +99,15 @@ gpointer network_gthread_sendfile_read_thread(gpointer _srv) {
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
-			chunk *c = wj->c;
-			connection *con = wj->con;
+			chunk *c;
+			connection *con;
 			off_t max_toSend = 512 kByte; /** should be larger than the send buffer */
 
+			if(wj == (write_job *) 1)
+				continue; /* just notifying us that srv->is_shutdown changed */
+
+			c = wj->c;
+			con = wj->con;
 			offset = c->file.start + c->offset;
 
 			toSend = c->file.length - c->offset > max_toSend ?

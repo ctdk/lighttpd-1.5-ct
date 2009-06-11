@@ -111,13 +111,19 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
-			chunk *c = wj->c;
-			connection *con = wj->con;
+			chunk *c;
+			connection *con;
 			off_t max_toSend = 64 kByte; /** should be larger than the send buffer */
 
 			int fadvise_fd = 0;
 			off_t fadvise_offset = 0;
 			off_t fadvise_len = 0;
+
+			if(wj == (write_job *) 1)
+				continue; /* just notifying us that srv->is_shutdown changed */
+
+			c = wj->c;
+			con = wj->con;
 
 #if 0
 			/* try to be adaptive */

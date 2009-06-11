@@ -84,7 +84,7 @@ static void timing_print(server *srv, connection *con) {
 }
 
 gpointer network_gthread_aio_read_thread(gpointer _srv) {
-        server *srv = (server *)_srv;
+	server *srv = (server *)_srv;
 
 	GAsyncQueue * inq;
 	GAsyncQueue * outq;
@@ -100,7 +100,7 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 	/* */
 	while (!srv->is_shutdown) {
 		GTimeVal ts;
-        	write_job *wj = NULL;
+		write_job *wj = NULL;
 
 		/* wait one second as the poll() */
 		g_get_current_time(&ts);
@@ -206,13 +206,13 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 				fadvise_fd     = c->file.fd;
 				fadvise_offset = c->file.start  + c->offset + c->file.copy.length;
 				fadvise_len    = c->file.length - c->offset - c->file.copy.length;
-			       
+
 				if (fadvise_len > max_toSend) {
 					fadvise_len = max_toSend;
 				}
 			}
 			timing_log(srv, con, TIME_SEND_ASYNC_READ_END_QUEUED);
-			/* read async, write as usual */ 
+			/* read async, write as usual */
 			g_async_queue_push(outq, wj->con);
 
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
@@ -232,7 +232,7 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 			write_job_free(wj);
 		}
 	}
-	
+
 	g_async_queue_unref(srv->aio_write_queue);
 	g_async_queue_unref(srv->joblist_queue);
 
@@ -321,10 +321,10 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 				/* we small files don't take the overhead of a full async-loop */
 				if (toSend < 4 * 1024) {
-			
+
 					c->file.copy.offset = 0;
 					c->file.copy.length = toSend;
-			
+
 					/* open a file in /dev/shm to write to */
 					if (c->file.mmap.start == MAP_FAILED) {
 #if defined(HAVE_MEM_MMAP_ZERO)
@@ -341,7 +341,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 						} else {
 							c->file.mmap.offset = 0;
 							c->file.mmap.length = c->file.copy.length; /* align to page-size */
-				
+
 							c->file.mmap.start = mmap(0, c->file.mmap.length,
 									PROT_READ | PROT_WRITE, MAP_SHARED, mmap_fd, 0);
 							if (c->file.mmap.start == MAP_FAILED) {
@@ -349,7 +349,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 
 								return NETWORK_STATUS_FATAL_ERROR;
 							}
-				
+
 							close(mmap_fd);
 							mmap_fd = -1;
 						}
@@ -372,12 +372,12 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 					
 					if (c->file.mmap.start != MAP_FAILED) {
 						lseek(c->file.fd, c->file.start + c->offset, SEEK_SET);
-			
+
 						if (-1 == (r = read(c->file.fd, c->file.mmap.start, c->file.copy.length))) {
 							switch(errno) {
 							default:
 								ERROR("reading file failed: %d (%s)", errno, strerror(errno));
-			
+
 								return NETWORK_STATUS_FATAL_ERROR;
 							}
 						} else if (r == 0) {
@@ -386,7 +386,7 @@ NETWORK_BACKEND_WRITE(gthreadaio) {
 							return NETWORK_STATUS_FATAL_ERROR;
 						} else if (r != c->file.copy.length) {
 							ERROR("read() returned %zd instead of %jd", r, (intmax_t) c->file.copy.length);
-			
+
 							return NETWORK_STATUS_FATAL_ERROR;
 						}
 					} else {

@@ -3,7 +3,7 @@
  */
 #include "settings.h"
 #include "network_backends.h"
-#if defined(USE_GTHREAD_SENDFILE)
+#if defined(USE_GTHREAD_FREEBSD_SENDFILE)
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef HAVE_SYS_TIME_H
@@ -73,7 +73,7 @@ static void timing_print(server *srv, connection *con) {
  * a backend which calls sendfile() in a thread
  */
 
-gpointer network_gthread_sendfile_read_thread(gpointer _srv) {
+gpointer network_gthread_freebsd_sendfile_read_thread(gpointer _srv) {
 	server *srv = (server *)_srv;
 
 	GAsyncQueue * inq;
@@ -99,10 +99,15 @@ gpointer network_gthread_sendfile_read_thread(gpointer _srv) {
 			ssize_t r;
 			off_t offset;
 			size_t toSend;
-			chunk *c = wj->c;
-			connection *con = wj->con;
+			chunk *c;
+			connection *con;
 			off_t max_toSend = 512 kByte; /** should be larger than the send buffer */
 
+			if(wj == (write_job *) 1)
+				continue; /* just notifying us that srv->is_shutdown changed */
+
+			c = wj->c;
+			con = wj->con;
 			offset = c->file.start + c->offset;
 
 			toSend = c->file.length - c->offset > max_toSend ?
@@ -110,20 +115,15 @@ gpointer network_gthread_sendfile_read_thread(gpointer _srv) {
 
 			timing_log(srv, con, TIME_SEND_ASYNC_READ_START);
 
-			if (-1 == (r = sendfile(wj->sock_fd, c->file.fd, &offset, toSend))) {
+			r = 0;
+			if (-1 == sendfile(c->file.fd, wj->sock_fd, offset, toSend, NULL, &r, 0)) {
 				switch (errno) {
 				case EAGAIN:
 				case EINTR:
 					c->async.ret_val = NETWORK_STATUS_WAIT_FOR_EVENT;
 					break;
-				case EPIPE:
-				case ECONNRESET:
+				case ENOTCONN:
 					c->async.ret_val = NETWORK_STATUS_CONNECTION_CLOSE;
-					break;
-				case ENOSYS:
-					ERROR("sendfile(%s) is not implemented, use server.network-backend = \"writev\"",
-						SAFE_BUF_STR(c->file.name));
-					c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 					break;
 				default:
 					ERROR("sendfile(%s) failed: %s (%d)",
@@ -156,7 +156,7 @@ gpointer network_gthread_sendfile_read_thread(gpointer _srv) {
 }
 
 
-NETWORK_BACKEND_WRITE(gthreadsendfile) {
+NETWORK_BACKEND_WRITE(gthreadfreebsdsendfile) {
 	chunk *c, *tc;
 	size_t chunks_written = 0;
 
@@ -256,11 +256,8 @@ NETWORK_BACKEND_WRITE(gthreadsendfile) {
 
 			break;
 		}
-		default:
-
-			log_error_write(srv, __FILE__, __LINE__, "ds", c, "type not known");
-
-			return NETWORK_STATUS_FATAL_ERROR;
+		case UNUSED_CHUNK:
+			continue;
 		}
 
 		if (!chunk_finished) {
@@ -274,3 +271,4 @@ NETWORK_BACKEND_WRITE(gthreadsendfile) {
 }
 
 #endif
+

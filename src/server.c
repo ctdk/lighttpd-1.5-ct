@@ -1745,6 +1745,20 @@ int main (int argc, char **argv, char **envp) {
 		need_joblist_queue_thread = 1;
 		break;
 #endif
+#ifdef USE_GTHREAD_FREEBSD_SENDFILE
+	case NETWORK_BACKEND_GTHREAD_FREEBSD_SENDFILE:
+		aio_write_threads = calloc(srv->srvconf.max_read_threads, sizeof(*aio_write_threads));
+		for (i = 0; i < srv->srvconf.max_read_threads; i++) {
+			aio_write_threads[i] = g_thread_create_full(network_gthread_freebsd_sendfile_read_thread, srv, LI_THREAD_STACK_SIZE, 1, TRUE, G_THREAD_PRIORITY_NORMAL, &gerr);
+			if (gerr) {
+				ERROR("g_thread_create failed: %s", gerr->message);
+
+				return -1;
+			}
+		}
+		need_joblist_queue_thread = 1;
+		break;
+#endif
 #ifdef USE_POSIX_AIO
 	case NETWORK_BACKEND_POSIX_AIO:
 		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));

@@ -13,6 +13,7 @@ LI_EXPORT buffer * config_get_value_buffer(server *srv, connection *con, config_
 gpointer stat_cache_thread(gpointer );
 gpointer network_gthread_aio_read_thread(gpointer );
 gpointer network_gthread_sendfile_read_thread(gpointer );
+gpointer network_gthread_freebsd_sendfile_read_thread(gpointer );
 gpointer linux_aio_read_thread(gpointer );
 #endif
 

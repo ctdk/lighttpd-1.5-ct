@@ -118,6 +118,7 @@ NEWS
   * Fix 100% cpu usage if time() < 0 (thx to gaspa and cate, fixes #1964)
   * Free wakeup_iosocket (thx peto, fixes #1808)
   * Free ssl cipher list (thx peto, fixes #1809)
+  * Add gthread-freebsd-sendfile (thx peto, fixes #1795)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

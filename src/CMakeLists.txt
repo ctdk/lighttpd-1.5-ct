@@ -456,6 +456,7 @@ SET(COMMON_SRC
       network_posix_aio.c
       network_gthread_aio.c
       network_gthread_sendfile.c
+      network_gthread_freebsd_sendfile.c
       http_resp.c
       http_resp_parser.c
       http_req.c

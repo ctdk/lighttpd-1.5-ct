@@ -103,6 +103,17 @@ static network_backend_info_t network_backends[] = {
 	},
 
 	{
+		NETWORK_BACKEND_GTHREAD_FREEBSD_SENDFILE,
+		"gthread-freebsd-sendfile",
+		NULL,
+#if defined USE_WRITE && defined USE_GTHREAD_AIO && defined USE_GTHREAD_FREEBSD_SENDFILE
+		BACKEND_HANDLERS(read, gthreadfreebsdsendfile)
+#else
+		NULL, NULL
+#endif
+	},
+
+	{
 		NETWORK_BACKEND_WRITEV,
 		"writev",
 		NULL,

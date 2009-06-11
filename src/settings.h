@@ -72,6 +72,11 @@
 # include <sys/uio.h>
 #endif
 
+#if defined(USE_FREEBSD_SENDFILE) && defined(USE_GTHREAD)
+#  define USE_GTHREAD_FREEBSD_SENDFILE
+#endif
+
+
 #if defined HAVE_SYS_SENDFILE_H && defined HAVE_SENDFILEV && defined HAVE_WRITEV && defined(__sun)
 # define USE_SOLARIS_SENDFILEV
 # include <sys/sendfile.h>

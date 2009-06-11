@@ -309,6 +309,11 @@ static void server_free(server *srv) {
 	CLEAN(tmp_chunk_len);
 #undef CLEAN
 
+#ifdef USE_GTHREAD
+	fdevent_unregister(srv->ev, srv->wakeup_iosocket);
+	iosocket_free(srv->wakeup_iosocket);
+#endif
+
 #if 0
 	fdevent_unregister(srv->ev, srv->fd);
 #endif

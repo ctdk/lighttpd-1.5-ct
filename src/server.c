@@ -335,6 +335,7 @@ static void server_free(server *srv) {
 			buffer_free(s->error_handler);
 			buffer_free(s->errorfile_prefix);
 			array_free(s->mimetypes);
+			buffer_free(s->ssl_cipher_list);
 
 			free(s);
 		}

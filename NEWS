@@ -113,6 +113,7 @@ NEWS
   * Add ssi.content-type option (default text/html, fixes #615)
   * Fix distbuild (add mod-compress.conf to dist files)
   * Add support for "real" entropy from /dev/[u]random (fixes #1977)
+  * Adding support for additional chars in LDAP usernames (fixes #1941)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

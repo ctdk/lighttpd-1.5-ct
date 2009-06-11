@@ -261,6 +261,15 @@ EOF
 $t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 400 } ];
 ok($tf->handle_http($t) == 0, 'Duplicate Content-Length headers');
 
+$t->{REQUEST}  = ( <<EOF
+GET / HTTP/1.0
+If-None-Match: 5
+If-None-Match: 4
+EOF
+ );
+$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 200 } ];
+ok($tf->handle_http($t) == 0, 'Duplicate If-None-Match headers');
+
 TODO: {
   local $TODO = "Duplicate checks are broken for now, ignore them";
 $t->{REQUEST}  = ( <<EOF
@@ -280,15 +289,6 @@ EOF
  );
 $t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 400 } ];
 ok($tf->handle_http($t) == 0, 'Duplicate Range headers');
-
-$t->{REQUEST}  = ( <<EOF
-GET / HTTP/1.0
-If-None-Match: 5
-If-None-Match: 4
-EOF
- );
-$t->{RESPONSE} = [ { 'HTTP-Protocol' => 'HTTP/1.0', 'HTTP-Status' => 400 } ];
-ok($tf->handle_http($t) == 0, 'Duplicate If-None-Match headers');
 
 $t->{REQUEST}  = ( <<EOF
 GET / HTTP/1.0

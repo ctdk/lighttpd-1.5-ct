@@ -620,6 +620,7 @@ static handler_t connection_handle_read_request_header(server *srv, connection *
 		return HANDLER_WAIT_FOR_EVENT;
 	case NETWORK_STATUS_CONNECTION_CLOSE:
 		/* the connection went away before we got something back */
+		con->close_timeout_ts = srv->cur_ts - 2;
 		connection_set_state(srv, con, CON_STATE_CLOSE);
 
 		return HANDLER_GO_ON;
@@ -688,6 +689,7 @@ static handler_t connection_handle_read_request_content(server *srv, connection 
 			return HANDLER_WAIT_FOR_EVENT;
 		case NETWORK_STATUS_CONNECTION_CLOSE:
 			/* the connection went away before we got something back */
+			con->close_timeout_ts = srv->cur_ts - 2;
 			connection_set_state(srv, con, CON_STATE_CLOSE);
 
 			return HANDLER_GO_ON;
@@ -1471,10 +1473,10 @@ void connection_state_machine(server *srv, connection *con) {
 				} else {
 					/* nothing to read */
 
-					con->close_timeout_ts = 0;
+					con->close_timeout_ts = srv->cur_ts - 2;
 				}
 			} else {
-				con->close_timeout_ts = 0;
+				con->close_timeout_ts = srv->cur_ts - 2;
 			}
 
 			if (srv->cur_ts - con->close_timeout_ts > 1) {

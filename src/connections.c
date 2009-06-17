@@ -296,7 +296,12 @@ static int connection_handle_response_header(server *srv, connection *con) {
 				chunkqueue_append_file(con->send, con->physical.path, 0, sce->st.st_size);
 				con->send->bytes_in += sce->st.st_size;
 				con->send->is_closed = 1;
-				response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(sce->content_type));
+				if (buffer_is_empty(sce->content_type)) {
+					/* for error docs default to html instead of application-data */
+					response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_STR_LEN("text/html"));
+				} else {
+					response_header_overwrite(srv, con, CONST_STR_LEN("Content-Type"), CONST_BUF_LEN(sce->content_type));
+				}
 			}
 		}
 

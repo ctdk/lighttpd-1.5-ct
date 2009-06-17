@@ -121,6 +121,7 @@ NEWS
   * Add gthread-freebsd-sendfile (thx peto, fixes #1795)
   * Send gthread dummy pointers to wake them up for faster exit (thx peto, fixes #1812)
   * Fix race condition with joblist thread condition/mutex (thx peto, fixes #1823)
+  * Fix segfault if there is no mimetype for the error documents
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

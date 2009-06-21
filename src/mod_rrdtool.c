@@ -129,20 +129,16 @@ static int mod_rrd_create_pipe(server *srv, plugin_data *p) {
 		char *dash = "-";
 
 		/* move stdout to from_rrdtool_fd[1] */
-		close(STDOUT_FILENO);
 		dup2(from_rrdtool_fds[1], STDOUT_FILENO);
 		close(from_rrdtool_fds[1]);
 		/* not needed */
 		close(from_rrdtool_fds[0]);
 
 		/* move the stdin to to_rrdtool_fd[0] */
-		close(STDIN_FILENO);
 		dup2(to_rrdtool_fds[0], STDIN_FILENO);
 		close(to_rrdtool_fds[0]);
 		/* not needed */
 		close(to_rrdtool_fds[1]);
-
-		close(STDERR_FILENO);
 
 		/* set up args */
 		argc = 3;

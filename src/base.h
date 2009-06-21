@@ -551,6 +551,7 @@ typedef struct {
 
 	buffer *errorlog_file;
 	unsigned short errorlog_use_syslog;
+	buffer *breakagelog_file;
 
 	unsigned short max_stat_threads;
 	unsigned short max_read_threads;

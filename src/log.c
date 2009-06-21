@@ -41,6 +41,29 @@
 # define O_LARGEFILE 0
 #endif
 
+/* Close fd and _try_ to get a /dev/null for it instead.
+ * close() alone may trigger some bugs when a
+ * process opens another file and gets fd = STDOUT_FILENO or STDERR_FILENO
+ * and later tries to just print on stdout/stderr
+ *
+ * Returns 0 on success and -1 on failure (fd gets closed in all cases)
+ */
+int openDevNull(int fd) {
+	int tmpfd;
+	close(fd);
+#if defined(__WIN32)
+	/* Cygwin should work with /dev/null */
+	tmpfd = open("nul", O_RDWR);
+#else
+	tmpfd = open("/dev/null", O_RDWR);
+#endif
+	if (tmpfd != -1 && tmpfd != fd) {
+		dup2(tmpfd, fd);
+		close(tmpfd);
+	}
+	return (tmpfd != -1) ? 0 : -1;
+}
+
 /**
  * open the errorlog
  *
@@ -60,7 +83,7 @@ typedef struct {
 
 	/* the errorlog */
 	int fd;
-	enum { ERRORLOG_STDERR, ERRORLOG_FILE, ERRORLOG_SYSLOG } mode;
+	enum { ERRORLOG_FILE, ERRORLOG_FD, ERRORLOG_SYSLOG } mode;
 	buffer *buf;
 
 	time_t cached_ts;
@@ -75,8 +98,8 @@ void log_init(void) {
 
 	err = calloc(1, sizeof(*err));
 
-	err->fd = -1;
-	err->mode = ERRORLOG_STDERR;
+	err->fd = STDERR_FILENO;
+	err->mode = ERRORLOG_FD;
 	err->buf = buffer_init();
 	err->cached_ts_str = buffer_init();
 
@@ -90,14 +113,17 @@ void log_free(void) {
 
 	switch(err->mode) {
 	case ERRORLOG_FILE:
-		close(err->fd);
+	case ERRORLOG_FD:
+		if (-1 != err->fd) {
+			if (STDERR_FILENO != err->fd)
+				close(err->fd);
+			err->fd = -1;
+		}
 		break;
 	case ERRORLOG_SYSLOG:
 #ifdef HAVE_SYSLOG_H
 		closelog();
 #endif
-		break;
-	case ERRORLOG_STDERR:
 		break;
 	}
 
@@ -109,17 +135,15 @@ void log_free(void) {
 	myconfig = NULL;
 }
 
-int log_error_open(buffer *file, int use_syslog) {
-	int fd;
-	int close_stderr = 1;
-
+int log_error_open(buffer *file, buffer *breakage_file, int use_syslog, int dont_daemonize) {
 	errorlog *err = myconfig;
 
 #ifdef HAVE_SYSLOG_H
 	/* perhaps someone wants to use syslog() */
 	openlog("lighttpd", LOG_CONS | LOG_PID, LOG_DAEMON);
 #endif
-	err->mode = ERRORLOG_STDERR;
+	err->mode = ERRORLOG_FD;
+	err->fd = STDERR_FILENO;
 
 	if (use_syslog) {
 		err->mode = ERRORLOG_SYSLOG;
@@ -141,17 +165,39 @@ int log_error_open(buffer *file, int use_syslog) {
 
 	TRACE("%s", "server started");
 
-	/* don't close stderr for debugging purposes if run in valgrind */
-	if (RUNNING_ON_VALGRIND) close_stderr = 0;
-	if (err->mode == ERRORLOG_STDERR) close_stderr = 0;
-
-	/* move stderr to /dev/null */
-	if (close_stderr &&
-	    -1 != (fd = open("/dev/null", O_WRONLY))) {
-		close(STDERR_FILENO);
-		dup2(fd, STDERR_FILENO);
-		close(fd);
+	if (err->mode == ERRORLOG_FD && !dont_daemonize) {
+		/* We can only log to stderr in dont-daemonize mode */
+		err->fd = -1;
 	}
+
+	if (!buffer_is_empty(breakage_file)) {
+		int breakage_fd;
+
+		if (err->mode == ERRORLOG_FD) {
+			err->fd = dup(STDERR_FILENO);
+#ifdef FD_CLOEXEC
+			fcntl(err->fd, F_SETFD, FD_CLOEXEC);
+#endif
+		}
+
+		if (-1 == (breakage_fd = open(breakage_file->ptr, O_APPEND | O_WRONLY | O_CREAT | O_LARGEFILE, 0644))) {
+			log_error_write(NULL, __FILE__, __LINE__, "SBSS",
+					"opening breakagelog '", breakage_file,
+					"' failed: ", strerror(errno));
+
+			return -1;
+		}
+
+		if (STDERR_FILENO != breakage_fd) {
+			dup2(breakage_fd, STDERR_FILENO);
+			close(breakage_fd);
+		}
+	} else if (!dont_daemonize) {
+		/* move stderr to /dev/null */
+		openDevNull(STDERR_FILENO);
+	}
+
+
 	return 0;
 }
 
@@ -206,7 +252,8 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 
 	switch(err->mode) {
 	case ERRORLOG_FILE:
-	case ERRORLOG_STDERR:
+	case ERRORLOG_FD:
+		if (-1 == err->fd) return 0;
 		/* cache the generated timestamp */
 		t = time(NULL);
 
@@ -290,12 +337,9 @@ int log_error_write(void *srv, const char *filename, unsigned int line, const ch
 
 	switch(err->mode) {
 	case ERRORLOG_FILE:
+	case ERRORLOG_FD:
 		buffer_append_string_len(err->buf, CONST_STR_LEN("\n"));
 		write(err->fd, err->buf->ptr, err->buf->used - 1);
-		break;
-	case ERRORLOG_STDERR:
-		buffer_append_string_len(err->buf, CONST_STR_LEN("\n"));
-		write(STDERR_FILENO, err->buf->ptr, err->buf->used - 1);
 		break;
 #ifdef HAVE_SYSLOG_H
 	case ERRORLOG_SYSLOG:
@@ -320,7 +364,8 @@ int log_trace(const char *fmt, ...) {
 
 	switch(err->mode) {
 	case ERRORLOG_FILE:
-	case ERRORLOG_STDERR:
+	case ERRORLOG_FD:
+		if (-1 == err->fd) return 0;
 		/* cache the generated timestamp */
 		t = time(NULL);
 
@@ -384,12 +429,9 @@ int log_trace(const char *fmt, ...) {
 	/* write b */
 	switch(err->mode) {
 	case ERRORLOG_FILE:
+	case ERRORLOG_FD:
 		buffer_append_string_len(b, CONST_STR_LEN("\n"));
 		write(err->fd, b->ptr, b->used - 1);
-		break;
-	case ERRORLOG_STDERR:
-		buffer_append_string_len(b, CONST_STR_LEN("\n"));
-		write(STDERR_FILENO, b->ptr, b->used - 1);
 		break;
 #ifdef HAVE_SYSLOG_H
 	case ERRORLOG_SYSLOG:

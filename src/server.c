@@ -203,6 +203,7 @@ static server *server_init(void) {
 	CLEAN(cond_check_buf);
 
 	CLEAN(srvconf.errorlog_file);
+	CLEAN(srvconf.breakagelog_file);
 	CLEAN(srvconf.groupname);
 	CLEAN(srvconf.username);
 	CLEAN(srvconf.changeroot);
@@ -297,6 +298,7 @@ static void server_free(server *srv) {
 	CLEAN(cond_check_buf);
 
 	CLEAN(srvconf.errorlog_file);
+	CLEAN(srvconf.breakagelog_file);
 	CLEAN(srvconf.groupname);
 	CLEAN(srvconf.username);
 	CLEAN(srvconf.changeroot);
@@ -1536,7 +1538,7 @@ int main (int argc, char **argv, char **envp) {
 		return -1;
 	}
 
-	if (-1 == log_error_open(srv->srvconf.errorlog_file, srv->srvconf.errorlog_use_syslog)) {
+	if (-1 == log_error_open(srv->srvconf.errorlog_file, srv->srvconf.breakagelog_file, srv->srvconf.errorlog_use_syslog, srv->srvconf.dont_daemonize)) {
 		log_error_write(srv, __FILE__, __LINE__, "s",
 				"opening errorlog failed, dying");
 

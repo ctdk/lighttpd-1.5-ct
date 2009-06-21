@@ -102,6 +102,7 @@ static int config_insert(server *srv) {
 		{ "etag.use-inode",              NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 54 */
 		{ "etag.use-mtime",              NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 55 */
 		{ "etag.use-size",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 56 */
+		{ "server.breakagelog",          NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 57 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -149,6 +150,7 @@ static int config_insert(server *srv) {
 	cv[49].destination = &(srv->srvconf.max_read_threads);
 	
 	cv[51].destination = &(srv->srvconf.log_timing);
+	cv[57].destination = srv->srvconf.breakagelog_file;
 
 	srv->config_storage = calloc(1, srv->config_context->used * sizeof(specific_config *));
 

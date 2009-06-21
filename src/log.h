@@ -4,10 +4,15 @@
 #include "valgrind/valgrind.h"
 #include "buffer.h"
 
+/* Close fd and _try_ to get a /dev/null for it instead.
+ * Returns 0 on success and -1 on failure (fd gets closed in all cases)
+ */
+LI_API int openDevNull(int fd);
+
 LI_API void log_init(void);
 LI_API void log_free(void);
 
-LI_API int log_error_open(buffer *file, int use_syslog);
+LI_API int log_error_open(buffer* file, buffer* breakage_file, int use_syslog, int dont_daemonize);
 LI_API int log_error_close();
 LI_API int log_error_write(void *srv, const char *filename, unsigned int line, const char *fmt, ...);
 LI_API int log_error_cycle();

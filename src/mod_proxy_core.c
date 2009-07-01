@@ -799,6 +799,10 @@ static handler_t proxy_handle_response_headers(server *srv, connection *con, plu
 		sess->send_response_content = 0;
 		sess->do_internal_redirect = 1;
 		sess->do_new_session = 1;
+		sess->is_chunked = 0;
+		con->http_status = 0;
+		sess->content_length = -1;
+		con->response.content_length = -1;
 
 		/* we are restarting the whole request, reset all the response headers */
 		array_reset(con->response.headers);

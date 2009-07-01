@@ -104,6 +104,7 @@ static int config_insert(server *srv) {
 		{ "etag.use-size",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 56 */
 		{ "server.breakagelog",          NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 57 */
 		{ "debug.log-timeouts",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 58 */
+		{ "debug.log-ssl-noise",         NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 59 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -239,6 +240,7 @@ static int config_insert(server *srv) {
 		cv[55].destination = &(s->etag_use_mtime);
 		cv[56].destination = &(s->etag_use_size);
 		cv[58].destination = &(s->log_timeouts);
+		cv[59].destination = &(s->log_ssl_noise);
 
 		srv->config_storage[i] = s;
 
@@ -302,6 +304,7 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(log_condition_handling);
 	PATCH(log_condition_cache_handling);
 	PATCH(log_file_not_found);
+	PATCH(log_ssl_noise);
 	PATCH(log_timeouts);
 
 	PATCH(range_requests);
@@ -399,6 +402,8 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(log_condition_cache_handling);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("debug.log-file-not-found"))) {
 				PATCH(log_file_not_found);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("debug.log-ssl-noise"))) {
+				PATCH(log_ssl_noise);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("debug.log-timeouts"))) {
 				PATCH(log_timeouts);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.protocol-http11"))) {

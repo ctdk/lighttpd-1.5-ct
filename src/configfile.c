@@ -103,6 +103,7 @@ static int config_insert(server *srv) {
 		{ "etag.use-mtime",              NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 55 */
 		{ "etag.use-size",               NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 56 */
 		{ "server.breakagelog",          NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 57 */
+		{ "debug.log-timeouts",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 58 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -237,7 +238,8 @@ static int config_insert(server *srv) {
 		cv[54].destination = &(s->etag_use_inode);
 		cv[55].destination = &(s->etag_use_mtime);
 		cv[56].destination = &(s->etag_use_size);
- 
+		cv[58].destination = &(s->log_timeouts);
+
 		srv->config_storage[i] = s;
 
 		if (0 != (ret = config_insert_values_global(srv, ((data_config *)srv->config_context->data[i])->value, cv))) {
@@ -300,6 +302,7 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(log_condition_handling);
 	PATCH(log_condition_cache_handling);
 	PATCH(log_file_not_found);
+	PATCH(log_timeouts);
 
 	PATCH(range_requests);
 	PATCH(force_lowercase_filenames);
@@ -396,6 +399,8 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(log_condition_cache_handling);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("debug.log-file-not-found"))) {
 				PATCH(log_file_not_found);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("debug.log-timeouts"))) {
+				PATCH(log_timeouts);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.protocol-http11"))) {
 				PATCH(allow_http11);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("server.force-lowercase-filenames"))) {

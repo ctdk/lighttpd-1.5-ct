@@ -124,6 +124,7 @@ NEWS
   * Fix segfault if there is no mimetype for the error documents
   * Use unsigned int for secdownload.timeout (fixes #1966)
   * Add server.breakagelog, a "special" stderr (fixes #1863)
+  * Silenced the annoying "request timed out" warning, enable with the "debug.log-timeouts" option (fixes #2018)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -53,6 +53,7 @@ typedef struct {
 typedef struct {
 	array *cgi;
 	unsigned short execute_all;
+	unsigned short execute_x_only;
 } plugin_config;
 
 typedef struct {
@@ -167,6 +168,7 @@ FREE_FUNC(mod_cgi_free) {
 #define PLUGIN_NAME "cgi"
 #define CONFIG_ASSIGN      PLUGIN_NAME ".assign"
 #define CONFIG_EXECUTE_ALL PLUGIN_NAME ".execute-all"
+#define CONFIG_EXECUTE_X_ONLY PLUGIN_NAME ".execute-x-only"
 
 SETDEFAULTS_FUNC(mod_cgi_set_defaults) {
 	plugin_data *p = p_d;
@@ -175,6 +177,7 @@ SETDEFAULTS_FUNC(mod_cgi_set_defaults) {
 	config_values_t cv[] = {
 		{ CONFIG_ASSIGN,                 NULL, T_CONFIG_ARRAY,   T_CONFIG_SCOPE_CONNECTION },       /* 0 */
 		{ CONFIG_EXECUTE_ALL,            NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },       /* 1 */
+		{ CONFIG_EXECUTE_X_ONLY,         NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },       /* 2 */
 		{ NULL,                          NULL, T_CONFIG_UNSET,   T_CONFIG_SCOPE_UNSET}
 	};
 
@@ -190,9 +193,11 @@ SETDEFAULTS_FUNC(mod_cgi_set_defaults) {
 
 		s->cgi    = array_init();
 		s->execute_all = 0;
+		s->execute_x_only = 0;
 
 		cv[0].destination = s->cgi;
 		cv[1].destination = &(s->execute_all);
+		cv[2].destination = &(s->execute_x_only);
 
 		p->config_storage[i] = s;
 
@@ -1017,6 +1022,7 @@ static int mod_cgi_patch_connection(server *srv, connection *con, plugin_data *p
 
 	PATCH_OPTION(cgi);
 	PATCH_OPTION(execute_all);
+	PATCH_OPTION(execute_x_only);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -1034,6 +1040,8 @@ static int mod_cgi_patch_connection(server *srv, connection *con, plugin_data *p
 				PATCH_OPTION(cgi);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_EXECUTE_ALL))) {
 				PATCH_OPTION(execute_all);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_EXECUTE_X_ONLY))) {
+				PATCH_OPTION(execute_x_only);
 			}
 		}
 	}
@@ -1061,6 +1069,7 @@ URIHANDLER_FUNC(mod_cgi_start_backend) {
 
 	if (HANDLER_ERROR == stat_cache_get_entry(srv, con, con->physical.path, &sce)) return HANDLER_GO_ON;
 	if (!S_ISREG(sce->st.st_mode)) return HANDLER_GO_ON;
+	if (p->conf.execute_x_only == 1 && (sce->st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0) return HANDLER_GO_ON;
 
 	s_len = fn->used - 1;
 

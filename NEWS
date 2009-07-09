@@ -128,6 +128,7 @@ NEWS
   * Hide some ssl errors per default, enable them with debug.log-ssl-noise (#397)
   * Add "cgi.execute-x-only" to mod_cgi, requires +x for cgi scripts (fixes #2013)
   * Fixed gthread-freebsd-sendfile (#1795)
+  * cmake: check for strtoll
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

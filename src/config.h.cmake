@@ -139,6 +139,7 @@
 #cmakedefine  HAVE_SIGNAL
 #cmakedefine  HAVE_SIGTIMEDWAIT
 #cmakedefine  HAVE_STRPTIME
+#cmakedefine  HAVE_STRTOLL
 #cmakedefine  HAVE_SYSLOG
 #cmakedefine  HAVE_WRITEV
 

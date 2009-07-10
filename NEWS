@@ -129,6 +129,7 @@ NEWS
   * Add "cgi.execute-x-only" to mod_cgi, requires +x for cgi scripts (fixes #2013)
   * Fixed gthread-freebsd-sendfile (#1795)
   * cmake: check for strtoll
+  * Fix FD_SETSIZE comparision warnings
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

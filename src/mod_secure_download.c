@@ -275,8 +275,8 @@ URIHANDLER_FUNC(mod_secdownload_uri_handler) {
 	}
 
 	/* timed-out */
-	if ( (srv->cur_ts > ts && srv->cur_ts - ts > (int) p->conf.timeout) ||
-	     (srv->cur_ts < ts && ts - srv->cur_ts > (int) p->conf.timeout) ) {
+	if ( (srv->cur_ts > ts && (unsigned int) (srv->cur_ts - ts) > p->conf.timeout) ||
+	     (srv->cur_ts < ts && (unsigned int) (ts - srv->cur_ts) > p->conf.timeout) ) {
 		if (con->conf.log_request_handling) {
 			TRACE("timestamp is too old: %ld, timeout: %d", (long int) ts, p->conf.timeout);
 		}

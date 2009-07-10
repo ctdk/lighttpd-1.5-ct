@@ -1159,6 +1159,7 @@ static int webdav_parse_chunkqueue(server *srv, connection *con, plugin_data *p,
 }
 #endif
 
+#ifdef USE_LOCKS
 static int webdav_lockdiscovery(server *srv, connection *con,
 		buffer *locktoken, const char *lockscope, const char *locktype, int depth) {
 
@@ -1215,6 +1216,8 @@ static int webdav_lockdiscovery(server *srv, connection *con,
 
 	return 0;
 }
+#endif
+
 /**
  * check if resource is having the right locks to access to resource
  *

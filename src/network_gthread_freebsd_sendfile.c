@@ -96,7 +96,7 @@ gpointer network_gthread_freebsd_sendfile_read_thread(gpointer _srv) {
 
 		if ((wj = g_async_queue_timed_pop(inq, &ts))) {
 			/* let's see what we have to stat */
-			ssize_t r;
+			off_t r;
 			off_t offset;
 			size_t toSend;
 			chunk *c;

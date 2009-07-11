@@ -575,6 +575,11 @@ static int network_server_init(server *srv, buffer *host_token, specific_config 
 #endif
 	}
 
+#ifdef FD_CLOEXEC
+	/* set FD_CLOEXEC now, fdevent_fcntl_set is called later; needed for pipe-logger forks */
+	fcntl(srv_socket->sock->fd, F_SETFD, FD_CLOEXEC);
+#endif
+
 	srv_socket->is_ssl = s->is_ssl;
 
 	if (srv->srv_sockets.size == 0) {

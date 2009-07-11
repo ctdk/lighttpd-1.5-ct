@@ -131,6 +131,7 @@ NEWS
   * cmake: check for strtoll
   * Fix FD_SETSIZE comparision warnings
   * Add "lua-5.1" to searched pkg-config names for lua
+  * Set FD_CLOEXEC for bound sockets before pipe-logger forks (fixes #2026)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

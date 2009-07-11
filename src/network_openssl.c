@@ -36,6 +36,7 @@ NETWORK_BACKEND_READ(openssl) {
 	int read_something = 0;
 	off_t max_read = 256 * 1024;
 	off_t start_bytes_in = cq->bytes_in;
+	network_status_t res;
 
 	UNUSED(srv);
 	UNUSED(con);
@@ -102,6 +103,7 @@ NETWORK_BACKEND_READ(openssl) {
 				}
 				/* fall through otherwise */
 			default:
+				res = NETWORK_STATUS_CONNECTION_CLOSE;
 				while((ssl_err = ERR_get_error())) {
 					switch (ERR_GET_REASON(ssl_err)) {
 					case SSL_R_SSL_HANDSHAKE_FAILURE:
@@ -111,13 +113,14 @@ NETWORK_BACKEND_READ(openssl) {
 						if (!con->conf.log_ssl_noise) continue;
 						break;
 					default:
+						res = NETWORK_STATUS_FATAL_ERROR;
 						break;
 					}
 					/* get all errors from the error-queue */
 					ERROR("ssl-errors: %s", ERR_error_string(ssl_err, NULL));
 				}
 
-				return NETWORK_STATUS_FATAL_ERROR;
+				return res;
 			}
 		} else {
 			b->used += len;

@@ -134,6 +134,7 @@ NEWS
   * Set FD_CLOEXEC for bound sockets before pipe-logger forks (fixes #2026)
   * Report non-fatal ssl errors as "connection close"
   * Add '%_' pattern for complete hostname in mod_evhost (fixes #1737)
+  * Allow digits in hostnames in more places (fixes #1148)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

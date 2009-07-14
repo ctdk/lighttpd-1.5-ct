@@ -113,7 +113,7 @@ static int request_check_hostname(buffer *host) {
 
 					/* check the first character at right of the dot */
 					if (is_ip == 0) {
-						if (!light_isalpha(host->ptr[i+1])) {
+						if (!light_isalnum(host->ptr[i+1])) {
 							return -1;
 						}
 					} else if (!light_isdigit(host->ptr[i+1])) {
@@ -135,7 +135,7 @@ static int request_check_hostname(buffer *host) {
 				}
 			} else if (i == 0) {
 				/* the first character of the hostname */
-				if (!light_isalpha(c)) {
+				if (!light_isalnum(c)) {
 					return -1;
 				}
 				label_len++;

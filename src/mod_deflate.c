@@ -35,8 +35,6 @@
 #if defined HAVE_ZLIB_H && defined HAVE_LIBZ
 # define USE_ZLIB
 # include <zlib.h>
-#else
-# define Z_DEFAULT_COMPRESSION 1
 #endif
 
 #if defined HAVE_BZLIB_H && defined HAVE_LIBBZ2
@@ -213,7 +211,7 @@ SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 		s->window_size = 15;
 		s->min_compress_size = 0;
 		s->work_block_size = 2048;
-		s->compression_level = Z_DEFAULT_COMPRESSION;
+		s->compression_level = -1;
 		s->mimetypes = array_init();
 
 		cv[0].destination = &(s->output_buffer_size);
@@ -260,7 +258,7 @@ SETDEFAULTS_FUNC(mod_deflate_setdefaults) {
 		}
 
 		if((s->compression_level < 1 || s->compression_level > 9) &&
-				s->compression_level != Z_DEFAULT_COMPRESSION) {
+				s->compression_level != -1) {
 			ERROR("compression-level must be between 1 and 9: %i", s->compression_level);
 			return HANDLER_ERROR;
 		}
@@ -301,7 +299,7 @@ static const char gzip_header[10] =
 static int stream_deflate_init(server *srv, connection *con, handler_ctx *hctx) {
 	plugin_data *p = hctx->plugin_data;
 	z_stream *z;
-	int r;
+	int r, compression_level;
 
 	UNUSED(srv);
 	UNUSED(con);
@@ -314,17 +312,21 @@ static int stream_deflate_init(server *srv, connection *con, handler_ctx *hctx) 
 	z->total_out = 0;
 	z->next_out = NULL;
 	z->avail_out = 0;
-	
+
+	compression_level = p->conf.compression_level;
+	if(compression_level == -1)
+		compression_level = Z_DEFAULT_COMPRESSION;
+
 	if(p->conf.debug) {
 		TRACE("output-buffer-size: %i", p->conf.output_buffer_size);
-		TRACE("compression-level: %i", p->conf.compression_level);
+		TRACE("compression-level: %i", compression_level);
 		TRACE("mem-level: %i", p->conf.mem_level);
 		TRACE("window-size: %i", p->conf.window_size);
 		TRACE("min-compress-size: %i", p->conf.min_compress_size);
 		TRACE("work-block-size: %i", p->conf.work_block_size);
 	}
 	if (Z_OK != (r = deflateInit2(z, 
-				 p->conf.compression_level,
+				 compression_level,
 				 Z_DEFLATED, 
 				 p->conf.window_size,  /* supress zlib-header */
 				 p->conf.mem_level,
@@ -517,6 +519,7 @@ static int stream_deflate_end(server *srv, connection *con, handler_ctx *hctx) {
 static int stream_bzip2_init(server *srv, connection *con, handler_ctx *hctx) {
 	plugin_data *p = hctx->plugin_data;
 	bz_stream *bz;
+	int compression_level;
 
 	UNUSED(srv);
 	UNUSED(con);
@@ -529,17 +532,21 @@ static int stream_bzip2_init(server *srv, connection *con, handler_ctx *hctx) {
 	bz->total_in_hi32 = 0;
 	bz->total_out_lo32 = 0;
 	bz->total_out_hi32 = 0;
-	
+
+	compression_level = p->conf.compression_level;
+	if(compression_level == -1)
+		compression_level = 9;
+
 	if(p->conf.debug) {
 		TRACE("output-buffer-size: %i", p->conf.output_buffer_size);
-		TRACE("compression-level: %i", p->conf.compression_level);
+		TRACE("compression-level: %i", compression_level);
 		TRACE("mem-level: %i", p->conf.mem_level);
 		TRACE("window-size: %i", p->conf.window_size);
 		TRACE("min-compress-size: %i", p->conf.min_compress_size);
 		TRACE("work-block-size: %i", p->conf.work_block_size);
 	}
 	if (BZ_OK != BZ2_bzCompressInit(bz, 
-					p->conf.compression_level, /* blocksize = 900k */
+					compression_level, /* blocksize */
 					0, /* no output */
 					30)) { /* workFactor: default */
 		return -1;

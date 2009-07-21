@@ -136,6 +136,7 @@ NEWS
   * Add '%_' pattern for complete hostname in mod_evhost (fixes #1737)
   * Allow digits in hostnames in more places (fixes #1148)
   * Allow all comparisons for $SERVER["socket"] - only bind for "=="
+  * Fix mod_deflate bzip2 compression level (thx peto, fixes #2035)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

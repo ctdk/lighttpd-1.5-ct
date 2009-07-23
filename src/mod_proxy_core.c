@@ -40,6 +40,7 @@
 #define CONFIG_PROXY_CORE_MAX_POOL_SIZE    PROXY_CORE ".max-pool-size"
 #define CONFIG_PROXY_CORE_CHECK_LOCAL      PROXY_CORE ".check-local"
 #define CONFIG_PROXY_CORE_SPLIT_HOSTNAMES  PROXY_CORE ".split-hostnames"
+#define CONFIG_PROXY_CORE_DISABLE_TIME     PROXY_CORE ".disable-time"
 
 static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_config *p_conf);
 
@@ -269,6 +270,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 			T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_CONNECTION },        /* 9 */
 		{ CONFIG_PROXY_CORE_MAX_KEEP_ALIVE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },       /* 10 */
 		{ CONFIG_PROXY_CORE_SPLIT_HOSTNAMES, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 11 */
+		{ CONFIG_PROXY_CORE_DISABLE_TIME, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },         /* 12 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -296,6 +298,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		s->check_local = 0;
 		s->split_hostnames = 1;
 		s->max_keep_alive_requests = 0;
+		s->disable_time = 1;
 
 		cv[0].destination = p->backends_arr;
 		cv[1].destination = &(s->debug);
@@ -306,6 +309,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		cv[8].destination = &(s->max_pool_size);
 		cv[10].destination = &(s->max_keep_alive_requests);
 		cv[11].destination = &(s->split_hostnames);
+		cv[12].destination = &(s->disable_time);
 
 		buffer_reset(p->balance_buf);
 
@@ -1445,11 +1449,12 @@ static handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p
 			return HANDLER_WAIT_FOR_FD;
 		case HANDLER_ERROR:
 			/* there is no-one on the other side */
-			sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+			sess->proxy_con->address->disabled_until = srv->cur_ts + p->conf.disable_time;
 
-			TRACE("connecting to address %s (%p) failed, disabling for 60 sec", 
+			TRACE("connecting to address %s (%p) failed, disabling for %u sec",
 					SAFE_BUF_STR(sess->proxy_con->address->name),
-					(void*) sess->proxy_con->address);
+					(void*) sess->proxy_con->address,
+					(unsigned int) p->conf.disable_time);
 			COUNTER_INC(sess->proxy_backend->requests_failed);
 
 			sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
@@ -1487,24 +1492,24 @@ static handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p
 					switch (socket_error) {
 					case ECONNREFUSED:
 						/* there is no-one on the other side */
-						sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
+						sess->proxy_con->address->disabled_until = srv->cur_ts + p->conf.disable_time;
 	
-						TRACE("address %s refused us, disabling for 2 sec", sess->proxy_con->address->name->ptr);
+						TRACE("address %s refused us, disabling for %u sec", sess->proxy_con->address->name->ptr, (unsigned int) p->conf.disable_time);
 						COUNTER_INC(sess->proxy_backend->requests_failed);
 	
 						break;
 					case EHOSTUNREACH:
 						/* there is no-one on the other side */
-						sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+						sess->proxy_con->address->disabled_until = srv->cur_ts + p->conf.disable_time;
 	
-						TRACE("host %s is unreachable, disabling for 60 sec", sess->proxy_con->address->name->ptr);
+						TRACE("host %s is unreachable, disabling for %u sec", sess->proxy_con->address->name->ptr, (unsigned int) p->conf.disable_time);
 						break;
 					default:
-						sess->proxy_con->address->disabled_until = srv->cur_ts + 60;
+						sess->proxy_con->address->disabled_until = srv->cur_ts + p->conf.disable_time;
 	
 						TRACE("connected finally failed: %s (%d)", strerror(socket_error), socket_error);
 	
-						TRACE("connect to address %s failed and I don't know why, disabling for 10 sec", sess->proxy_con->address->name->ptr);
+						TRACE("connect to address %s failed and I don't know why, disabling for %u sec", sess->proxy_con->address->name->ptr, (unsigned int) p->conf.disable_time);
 	
 						break;
 					}
@@ -1527,7 +1532,7 @@ static handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p
 				break;
 			case PROXY_CONNECTION_STATE_CLOSED:
 				/* looks like the connect() timed out */
-				sess->proxy_con->address->disabled_until = srv->cur_ts + 2;
+				sess->proxy_con->address->disabled_until = srv->cur_ts + p->conf.disable_time;
 				sess->proxy_con->address->state = PROXY_ADDRESS_STATE_DISABLED;
 
 				/* the connection */
@@ -2043,6 +2048,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(check_local);
 	PATCH_OPTION(split_hostnames);
 	PATCH_OPTION(max_keep_alive_requests);
+	PATCH_OPTION(disable_time);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -2082,6 +2088,8 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(split_hostnames);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_MAX_KEEP_ALIVE))) {
 				PATCH_OPTION(max_keep_alive_requests);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_DISABLE_TIME))) {
+				PATCH_OPTION(disable_time);
 			}
 		}
 	}

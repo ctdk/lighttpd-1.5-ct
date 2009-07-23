@@ -33,6 +33,7 @@ typedef struct {
 	unsigned short split_hostnames;
 	unsigned short max_keep_alive_requests;
 	unsigned short disable_time;
+	unsigned short max_backlog_size;
 
 	proxy_balance_t balancer;
 	struct proxy_protocol *protocol;

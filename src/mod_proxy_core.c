@@ -41,6 +41,7 @@
 #define CONFIG_PROXY_CORE_CHECK_LOCAL      PROXY_CORE ".check-local"
 #define CONFIG_PROXY_CORE_SPLIT_HOSTNAMES  PROXY_CORE ".split-hostnames"
 #define CONFIG_PROXY_CORE_DISABLE_TIME     PROXY_CORE ".disable-time"
+#define CONFIG_PROXY_CORE_MAX_BACKLOG_SIZE PROXY_CORE ".max-backlog-size"
 
 static int mod_proxy_wakeup_connections(server *srv, plugin_data *p, plugin_config *p_conf);
 
@@ -271,6 +272,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		{ CONFIG_PROXY_CORE_MAX_KEEP_ALIVE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },       /* 10 */
 		{ CONFIG_PROXY_CORE_SPLIT_HOSTNAMES, NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION },    /* 11 */
 		{ CONFIG_PROXY_CORE_DISABLE_TIME, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },         /* 12 */
+		{ CONFIG_PROXY_CORE_MAX_BACKLOG_SIZE, NULL, T_CONFIG_SHORT, T_CONFIG_SCOPE_CONNECTION },     /* 13 */
 		{ NULL,                        NULL, T_CONFIG_UNSET, T_CONFIG_SCOPE_UNSET }
 	};
 
@@ -299,6 +301,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		s->split_hostnames = 1;
 		s->max_keep_alive_requests = 0;
 		s->disable_time = 1;
+		s->max_backlog_size = 4;
 
 		cv[0].destination = p->backends_arr;
 		cv[1].destination = &(s->debug);
@@ -310,6 +313,7 @@ SETDEFAULTS_FUNC(mod_proxy_core_set_defaults) {
 		cv[10].destination = &(s->max_keep_alive_requests);
 		cv[11].destination = &(s->split_hostnames);
 		cv[12].destination = &(s->disable_time);
+		cv[13].destination = &(s->max_backlog_size);
 
 		buffer_reset(p->balance_buf);
 
@@ -1213,6 +1217,10 @@ static int proxy_recycle_backend_connection(server *srv, plugin_data *p, proxy_s
 static handler_t mod_proxy_core_backlog_connection(server *srv, connection *con, plugin_data *p, proxy_session *sess) {
 	proxy_request *req;
 
+	if (sess->sent_to_backlog >= p->conf.max_backlog_size) {
+		return HANDLER_ERROR;
+	}
+
 	/* connection pool is full, queue the request for now */
 	req = proxy_request_init();
 	req->added_ts = srv->cur_ts;
@@ -1222,10 +1230,6 @@ static handler_t mod_proxy_core_backlog_connection(server *srv, connection *con,
 
 	COUNTER_INC(p->conf.backlog_size);
 	sess->sent_to_backlog++;
-
-	if (sess->sent_to_backlog > 4) {
-		return HANDLER_ERROR;
-	}
 
 	return HANDLER_GO_ON;
 }
@@ -2049,6 +2053,7 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 	PATCH_OPTION(split_hostnames);
 	PATCH_OPTION(max_keep_alive_requests);
 	PATCH_OPTION(disable_time);
+	PATCH_OPTION(max_backlog_size);
 
 	/* skip the first, the global context */
 	for (i = 1; i < srv->config_context->used; i++) {
@@ -2090,6 +2095,8 @@ static int mod_proxy_core_patch_connection(server *srv, connection *con, plugin_
 				PATCH_OPTION(max_keep_alive_requests);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_DISABLE_TIME))) {
 				PATCH_OPTION(disable_time);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN(CONFIG_PROXY_CORE_MAX_BACKLOG_SIZE))) {
+				PATCH_OPTION(max_backlog_size);
 			}
 		}
 	}

@@ -1768,15 +1768,16 @@ int main (int argc, char **argv, char **envp) {
 #endif
 #ifdef USE_LINUX_AIO_SENDFILE
 	case NETWORK_BACKEND_LINUX_AIO_SENDFILE:
-		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
-		if (gerr) {
-			ERROR("g_thread_create failed: %s", gerr->message);
+		TRACE("WARNING: You selected the experimental network.backend '%s'", "linux-aio-sendfile");
+		srv->linux_io_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->linux_io_iocbs));
+		if (0 != (i = io_setup(srv->srvconf.max_read_threads, &(srv->linux_io_ctx)))) {
+			ERROR("io-setup() failed somehow %s", strerror(-i));
 
 			return -1;
 		}
-		srv->linux_io_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->linux_io_iocbs));
-		if (0 != io_setup(srv->srvconf.max_read_threads, &(srv->linux_io_ctx))) {
-			ERROR("io-setup() failed somehow %s", "");
+		linux_aio_read_thread_id = g_thread_create(linux_aio_read_thread, srv, 1, &gerr);
+		if (gerr) {
+			ERROR("g_thread_create failed: %s", gerr->message);
 
 			return -1;
 		}

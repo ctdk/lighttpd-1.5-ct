@@ -39,7 +39,7 @@
 
 /* the completion handler */
 gpointer linux_aio_read_thread(gpointer _srv) {
-        server *srv = (server *)_srv;
+	server *srv = (server *)_srv;
 
 	GAsyncQueue * outq;
 
@@ -51,11 +51,11 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 	while (!srv->is_shutdown) {
 		/* let's see what we have to stat */
 		struct io_event event[16];
-	        struct timespec io_ts;
+		struct timespec io_ts;
 		int res;
 
 		io_ts.tv_sec = 1;
-	        io_ts.tv_nsec = 0;
+		io_ts.tv_nsec = 0;
 
 		if ((res = io_getevents(srv->linux_io_ctx, 1, 16, event, &io_ts)) > 0) {
 			int i;
@@ -64,7 +64,7 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 
 				if ((long)event[i].res <= 0) {
 					TRACE("async-read failed with %d (%s), was asked for %s (fd = %d)",
-						event[i].res, strerror(-event[i].res), SAFE_BUF_STR(con->uri.path), con->sock->fd);
+						(int) event[i].res, strerror(-event[i].res), SAFE_BUF_STR(con->uri.path), con->sock->fd);
 				}
 
 				/* free the iocb */
@@ -73,7 +73,7 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 				g_async_queue_push(outq, con);
 			}
 		} else if (res < 0) {
-			TRACE("getevents - failed: %d", res);
+			TRACE("getevents - failed: %d: %s", res, strerror(-res));
 		}
 	}
 	
@@ -98,7 +98,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 			/* check which chunks are finished now */
 			for (tc = c; tc; tc = tc->next) {
 				/* finished the chunk */
-				if (tc->offset == tc->mem->used - 1) {
+				if (tc->offset == (off_t) tc->mem->used - 1) {
 					/* skip the first c->next as that will be done by the c = c->next in the other for()-loop */
 					if (chunk_finished) {
 						c = c->next;
@@ -245,7 +245,7 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 					}
 
 					/* can we be sure that offset is always aligned ? */
-        				if (async_error == 0 &&
+					if (async_error == 0 &&
 					    (((intptr_t)c->file.mmap.start) % page_size != 0 ||
 					     c->file.copy.length % page_size != 0 ||
 					     ((intptr_t)(c->file.start + c->offset)) % page_size != 0)) {
@@ -259,14 +259,14 @@ NETWORK_BACKEND_WRITE(linuxaiosendfile) {
 
 					/* looks like we couldn't get a temp-file [disk-full] */
 					if (async_error == 0 && -1 != c->file.copy.fd) {
-		        			struct iocb *iocbs[] = { iocb };
+						struct iocb *iocbs[] = { iocb };
 
 						assert(c->file.copy.length > 0);
 
 						io_prep_pread(iocb, c->file.fd, c->file.mmap.start, c->file.copy.length, c->file.start + c->offset);
 						iocb->data = con;
 
-					       	if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
+						if (1 == (res = io_submit(srv->linux_io_ctx, 1, iocbs))) {
 							status_counter_inc(CONST_STR_LEN("server.io.linux-aio.async-read"));
 							return NETWORK_STATUS_WAIT_FOR_AIO_EVENT;
 						} else {

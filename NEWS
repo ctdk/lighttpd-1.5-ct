@@ -139,6 +139,7 @@ NEWS
   * Fix mod_deflate bzip2 compression level (thx peto, fixes #2035)
   * Add proxy-core.disable-time (used for all disable-times), default value 1 sec (fixes #1038)
   * Add proxy-core.max-backlog-size (set to 0 to disable backlog, thx e-razor)
+  * Enable linux-aio-sendfile for testing in cmake again, fix a small bug in it
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

@@ -50,7 +50,7 @@
 /* all the Async IO backends need GTHREAD support */
 #if defined(USE_GTHREAD)
 # if defined(USE_LINUX_SENDFILE)
-#  if 0 && defined(HAVE_LIBAIO_H)
+#  if defined(HAVE_LIBAIO_H)
      /** disabled for now as not all FSs are async-io capable */
 #    define USE_LINUX_AIO_SENDFILE
 #  endif

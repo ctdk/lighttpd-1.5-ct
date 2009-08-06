@@ -269,7 +269,7 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 					}
 
 					if (0 == strncmp(BUF_STR(http_if_modified_since->value), mtime->ptr, used_len)) {
-						con->http_status = 304;
+						if ('\0' == mtime->ptr[used_len]) con->http_status = 304;
 						return HANDLER_FINISHED;
 					} else {
 #ifdef HAVE_STRPTIME
@@ -291,14 +291,15 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 						strncpy(buf, BUF_STR(http_if_modified_since->value), used_len);
 						buf[used_len] = '\0';
 
-						tm.tm_isdst = 0;
 						if (NULL == strptime(buf, "%a, %d %b %Y %H:%M:%S GMT", &tm)) {
 							con->http_status = 412;
 							return HANDLER_FINISHED;
 						}
+						tm.tm_isdst = 0;
 						t_header = mktime(&tm);
 
 						strptime(mtime->ptr, "%a, %d %b %Y %H:%M:%S GMT", &tm);
+						tm.tm_isdst = 0;
 						t_file = mktime(&tm);
 
 						if (t_file > t_header) return HANDLER_GO_ON;
@@ -329,7 +330,7 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 		}
 
 		if (0 == strncmp(BUF_STR(http_if_modified_since->value), mtime->ptr, used_len)) {
-			con->http_status = 304;
+			if ('\0' == mtime->ptr[used_len]) con->http_status = 304;
 			return HANDLER_FINISHED;
 		} else {
 #ifdef HAVE_STRPTIME
@@ -343,13 +344,14 @@ int http_response_handle_cachable(server *srv, connection *con, buffer *mtime) {
 			strncpy(buf, BUF_STR(http_if_modified_since->value), used_len);
 			buf[used_len] = '\0';
 
-			tm.tm_isdst = 0;
 			if (NULL == strptime(buf, "%a, %d %b %Y %H:%M:%S GMT", &tm)) {
 				return HANDLER_GO_ON;
 			}
+			tm.tm_isdst = 0;
 			t_header = mktime(&tm);
 
 			strptime(mtime->ptr, "%a, %d %b %Y %H:%M:%S GMT", &tm);
+			tm.tm_isdst = 0;
 			t_file = mktime(&tm);
 
 			if (t_file > t_header) return HANDLER_GO_ON;

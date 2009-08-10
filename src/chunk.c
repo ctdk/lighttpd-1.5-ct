@@ -158,6 +158,19 @@ int chunk_is_done(chunk *c) {
 	}
 }
 
+off_t chunk_length(chunk *c) {
+	switch (c->type) {
+	case MEM_CHUNK:
+		if (c->mem->used == 0) return 0;
+		return (off_t)c->mem->used - 1 - c->offset;
+	case FILE_CHUNK:
+		return c->file.length - c->offset;
+	case UNUSED_CHUNK:
+		break;
+	}
+	return 0;
+}
+
 void chunkpool_free(void) {
 	if (!chunkpool) return;
 
@@ -462,12 +475,10 @@ off_t chunkqueue_skip(chunkqueue *cq, off_t skip) {
 
 	/* consume chunks */
 	for (c = cq->first; c && skip > 0; c = c->next) {
+		we_have = chunk_length(c);
+
 		/* skip empty chunks */
-		if (chunk_is_done(c)) continue;
-
-		assert(c->type == MEM_CHUNK);
-
-		we_have = c->mem->used - c->offset - 1;
+		if (!we_have) continue;
 
 		we_want = we_have < skip ? we_have : skip;
 

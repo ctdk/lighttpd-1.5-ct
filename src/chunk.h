@@ -89,5 +89,6 @@ LI_API void chunkqueue_print(chunkqueue *cq);
 
 LI_API int chunk_is_done(chunk *c);
 LI_API void chunk_set_done(chunk *c);
+LI_API off_t chunk_length(chunk *c);
 
 #endif

@@ -142,6 +142,7 @@ NEWS
   * Enable linux-aio-sendfile for testing in cmake again, fix a small bug in it
   * Set tm.tm_isdst = 0 before mktime() (fixes #2047)
   * Allow chunkqueue_skip to skip all types of chunks
+  * Use linux-epoll by default if available (fixes #2021)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

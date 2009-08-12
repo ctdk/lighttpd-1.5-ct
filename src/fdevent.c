@@ -21,6 +21,16 @@ static fdevent_handler_info_t fdevent_handlers[] = {
 	 * - linux-* are experimental
 	 */
 	{
+		FDEVENT_HANDLER_LINUX_SYSEPOLL,
+		"linux-sysepoll",
+		"epoll (Linux 2.6)",
+#ifdef USE_LINUX_EPOLL
+		fdevent_linux_sysepoll_init
+#else
+		NULL
+#endif
+	},
+	{
 		FDEVENT_HANDLER_POLL,
 		"poll",
 		"poll (Unix)",
@@ -36,16 +46,6 @@ static fdevent_handler_info_t fdevent_handlers[] = {
 		"select (generic)",
 #ifdef USE_SELECT
 		fdevent_select_init
-#else
-		NULL
-#endif
-	},
-	{
-		FDEVENT_HANDLER_LINUX_SYSEPOLL,
-		"linux-sysepoll",
-		"epoll (Linux 2.6)",
-#ifdef USE_LINUX_EPOLL
-		fdevent_linux_sysepoll_init
 #else
 		NULL
 #endif

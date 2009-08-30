@@ -6,6 +6,7 @@ DIR *opendir(const char *dn) {
     DIR *d = malloc(sizeof(*d));
 
     if (INVALID_HANDLE_VALUE == (d->h = FindFirstFile(dn, &(d->finddata)))) {
+        free(d);
         return NULL;
     }
 

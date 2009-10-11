@@ -744,7 +744,7 @@ static int lighty_mainloop(server *srv) {
 								changed = 1;
 							}
 						} else {
-							if (srv->cur_ts - con->read_idle_ts > con->conf.max_keep_alive_idle) {
+							if (srv->cur_ts - con->read_idle_ts > con->keep_alive_idle) {
 								/* time - out */
 #if 0
 								TRACE("(keep-alive read timeout) [%s]", SAFE_BUF_STR(con->dst_addr_buf));

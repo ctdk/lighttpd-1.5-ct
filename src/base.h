@@ -38,6 +38,9 @@
 #if defined HAVE_LIBSSL && defined HAVE_OPENSSL_SSL_H
 # define USE_OPENSSL
 # include <openssl/ssl.h>
+# if ! defined OPENSSL_NO_TLSEXT && ! defined SSL_CTRL_SET_TLSEXT_HOSTNAME
+#  define OPENSSL_NO_TLSEXT
+# endif
 #endif
 
 #ifdef HAVE_SYS_INOTIFY_H

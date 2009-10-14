@@ -312,6 +312,7 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(is_ssl);
 
 	PATCH(ssl_pemfile);
+	PATCH(ssl_ctx);
 	PATCH(ssl_ca_file);
 	PATCH(ssl_cipher_list);
 	PATCH(ssl_use_sslv2);
@@ -366,6 +367,7 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(use_xattr);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.pemfile"))) {
 				PATCH(ssl_pemfile);
+				PATCH(ssl_ctx);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.ca-file"))) {
 				PATCH(ssl_ca_file);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.engine"))) {

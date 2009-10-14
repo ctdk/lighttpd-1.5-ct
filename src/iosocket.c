@@ -13,6 +13,10 @@ iosocket *iosocket_init(void) {
 
 	sock->type = IOSOCKET_TYPE_SOCKET;
 
+#if defined USE_OPENSSL && ! defined OPENSSL_NO_TLSEXT
+	sock->tlsext_server_name = buffer_init();
+#endif
+
 	return sock;
 }
 
@@ -31,6 +35,10 @@ void iosocket_free(iosocket *sock) {
 			break;
 		}
 	}
+
+#if defined USE_OPENSSL && ! defined OPENSSL_NO_TLSEXT
+	buffer_free(sock->tlsext_server_name);
+#endif
 
 	free(sock);
 }

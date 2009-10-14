@@ -959,6 +959,9 @@ connection *connection_accept(server *srv, server_socket *srv_socket) {
 				return NULL;
 			}
 
+#ifndef OPENSSL_NO_TLSEXT
+			SSL_set_app_data(con->sock->ssl, con);
+#endif
 			SSL_set_accept_state(con->sock->ssl);
 			con->conf.is_ssl=1;
 

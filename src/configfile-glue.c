@@ -305,6 +305,10 @@ static cond_result_t config_check_cond_nocache(server *srv, connection *con, dat
 			default:
 				break;
 			}
+#if defined USE_OPENSSL && ! defined OPENSSL_NO_TLSEXT
+		} else if (!buffer_is_empty(con->sock->tlsext_server_name)) {
+			l = con->sock->tlsext_server_name;
+#endif
 		} else {
 			l = srv->empty_string;
 		}

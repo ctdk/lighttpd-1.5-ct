@@ -143,6 +143,7 @@ NEWS
   * Set tm.tm_isdst = 0 before mktime() (fixes #2047)
   * Allow chunkqueue_skip to skip all types of chunks
   * Use linux-epoll by default if available (fixes #2021)
+  * Add TLS servername indication (SNI) support (fixes #386, thx Peter Colberg <peter@colberg.org>)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

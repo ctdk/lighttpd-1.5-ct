@@ -19,6 +19,7 @@
 #endif
 
 #include "settings.h"
+#include "buffer.h"
 
 typedef enum {
 	IOSOCKET_TYPE_UNSET,
@@ -35,6 +36,9 @@ typedef struct {
 
 #ifdef USE_OPENSSL
 	SSL *ssl;
+#ifndef OPENSSL_NO_TLSEXT
+	buffer *tlsext_server_name;
+#endif
 #endif
 
 	iosocket_t type; /**< sendfile on solaris doesn't work on pipes */

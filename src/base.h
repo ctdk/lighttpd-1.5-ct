@@ -310,6 +310,11 @@ typedef struct {
 	buffer *ssl_ca_file;
 	buffer *ssl_cipher_list;
 	unsigned short ssl_use_sslv2;
+	unsigned short ssl_verifyclient;
+	unsigned short ssl_verifyclient_enforce;
+	unsigned short ssl_verifyclient_depth;
+	buffer *ssl_verifyclient_username;
+
 	unsigned short use_ipv6;
 	unsigned short is_ssl;
 	unsigned short allow_http11;

@@ -105,6 +105,10 @@ static int config_insert(server *srv) {
 		{ "server.breakagelog",          NULL, T_CONFIG_STRING, T_CONFIG_SCOPE_SERVER },      /* 57 */
 		{ "debug.log-timeouts",          NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_CONNECTION }, /* 58 */
 		{ "debug.log-ssl-noise",         NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 59 */
+		{ "ssl.verifyclient.activate",   NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 60 */
+		{ "ssl.verifyclient.enforce",    NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 61 */
+		{ "ssl.verifyclient.depth",      NULL, T_CONFIG_SHORT,   T_CONFIG_SCOPE_SERVER },     /* 62 */
+		{ "ssl.verifyclient.username",   NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_SERVER },     /* 63 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -173,6 +177,10 @@ static int config_insert(server *srv) {
 		s->errorfile_prefix = buffer_init();
 		s->ssl_cipher_list = buffer_init();
 		s->ssl_use_sslv2 = 1;
+		s->ssl_verifyclient = 0;
+		s->ssl_verifyclient_enforce = 1;
+		s->ssl_verifyclient_username = buffer_init();
+		s->ssl_verifyclient_depth = 9;
 		s->max_keep_alive_requests = 16;
 		s->max_keep_alive_idle = 5;
 		s->max_read_idle = 60;
@@ -241,6 +249,12 @@ static int config_insert(server *srv) {
 		cv[56].destination = &(s->etag_use_size);
 		cv[58].destination = &(s->log_timeouts);
 		cv[59].destination = &(s->log_ssl_noise);
+
+		/* ssl.verify */
+		cv[60].destination = &(s->ssl_verifyclient);
+		cv[61].destination = &(s->ssl_verifyclient_enforce);
+		cv[62].destination = &(s->ssl_verifyclient_depth);
+		cv[63].destination = s->ssl_verifyclient_username;
 
 		srv->config_storage[i] = s;
 
@@ -319,6 +333,11 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(etag_use_inode);
 	PATCH(etag_use_mtime);
 	PATCH(etag_use_size);
+
+	PATCH(ssl_verifyclient);
+	PATCH(ssl_verifyclient_enforce);
+	PATCH(ssl_verifyclient_depth);
+	PATCH(ssl_verifyclient_username);
 
 	return 0;
 }
@@ -416,6 +435,14 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(global_kbytes_per_second);
 				PATCH(global_bytes_per_second_cnt);
 				con->conf.global_bytes_per_second_cnt_ptr = &s->global_bytes_per_second_cnt;
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.verifyclient.activate"))) {
+				PATCH(ssl_verifyclient);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.verifyclient.enforce"))) {
+				PATCH(ssl_verifyclient_enforce);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.verifyclient.depth"))) {
+				PATCH(ssl_verifyclient_depth);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.verifyclient.username"))) {
+				PATCH(ssl_verifyclient_username);
 			}
 		}
 	}

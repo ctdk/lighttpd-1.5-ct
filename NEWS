@@ -146,6 +146,7 @@ NEWS
   * Add TLS servername indication (SNI) support (fixes #386, thx Peter Colberg <peter@colberg.org>)
   * Add SSL Client Certificate verification (#1288)
   * mod_accesslog: escape special characters (fixes #1551, thx icy)
+  * Don't print ssl error if client didn't support TLS SNI
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

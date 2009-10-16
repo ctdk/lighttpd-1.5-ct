@@ -856,16 +856,15 @@ static handler_t connection_handle_fdevent(void *s, void *context, int revents) 
 			joblist_append(srv, con);
 			break;
 		case CON_STATE_ERROR:
-                        ERROR("we are in (CON_STATE_ERROR), but still get a FDEVENT_OUT, removing event from fd = %d, %04x for (%s)"
-,
-                                        con->sock->fd,
-                                        revents,
-                                        SAFE_BUF_STR(con->uri.path));
+			ERROR("we are in (CON_STATE_ERROR), but still get a FDEVENT_OUT, removing event from fd = %d, %04x for (%s)",
+				con->sock->fd,
+				revents,
+				SAFE_BUF_STR(con->uri.path));
 
-                        fdevent_event_del(srv->ev, con->sock);
+			fdevent_event_del(srv->ev, con->sock);
 
-                        joblist_append(srv, con);
-                        break;
+			joblist_append(srv, con);
+			break;
 		default:
 			TRACE("got FDEVENT_OUT for state %d, calling the job-handler, let's see what happens", con->state);
 			joblist_append(srv, con);
@@ -1278,10 +1277,14 @@ void connection_state_machine(server *srv, connection *con) {
 				return;
 			default:
 				/* something strange happened */
-				TRACE("%s", "(error)");
+				if (con->conf.log_request_handling) {
+					TRACE("%s", "handle response header failed");
+				}
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}
+
+			if (con->state == CON_STATE_ERROR) break;
 
 			/* all the response-headers are set, check if we have a */
 
@@ -1320,10 +1323,14 @@ void connection_state_machine(server *srv, connection *con) {
 				break;
 			default:
 				/* something strange happened */
-				TRACE("%s", "(error)");
+				if (con->conf.log_request_handling) {
+					TRACE("%s", "read response content failed");
+				}
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}
+
+			if (con->state == CON_STATE_ERROR) break;
 
 			/* we might have new content in the con->send buffer
 			 * encode it for the network
@@ -1339,10 +1346,14 @@ void connection_state_machine(server *srv, connection *con) {
 				return;
 			default:
 				/* something strange happened */
-				TRACE("%s", "(error)");
+				if (con->conf.log_request_handling) {
+					TRACE("%s", "filter response content failed");
+				}
 				connection_set_state(srv, con, CON_STATE_ERROR);
 				break;
 			}
+
+			if (con->state == CON_STATE_ERROR) break;
 
 			/* copy output from filters into send_raw. */
 			bytes_moved = filter_chain_copy_output(con->send_filters, con->send_raw);

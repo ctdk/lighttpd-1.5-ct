@@ -270,8 +270,22 @@ static int stat_cache_lstat(server *srv, buffer *dname, struct stat *lst) {
 #endif
 
 static int stat_cache_entry_is_current(server *srv, stat_cache_entry *sce) {
+	struct stat st;
 	UNUSED(srv);
 	UNUSED(sce);
+
+	if (-1 == stat(sce->name->ptr, &st)) {
+		return 0;
+	}
+	/* still existing */
+
+	if (st.st_dev != sce->st.st_dev || st.st_ino != sce->st.st_ino) {
+		return 0; /* different file */
+	}
+
+	/* same file, still existing: update other stats: */
+	sce->st = st;
+	/* need to check other properties before this: sce->stat_ts = srv->cur_ts; */
 	return 1;
 }
 

@@ -1077,6 +1077,7 @@ static handler_t proxy_handle_fdevent(void *s, void *ctx, int revents) {
 	}
 
 	if (sess->is_closed) {
+		sess->recv->is_closed = 1;
 		fdevent_event_del(srv->ev, sess->proxy_con->sock);
 	}
 

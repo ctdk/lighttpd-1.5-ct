@@ -820,6 +820,8 @@ PHYSICALPATH_FUNC(mod_compress_physical) {
 				CONST_STR_LEN("Content-Type"),
 				CONST_BUF_LEN(sce->content_type));
 
+		con->response.content_length = chunkqueue_length(con->send);
+
 		if (con->conf.log_request_handling) TRACE("looks like %s could be compressed", SAFE_BUF_STR(con->physical.path));
 		return HANDLER_FINISHED;
 	}

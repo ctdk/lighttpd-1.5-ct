@@ -150,6 +150,7 @@ NEWS
   * Reopen out stream in X-Rewrite (fixes #1678)
   * Remove joblist thread, don't use timed pops for async queues
   * Fix mod_cgi hang on "crash-before-header-sent" bug
+  * Set content-length in mod_compress (fixes #2089, thx liming)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

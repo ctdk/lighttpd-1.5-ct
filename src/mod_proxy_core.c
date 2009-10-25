@@ -1749,6 +1749,7 @@ static handler_t proxy_state_engine(server *srv, connection *con, plugin_data *p
 				 *
 				 * mod_staticfile should handle this file for us
 				 * con->mode = DIRECT is taking us out of the loop */
+				con->send->is_closed = 0;
 				con->mode = DIRECT;
 				con->http_status = 0;
 

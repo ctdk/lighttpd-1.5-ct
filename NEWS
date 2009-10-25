@@ -147,6 +147,7 @@ NEWS
   * Add SSL Client Certificate verification (#1288)
   * mod_accesslog: escape special characters (fixes #1551, thx icy)
   * Don't print ssl error if client didn't support TLS SNI
+  * Reopen out stream in X-Rewrite (fixes #1678)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

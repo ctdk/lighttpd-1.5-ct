@@ -715,6 +715,7 @@ typedef struct server {
 	GAsyncQueue *joblist_queue;
 	GAsyncQueue *aio_write_queue;
 
+	int did_wakeup;
 	int wakeup_pipe[2];
 	iosocket *wakeup_iosocket;
 #endif

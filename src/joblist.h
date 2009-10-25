@@ -3,8 +3,14 @@
 
 #include "base.h"
 
-LI_API int joblist_append(server *srv, connection *con);
+LI_API void joblist_append(server *srv, connection *con);
 LI_API void joblist_free(server *srv, connections *joblist);
+
+#ifdef USE_GTHREAD
+LI_API void joblist_async_append(server *srv, connection *con);
+
+LI_API void server_wakeup(server *srv);
+#endif
 
 LI_API int fdwaitqueue_append(server *srv, connection *con);
 LI_API void fdwaitqueue_free(server *srv, connections *fdwaitqueue);

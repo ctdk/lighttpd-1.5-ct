@@ -1,12 +1,13 @@
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "base.h"
 #include "joblist.h"
 #include "log.h"
 
-int joblist_append(server *srv, connection *con) {
-	if (con->in_joblist) return 0;
+void joblist_append(server *srv, connection *con) {
+	if (con->in_joblist) return;
 	con->in_joblist = 1;
 
 	if (srv->joblist->size == 0) {
@@ -18,8 +19,6 @@ int joblist_append(server *srv, connection *con) {
 	}
 
 	srv->joblist->ptr[srv->joblist->used++] = con;
-
-	return 0;
 }
 
 void joblist_free(server *srv, connections *joblist) {
@@ -28,6 +27,20 @@ void joblist_free(server *srv, connections *joblist) {
 	free(joblist->ptr);
 	free(joblist);
 }
+
+#ifdef USE_GTHREAD
+void joblist_async_append(server *srv, connection *con) {
+	g_async_queue_push(srv->joblist_queue, con);
+
+	server_wakeup(srv);
+}
+
+void server_wakeup(server *srv) {
+	if (g_atomic_int_compare_and_exchange(&srv->did_wakeup, 0, 1)) {
+		write(srv->wakeup_pipe[1], " ", 1);
+	}
+}
+#endif
 
 connection *fdwaitqueue_unshift(server *srv, connections *fdwaitqueue) {
 	connection *con;

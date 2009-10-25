@@ -78,17 +78,9 @@ static void posix_aio_completion_handler(union sigval foo) {
 	chunk *c           = wj->c;
 	int res;
 
-	GAsyncQueue * outq;
-
-	g_async_queue_ref(srv->joblist_queue);
-
-	outq = srv->joblist_queue;
-
 	if (srv->is_shutdown) {
 		write_job_free(wj);
 	
-		g_async_queue_unref(outq);
-
 		return;
 	}
 
@@ -119,14 +111,12 @@ static void posix_aio_completion_handler(union sigval foo) {
 			c->async.ret_val = NETWORK_STATUS_FATAL_ERROR;
 		}
 
-		g_async_queue_push(outq, con);
+		joblist_async_append(srv, con);
 
 		iocb->aio_nbytes = 0; /* mark the entry as unused */
 	}
 
 	write_job_free(wj);
-	
-	g_async_queue_unref(outq);
 }
 
 NETWORK_BACKEND_WRITE(posixaio) {

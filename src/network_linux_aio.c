@@ -41,12 +41,6 @@
 gpointer linux_aio_read_thread(gpointer _srv) {
 	server *srv = (server *)_srv;
 
-	GAsyncQueue * outq;
-
-	g_async_queue_ref(srv->joblist_queue);
-
-	outq = srv->joblist_queue;
-
 	/* */
 	while (!srv->is_shutdown) {
 		/* let's see what we have to stat */
@@ -70,14 +64,12 @@ gpointer linux_aio_read_thread(gpointer _srv) {
 				/* free the iocb */
 				event[i].obj->data = NULL;
 
-				g_async_queue_push(outq, con);
+				joblist_async_append(srv, con);
 			}
 		} else if (res < 0) {
 			TRACE("getevents - failed: %d: %s", res, strerror(-res));
 		}
 	}
-	
-	g_async_queue_unref(srv->joblist_queue);
 
 	return NULL;
 }

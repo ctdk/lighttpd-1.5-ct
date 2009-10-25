@@ -20,6 +20,7 @@
 #include "fdevent.h"
 #include "etag.h"
 #include "server.h"
+#include "joblist.h"
 
 #ifdef HAVE_ATTR_ATTRIBUTES_H
 #include <attr/attributes.h>
@@ -102,39 +103,29 @@ gpointer stat_cache_thread(gpointer _srv) {
 	
 	/* take the stat-job-queue */
 	GAsyncQueue * inq; 
-	GAsyncQueue * outq;
 
-	g_async_queue_ref(srv->joblist_queue);
 	g_async_queue_ref(srv->stat_queue);
 
 	inq = srv->stat_queue;
-	outq = srv->joblist_queue;
 
 	/* */
 	while (!srv->is_shutdown) {
 		/* let's see what we have to stat */
 		struct stat st;
-		GTimeVal ts;
 
-		/* wait one second as the poll() */
-		g_get_current_time(&ts);
-		g_time_val_add(&ts, 500 * 1000); 
-
-		if ((sj = g_async_queue_timed_pop(inq, &ts))) {
+		if ((sj = g_async_queue_pop(inq))) {
 			if(sj == (stat_job *) 1)
 				continue; /* just notifying us that srv->is_shutdown changed */
 
 			/* don't care about the return code for now */
 			stat(sj->name->ptr, &st);
 
-			g_async_queue_push(outq, sj->con);
-		
+			joblist_async_append(srv, sj->con);
 			stat_job_free(sj);
 		}
 	}
 
 	g_async_queue_unref(srv->stat_queue);
-	g_async_queue_unref(srv->joblist_queue);
 
 	return NULL;
 }

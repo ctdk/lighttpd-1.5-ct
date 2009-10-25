@@ -87,26 +87,18 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 	server *srv = (server *)_srv;
 
 	GAsyncQueue * inq;
-	GAsyncQueue * outq;
 
 	int fadvise_is_enosys = 0;
 
-	g_async_queue_ref(srv->joblist_queue);
 	g_async_queue_ref(srv->aio_write_queue);
 
-	outq = srv->joblist_queue;
 	inq = srv->aio_write_queue;
 
 	/* */
 	while (!srv->is_shutdown) {
-		GTimeVal ts;
 		write_job *wj = NULL;
 
-		/* wait one second as the poll() */
-		g_get_current_time(&ts);
-		g_time_val_add(&ts, 500 * 1000);
-
-		if ((wj = g_async_queue_timed_pop(inq, &ts))) {
+		if ((wj = g_async_queue_pop(inq))) {
 			/* let's see what we have to stat */
 			ssize_t r;
 			off_t offset;
@@ -219,7 +211,7 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 			}
 			timing_log(srv, con, TIME_SEND_ASYNC_READ_END_QUEUED);
 			/* read async, write as usual */
-			g_async_queue_push(outq, wj->con);
+			joblist_async_append(srv, wj->con);
 
 #if defined(HAVE_POSIX_FADVISE) && defined(POSIX_FADV_WILLNEED)
 			/* read ahead */
@@ -240,7 +232,6 @@ gpointer network_gthread_aio_read_thread(gpointer _srv) {
 	}
 
 	g_async_queue_unref(srv->aio_write_queue);
-	g_async_queue_unref(srv->joblist_queue);
 
 	return NULL;
 

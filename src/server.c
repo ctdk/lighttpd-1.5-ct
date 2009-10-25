@@ -532,71 +532,6 @@ static void show_help (void) {
 		exit(-1);
 	}
 }
-#ifdef USE_GTHREAD
-static GMutex *joblist_queue_mutex = NULL;
-static GCond  *joblist_queue_cond = NULL;
-#endif
-
-/**
- * a async handler
- *
- * The problem:
- * - poll(..., 1000) is blocking
- * - g_async_queue_timed_pop(..., 1000) is blocking too
- *
- * I havn't found a way to monitor g_async_queue_timed_pop with poll or friends
- *
- * So ... we run g_async_queue_timed_pop() and fdevents_poll() at the same time. As long
- * as the poll() is running g_async_queue_timed_pop() running too.
- *
- * The one who finishes earlier writes to wakeup_pipe[1] to interrupt
- * the other system call. We use mutexes to synchronize the two functions.
- *
- */
-#ifdef USE_GTHREAD
-static void *joblist_queue_thread(void *_data) {
-	server *srv = _data;
-
-	g_mutex_lock(joblist_queue_mutex);
-
-	while (!srv_shutdown) {
-		GTimeVal ts;
-		connection *con;
-
-		g_cond_wait(joblist_queue_cond, joblist_queue_mutex);
-		/* wait for getting signaled */
-
-		if (srv_shutdown)
-			break;
-
-		/* wait one second as the poll() */
-		g_get_current_time(&ts);
-		g_time_val_add(&ts, 1000 * 1000);
-
-		/* we can't get interrupted :(
-		 * if we don't get something into the queue we leave */
-		if (NULL != (con = g_async_queue_timed_pop(srv->joblist_queue, &ts))) {
-			int killme = 0;
-			do {
-				if (con == (void *)1) {
-					/* ignore the wakeup-packet, it is only used to break out of the
-					 * blocking nature of g_async_queue_timed_pop()  */
-				} else {
-					killme++;
-					joblist_append(srv, con);
-				}
-			} while ((con = g_async_queue_try_pop(srv->joblist_queue)));
-
-			/* interrupt the poll() */
-			if (killme) write(srv->wakeup_pipe[1], " ", 1);
-		}
-	}
-
-	g_mutex_unlock(joblist_queue_mutex);
-
-	return NULL;
-}
-#endif
 
 /**
  * call this function whenever you get a EMFILE or ENFILE as return-value
@@ -931,27 +866,9 @@ static int lighty_mainloop(server *srv) {
 				connection_state_machine(srv, con);
 			}
 		}
-#ifdef USE_GTHREAD
-		/* open the joblist-queue handling */
-		g_mutex_unlock(joblist_queue_mutex);
-		g_cond_signal(joblist_queue_cond);
-#endif
 		n = fdevent_poll(srv->ev, 1000);
 		poll_errno = errno;
 
-#ifdef USE_GTHREAD
-		if (FALSE == g_mutex_trylock(joblist_queue_mutex)) {
-			/**
-			 * we couldn't get the lock, looks like the joblist-thread
-			 * is still blocking on g_async_queue_timed_pop()
-			 *
-			 * let's send it a bogus job to jump out of the blocking mode
-			 */
-			g_async_queue_push(srv->joblist_queue, (void *)1); /* HACK to wakeup the g_async_queue_timed_pop() */
-
-			g_mutex_lock(joblist_queue_mutex);
-		}
-#endif
 		if (n > 0) {
 			/* n is the number of events */
 			size_t i;
@@ -1023,6 +940,14 @@ static int lighty_mainloop(server *srv) {
 		 * Note: Two joblist's are needed so a connection can be added back into the joblist
 		 * without getting stuck inside the for loop.
 		 */
+#ifdef USE_GTHREAD
+		{
+			connection *con;
+			while (NULL != (con = g_async_queue_try_pop(srv->joblist_queue))) {
+				joblist_append(srv, con);
+			}
+		}
+#endif
 		if(srv->joblist->used > 0) {
 			connections *joblist = srv->joblist;
 			/* switch joblist queues. */
@@ -1062,6 +987,7 @@ static handler_t wakeup_handle_fdevent(void *s, void *context, int revent) {
 	UNUSED(con);
 	UNUSED(revent);
 
+	g_atomic_int_set(&srv->did_wakeup, 0);
 	(void) read(srv->wakeup_iosocket->fd, buf, sizeof(buf));
 	return HANDLER_GO_ON; 
 }
@@ -1077,13 +1003,11 @@ int main (int argc, char **argv, char **envp) {
 	int pid_fd = -1, fd;
 	size_t i;
 #ifdef USE_GTHREAD
-	int need_joblist_queue_thread = 0;
 	GThread **stat_cache_threads;
 	GThread **aio_write_threads = NULL;
 #ifdef USE_LINUX_AIO_SENDFILE
 	GThread *linux_aio_read_thread_id = NULL;
 #endif
-	GThread * joblist_queue_thread_id = NULL;
 	GError *gerr = NULL;
 #endif
 
@@ -1675,6 +1599,7 @@ int main (int argc, char **argv, char **envp) {
 	srv->wakeup_iosocket = iosocket_init();
 	srv->wakeup_iosocket->type = IOSOCKET_TYPE_PIPE;	
 	srv->wakeup_iosocket->fd = srv->wakeup_pipe[0];
+	srv->did_wakeup = 0;
 	fdevent_fcntl_set(srv->ev, srv->wakeup_iosocket);
 	/* block on write */
 #ifdef FD_CLOEXEC
@@ -1706,15 +1631,10 @@ int main (int argc, char **argv, char **envp) {
 		fdevent_event_add(srv->ev, srv->stat_cache->sock, FDEVENT_IN);
 	}
 #endif
-	joblist_queue_mutex = g_mutex_new();
-	joblist_queue_cond = g_cond_new();
-	g_mutex_lock(joblist_queue_mutex);
-
 	stat_cache_threads = calloc(srv->srvconf.max_stat_threads, sizeof(*stat_cache_threads));
 
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
 		stat_cache_threads[i] = g_thread_create(stat_cache_thread, srv, 1, &gerr);
-		need_joblist_queue_thread = 1;
 		if (gerr) {
 			ERROR("g_thread_create failed: %s", gerr->message);
 
@@ -1734,7 +1654,6 @@ int main (int argc, char **argv, char **envp) {
 				return -1;
 			}
 		}
-		need_joblist_queue_thread = 1;
 		break;
 #ifdef USE_GTHREAD_SENDFILE
 	case NETWORK_BACKEND_GTHREAD_SENDFILE:
@@ -1747,7 +1666,6 @@ int main (int argc, char **argv, char **envp) {
 				return -1;
 			}
 		}
-		need_joblist_queue_thread = 1;
 		break;
 #endif
 #ifdef USE_GTHREAD_FREEBSD_SENDFILE
@@ -1761,13 +1679,11 @@ int main (int argc, char **argv, char **envp) {
 				return -1;
 			}
 		}
-		need_joblist_queue_thread = 1;
 		break;
 #endif
 #ifdef USE_POSIX_AIO
 	case NETWORK_BACKEND_POSIX_AIO:
 		srv->posix_aio_iocbs = calloc(srv->srvconf.max_read_threads, sizeof(*srv->posix_aio_iocbs));
-		need_joblist_queue_thread = 1;
 		break;
 #endif
 #ifdef USE_LINUX_AIO_SENDFILE
@@ -1785,8 +1701,6 @@ int main (int argc, char **argv, char **envp) {
 
 			return -1;
 		}
-
-		need_joblist_queue_thread = 1;
 		break;
 #endif
 	default:
@@ -1794,20 +1708,6 @@ int main (int argc, char **argv, char **envp) {
 	}
 #endif /* ifndef _WIN32 */
 
-	/* check if we really need this thread
-	 *
-	 * it simplifies debugging if there is no 'futex()' making noise in the strace()s
-	 *
-	 *
-	 * */
-
-
-	if (need_joblist_queue_thread) {
-		joblist_queue_thread_id = g_thread_create_full(joblist_queue_thread, srv, LI_THREAD_STACK_SIZE, 1, TRUE, G_THREAD_PRIORITY_NORMAL, &gerr);
-		if (gerr) {
-			return -1;
-		}
-	}
 #endif /* USE_GTHREAD */
 
 	for (i = 0; i < srv->srv_sockets.used; i++) {
@@ -1863,39 +1763,6 @@ int main (int argc, char **argv, char **envp) {
 	for (i = 0; i < srv->srvconf.max_stat_threads; i++) {
 		g_thread_join(stat_cache_threads[i]);
 	}
-
-	/* in case the thread is still running, take it down now
-	 * as it might be blocked in g_cond_wait() send a signal and
-	 * let it shutdown */
-	g_mutex_unlock(joblist_queue_mutex);
-	g_cond_signal(joblist_queue_cond);
-
-	if (joblist_queue_thread_id) {
-		g_async_queue_push(srv->joblist_queue, (void *) 1);
-		g_thread_join(joblist_queue_thread_id);
-	}
-
-#if 0
-	g_mutex_lock(joblist_queue_mutex);
-
-	g_cond_free(joblist_queue_cond);
-
-	g_mutex_unlock(joblist_queue_mutex);
-
-	/* if I leave this enabled I get:
-	 *
-	 * GThread-ERROR **: file gthread-posix.c: line 160 (): error 'Device or resource busy' during 'pthread_mutex_destroy ((pthread_mutex_t *) mutex)'
-	 * aborting...
-	 *
-	 * $ man pthread_mutex_destroy
-	 *
-	 *        EBUSY  The implementation has detected an attempt to destroy the object referenced by mutex while it is locked
-	 *               or referenced (for example, while being used in a pthread_cond_timedwait() or pthread_cond_wait())
-	 *               by another thread.
-	 *
-	 * */
-	g_mutex_free(joblist_queue_mutex);
-#endif
 
 	/* the ref-count should be 0 now */
 	g_async_queue_unref(srv->stat_queue);

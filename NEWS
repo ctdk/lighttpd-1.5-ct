@@ -149,6 +149,7 @@ NEWS
   * Don't print ssl error if client didn't support TLS SNI
   * Reopen out stream in X-Rewrite (fixes #1678)
   * Remove joblist thread, don't use timed pops for async queues
+  * Fix mod_cgi hang on "crash-before-header-sent" bug
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

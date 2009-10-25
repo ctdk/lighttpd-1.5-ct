@@ -328,6 +328,11 @@ static int cgi_demux_response(server *srv, connection *con, plugin_data *p) {
 			con->http_status = 502; /* Bad Gateway */
 			return -1;
 		case PARSE_NEED_MORE:
+			if (sess->rb->is_closed) {
+				/* backend died before sending a header */
+				con->http_status = 502; /* Bad Gateway */
+				return -1;
+			}
 			return 0;
 		case PARSE_SUCCESS:
 			con->http_status = p->resp->status;
@@ -560,6 +565,7 @@ static handler_t cgi_handle_fdevent(void *s, void *ctx, int revents) {
 
 		/* kill all connections to the cgi process */
 		fdevent_event_del(srv->ev, sess->sock);
+		joblist_append(srv, con);
 	}
 
 	return HANDLER_FINISHED;
@@ -615,7 +621,7 @@ static handler_t cgi_handle_err_fdevent(void *s, void *ctx, int revents) {
 	cgi_session *sess = ctx;
 	connection  *con  = sess->remote_con;
 
-	if (revents & FDEVENT_IN) {
+	if (revents & (FDEVENT_IN | FDEVENT_HUP)) {
 		switch (srv->network_backend_read(srv, con, sess->sock_err, sess->rb_err)) {
 		case NETWORK_STATUS_CONNECTION_CLOSE:
 			fdevent_event_del(srv->ev, sess->sock_err);
@@ -1130,8 +1136,10 @@ TRIGGER_FUNC(cgi_trigger) {
 #if 0
 				log_error_write(srv, __FILE__, __LINE__, "sd", "(debug) cgi exited fine, pid:", p->cgi_pid.ptr[ndx]);
 #endif
+			} else if (WIFSIGNALED(status)) {
+				log_error_write(srv, __FILE__, __LINE__, "sdsd", "cgi signaled, pid:", p->cgi_pid.ptr[ndx], ", signal", WTERMSIG(status));
 			} else {
-				log_error_write(srv, __FILE__, __LINE__, "s", "cgi died ?");
+				log_error_write(srv, __FILE__, __LINE__, "sdsd", "cgi died, pid:", p->cgi_pid.ptr[ndx], ", status", status);
 			}
 
 			cgi_pid_del(srv, p, p->cgi_pid.ptr[ndx]);

@@ -202,7 +202,7 @@ sub handle_http {
 			(my $line, $lines) = split($EOL, $lines, 2);
 
 			# header finished
-			last if(length($line) == 0);
+			last if (not defined($line)) or (length($line) == 0);
 
 			if ($ln == 0) {
 				# response header

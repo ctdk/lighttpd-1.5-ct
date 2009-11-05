@@ -109,6 +109,7 @@ static int config_insert(server *srv) {
 		{ "ssl.verifyclient.enforce",    NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 61 */
 		{ "ssl.verifyclient.depth",      NULL, T_CONFIG_SHORT,   T_CONFIG_SCOPE_SERVER },     /* 62 */
 		{ "ssl.verifyclient.username",   NULL, T_CONFIG_STRING,  T_CONFIG_SCOPE_SERVER },     /* 63 */
+		{ "ssl.verifyclient.exportcert", NULL, T_CONFIG_BOOLEAN, T_CONFIG_SCOPE_SERVER },     /* 64 */
 
 		{ "server.host",                 "use server.bind instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
 		{ "server.docroot",              "use server.document-root instead", T_CONFIG_DEPRECATED, T_CONFIG_SCOPE_UNSET },
@@ -181,6 +182,7 @@ static int config_insert(server *srv) {
 		s->ssl_verifyclient_enforce = 1;
 		s->ssl_verifyclient_username = buffer_init();
 		s->ssl_verifyclient_depth = 9;
+		s->ssl_verifyclient_export_cert = 0;
 		s->max_keep_alive_requests = 16;
 		s->max_keep_alive_idle = 5;
 		s->max_read_idle = 60;
@@ -255,6 +257,7 @@ static int config_insert(server *srv) {
 		cv[61].destination = &(s->ssl_verifyclient_enforce);
 		cv[62].destination = &(s->ssl_verifyclient_depth);
 		cv[63].destination = s->ssl_verifyclient_username;
+		cv[64].destination = &(s->ssl_verifyclient_export_cert);
 
 		srv->config_storage[i] = s;
 
@@ -340,6 +343,7 @@ int config_setup_connection(server *srv, connection *con) {
 	PATCH(ssl_verifyclient_enforce);
 	PATCH(ssl_verifyclient_depth);
 	PATCH(ssl_verifyclient_username);
+	PATCH(ssl_verifyclient_export_cert);
 
 	return 0;
 }
@@ -447,6 +451,8 @@ int config_patch_connection(server *srv, connection *con, comp_key_t comp) {
 				PATCH(ssl_verifyclient_depth);
 			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.verifyclient.username"))) {
 				PATCH(ssl_verifyclient_username);
+			} else if (buffer_is_equal_string(du->key, CONST_STR_LEN("ssl.verifyclient.exportcert"))) {
+				PATCH(ssl_verifyclient_export_cert);
 			}
 		}
 	}

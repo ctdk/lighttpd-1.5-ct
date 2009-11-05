@@ -153,6 +153,7 @@ NEWS
   * Set content-length in mod_compress (fixes #2089, thx liming)
   * Mark recv-queue closed if backend connection got closed in mod_proxy_core (fixes #2090, thx liming)
   * mod_magnet: add traceback for printing lua errors
+  * export some SSL_CLIENT_* vars for client cert validation (fixes #1288, thx presbrey)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

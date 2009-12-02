@@ -144,8 +144,8 @@ static http_resp_parser_t http_resp_tokenizer(
 		default:
 			while (c >= 32 && c != 127 && c != 255) {
 				if (t->is_statusline) {
-					if (c == ':') { t->is_statusline = 0; break; } /* this is not a status line by a real header */
-					if (c == 32) break; /* the space is a splitter in the statusline */
+					if (t->is_key && c == ':') { t->is_statusline = 0; break; } /* this is not a status line by a real header */
+					if (c == 32) { t->is_key = 0; break; } /* the space is a splitter in the statusline */
 				} else {
 					if (t->is_key) {
 						if (c == ':') break; /* the : is the splitter between key and value */
@@ -212,7 +212,7 @@ parse_status_t http_response_parse_cq(chunkqueue *cq, http_resp *resp) {
 	t.cq = cq;
 	t.c = cq->first;
 	t.offset = t.c->offset;
-	t.is_key = 0;
+	t.is_key = 1;
 	t.is_statusline = 1;
 
 	context.ok = 1;

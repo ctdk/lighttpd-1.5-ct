@@ -787,6 +787,13 @@ REQUESTDONE_FUNC(log_access_write) {
 					buffer_append_string_len(b, CONST_STR_LEN("-"));
 				}
 				break;
+			case FORMAT_ENV:
+				if (NULL != (ds = (data_string *)array_get_element(con->environment, CONST_BUF_LEN(p->conf.parsed_format->ptr[j]->string)))) {
+					accesslog_append_escaped(b, ds->value);
+				} else {
+					buffer_append_string_len(b, CONST_STR_LEN("-"));
+				}
+				break;
 			case FORMAT_FILENAME:
 				if (con->physical.path->used > 1) {
 					buffer_append_string_buffer(b, con->physical.path);
@@ -853,7 +860,6 @@ REQUESTDONE_FUNC(log_access_write) {
 				 { 'A', FORMAT_LOCAL_ADDR },
 				 { 'C', FORMAT_COOKIE },
 				 { 'D', FORMAT_TIME_USED_MS },
-				 { 'e', FORMAT_ENV },
 				 */
 
 				break;

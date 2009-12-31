@@ -451,7 +451,8 @@ if test "$WITH_LUA" != "no"; then
  AC_SUBST(LUA_LIBS)
 fi
 
-PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.4.0, [
+dnl need 2.10.0 for g_atomic_int_set
+PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.10.0, [
   AC_DEFINE([HAVE_GTHREAD], [1], [libglib])
   AC_DEFINE([HAVE_GLIB_H], [1], [glib.h])
 ])

@@ -106,7 +106,7 @@ static int fdevent_select_get_revents(fdevents *ev, size_t event_count, fdevent_
 
 	int ndx = 0;
 #ifndef _WIN32
-	int top = ev->select_max_fd;
+	int top = ev->select_max_fd + 1;
 #else
 	int top = ev->select_set_all.fd_count; // FD_SETSIZE;
 #endif

@@ -155,6 +155,10 @@ NEWS
   * mod_magnet: add traceback for printing lua errors
   * export some SSL_CLIENT_* vars for client cert validation (fixes #1288, thx presbrey)
   * reset tlsext_server_name in connection_reset - fixes random hostnames in the $HTTP["host"] conditional
+  * Accept ":" in the reason-phrase of a status-line
+  * mod_accesslog: support %e (fixes #2113, thx presbrey)
+  * Require at least glib 2.10.0 for g_atomic_int_set (fixes #2127)
+  * Fix select() backend under high load (off-by-one, noticed by Manuel Scharf in a forum thread)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

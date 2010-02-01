@@ -802,8 +802,14 @@ static handler_t connection_handle_read_request_content(server *srv, connection 
 		} else {
 			buffer *b;
 
-			b = chunkqueue_get_append_buffer(out);
-			buffer_copy_string_len(b, c->mem->ptr + c->offset, toRead);
+			b = (out->last) ? out->last->mem : NULL;
+
+			if (NULL == b) {
+				b = chunkqueue_get_append_buffer(out);
+				buffer_prepare_copy(b, con->request.content_length - out->bytes_in + 1);
+			}
+
+			buffer_append_string_len(b, c->mem->ptr + c->offset, toRead);
 		}
 
 		c->offset += toRead;

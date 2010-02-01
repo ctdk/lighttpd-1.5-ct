@@ -35,7 +35,7 @@
 * as vectors
 */
 NETWORK_BACKEND_READ(read) {
-	int toread;
+	int toread, read_offset;
 	buffer *b;
 	off_t r, start_bytes_in;
 	off_t max_read = 256 * 1024;
@@ -50,15 +50,21 @@ NETWORK_BACKEND_READ(read) {
 
 	start_bytes_in = cq->bytes_in;
 
-	/* use a chunk-size of 16k */
+	/* use a chunk-size of 4k, append to last buffer if it has >= 1kb free */
+#define TOREAD 4096
+
 	do {
-		toread = 16384;
+		b = (cq->last) ? cq->last->mem : NULL;
 
-		b = chunkqueue_get_append_buffer(cq);
+		if (NULL == b || b->size - b->used < 1024) {
+			b = chunkqueue_get_append_buffer(cq);
+			buffer_prepare_copy(b, TOREAD+1);
+		}
 
-		buffer_prepare_copy(b, toread);
+		read_offset = (b->used == 0) ? 0 : b->used - 1;
+		toread = b->size - 1 - read_offset;
 
-		if (-1 == (r = read(sock->fd, b->ptr, toread))) {
+		if (-1 == (r = read(sock->fd, b->ptr + read_offset, toread))) {
 			switch (errno) {
 			case EAGAIN:
 				/* remove the last chunk from the chunkqueue */
@@ -80,8 +86,10 @@ NETWORK_BACKEND_READ(read) {
 
 		read_something = 1;
 
-		b->used = r;
+		if (b->used > 0) b->used--;
+		b->used += r;
 		b->ptr[b->used++] = '\0';
+
 		cq->bytes_in += r;
 
 		if (cq->bytes_in - start_bytes_in > max_read) break;

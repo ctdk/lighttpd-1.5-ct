@@ -37,16 +37,29 @@ NETWORK_BACKEND_READ(openssl) {
 	off_t max_read = 256 * 1024;
 	off_t start_bytes_in = cq->bytes_in;
 	network_status_t res;
+	int toread, read_offset;
 
 	UNUSED(srv);
 	UNUSED(con);
 
+	/* use a chunk-size of 4k, append to last buffer if it has >= 1kb free */
+#define TOREAD 4096
+
 	do {
 		int oerrno;
-		b = chunkqueue_get_append_buffer(cq);
-		buffer_prepare_copy(b, 8192 + 12); /* ssl-chunk-size is 8kb */
+
+		b = (cq->last) ? cq->last->mem : NULL;
+
+		if (NULL == b || b->size - b->used < 1024) {
+			b = chunkqueue_get_append_buffer(cq);
+			buffer_prepare_copy(b, TOREAD+1);
+		}
+
+		read_offset = (b->used == 0) ? 0 : b->used - 1;
+		toread = b->size - 1 - read_offset;
+
 		ERR_clear_error();
-		len = SSL_read(sock->ssl, b->ptr, b->size - 1);
+		len = SSL_read(sock->ssl, b->ptr + read_offset, toread);
 
 		/**
 		 * man SSL_read:
@@ -63,6 +76,7 @@ NETWORK_BACKEND_READ(openssl) {
 
 			switch ((r = SSL_get_error(sock->ssl, len))) {
 			case SSL_ERROR_WANT_READ:
+			case SSL_ERROR_WANT_WRITE:
 				return read_something ? NETWORK_STATUS_SUCCESS : NETWORK_STATUS_WAIT_FOR_EVENT;
 			case SSL_ERROR_SYSCALL:
 				/**
@@ -123,6 +137,7 @@ NETWORK_BACKEND_READ(openssl) {
 				return res;
 			}
 		} else {
+			if (b->used > 0) b->used--;
 			b->used += len;
 			b->ptr[b->used++] = '\0';
 
@@ -130,10 +145,10 @@ NETWORK_BACKEND_READ(openssl) {
 			cq->bytes_in += len;
 		}
 
-		if (cq->bytes_in - start_bytes_in > max_read) return NETWORK_STATUS_SUCCESS;
-	} while (1);
+		if (cq->bytes_in - start_bytes_in > max_read) break;
+	} while (len == toread);
 
-	return NETWORK_STATUS_FATAL_ERROR;
+	return NETWORK_STATUS_SUCCESS;
 }
 
 

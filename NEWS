@@ -162,6 +162,7 @@ NEWS
   * Append to previous buffer in con read (fixes #2147, found by liming, CVE-2010-0295)
   * Fix handling return value of SSL_CTX_set_options (fixes #2157, thx mlcreech)
   * Print double quotes properly when dumping config file (fixes #1806)
+  * Include IP addresses on error log on password failures (fixes #2191)
 
 - 1.5.0-r19.. -
   * -F option added for spawn-fcgi

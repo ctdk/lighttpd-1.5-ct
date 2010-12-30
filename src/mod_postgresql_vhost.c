@@ -147,7 +147,7 @@ SERVER_FUNC(mod_postgresql_vhost_set_defaults) {
 		sel = buffer_init();
 		buffer_copy_string_buffer(sel, s->core->select_vhost);
 
-		if (sel->used && (qmark = index(sel->ptr, '?'))) {
+		if (sel->used && (qmark = strchr(sel->ptr, '?'))) {
 			*qmark = '\0';
 			buffer_copy_string(s->postgresql_pre, sel->ptr);
 			buffer_copy_string(s->postgresql_post, qmark+1);

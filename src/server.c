@@ -868,6 +868,9 @@ static int lighty_mainloop(server *srv) {
 		}
 		n = fdevent_poll(srv->ev, 1000);
 		poll_errno = errno;
+#ifdef USE_GTHREAD
+		g_atomic_int_set(&srv->did_wakeup, 0);
+#endif
 
 		if (n > 0) {
 			/* n is the number of events */
@@ -987,7 +990,6 @@ static handler_t wakeup_handle_fdevent(void *s, void *context, int revent) {
 	UNUSED(con);
 	UNUSED(revent);
 
-	g_atomic_int_set(&srv->did_wakeup, 0);
 	(void) read(srv->wakeup_iosocket->fd, buf, sizeof(buf));
 	return HANDLER_GO_ON; 
 }

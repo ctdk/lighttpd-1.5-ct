@@ -29,6 +29,8 @@
 #include "http_auth_digest.h"
 #include "stream.h"
 
+#include "inet_ntop_cache.h"
+
 #include "sys-strings.h"
 #include "sys-files.h"
 

@@ -149,6 +149,7 @@ PLUGIN_STATIC(mod_userdir);
 PLUGIN_STATIC(mod_usertrack);
 PLUGIN_STATIC(mod_webdav);
 PLUGIN_STATIC(mod_magnet);
+PLUGIN_STATIC(mod_extforward);
 
 #undef PLUGIN_STATIC
 
@@ -194,6 +195,7 @@ PLUGIN_STATIC(mod_userdir),
 PLUGIN_STATIC(mod_usertrack),
 PLUGIN_STATIC(mod_webdav),
 PLUGIN_STATIC(mod_magnet),
+PLUGIN_STATIC(mod_extforward),
 
 	{ NULL, NULL }
 };

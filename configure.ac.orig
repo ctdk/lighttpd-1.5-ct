@@ -415,23 +415,6 @@ if test "$WITH_MEMCACHE" != "no"; then
  ])
  AC_SUBST(MEMCACHE_LIB)
 fi
-
-dnl Check for libmemcached
-AC_MSG_CHECKING(for libmemcached)
-AC_ARG_WITH(libmemcached, AC_HELP_STRING([--with-libmemcached],[memcached storage using libmemcached for mod_mcpage]),
-[WITH_MEMCACHED=$withval],[WITH_MEMCACHED=no])
-AC_MSG_RESULT([$WITH_MEMCACHED])
-if test "$WITH_MEMCACHED" != "no"; then
- AC_CHECK_LIB(memcached, memcached_create, [
-	AC_CHECK_HEADERS([libmemcached/memcached.h],[
-		MEMCACHED_LIB=-lmemcached
-		AC_DEFINE([HAVE_MEMCACHED], [1], [libmemcached])
-		AC_DEFINE([HAVE_MEMCACHED_H], [1], [libmemcached/memcached.h])
-	])
- ])
- AC_SUBST(MEMCACHED_LIB)
-fi
-
   
 dnl Check for lua
 AC_MSG_CHECKING(for lua)
@@ -686,13 +669,6 @@ else
 	no_build="$no_build $plugins"
 fi
 
-plugins="mod_mcpage"
-if test ! "x$MEMCACHED_LIB" = x; then
-        do_build="$do_build $plugins"
-else
-        no_build="$no_build $plugins"
-fi
-
 features="storage-gdbm"
 if test ! "x$GDBM_LIB" = x; then
 	enable_feature="$enable_feature $features"
@@ -705,13 +681,6 @@ if test ! "x$MEMCACHE_LIB" = x; then
 	enable_feature="$enable_feature $features"
 else
 	disable_feature="$disable_feature $features"
-fi
-
-features="storage-libmemcached"
-if test ! "x$MEMCACHED_LIB" = x; then
-        enable_feature="$enable_feature $features"
-else
-        disable_feature="$disable_feature $features"
 fi
 
 features="compress-gzip compress-deflate"

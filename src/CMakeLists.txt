@@ -545,6 +545,7 @@ ADD_AND_INSTALL_LIBRARY(mod_chunked mod_chunked.c)
 ADD_AND_INSTALL_LIBRARY(mod_magnet "mod_magnet.c;mod_magnet_cache.c")
 ADD_AND_INSTALL_LIBRARY(mod_deflate mod_deflate.c)
 ADD_AND_INSTALL_LIBRARY(mod_webdav mod_webdav.c)
+ADD_AND_INSTALL_LIBRARY(mod_extforward mod_extforward.c)
 
 IF(NOT WIN32)
 ADD_AND_INSTALL_LIBRARY(mod_cgi mod_cgi.c)

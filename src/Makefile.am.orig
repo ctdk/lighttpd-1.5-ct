@@ -301,10 +301,6 @@ mod_accesslog_la_SOURCES = mod_accesslog.c
 mod_accesslog_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
 mod_accesslog_la_LIBADD = $(common_libadd)
 
-lib_LTLIBRARIES += mod_mcpage.la
-mod_mcpage_la_SOURCES = mod_mcpage.c
-mod_mcpage_la_LDFLAGS = -module -export-dynamic -avoid-version -no-undefined
-mod_mcpage_la_LIBADD = $(Z_LIB) $(MEMCACHED_LIB) $(common_libadd)
 
 hdr = server.h buffer.h network.h log.h keyvalue.h \
       response.h request.h fastcgi.h chunk.h filter.h \

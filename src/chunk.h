@@ -5,6 +5,8 @@
 #include "array.h"
 #include "sys-mmap.h"
 
+#define MCPCHUNK
+
 typedef struct chunk {
 	enum { UNUSED_CHUNK, MEM_CHUNK, FILE_CHUNK } type;
 
@@ -42,6 +44,10 @@ typedef struct chunk {
 		off_t written;
 		int ret_val;
 	} async;
+
+#ifdef MCPCHUNK
+	int touched;
+#endif
 
 	struct chunk *next;
 } chunk;

@@ -58,6 +58,10 @@ static chunk *chunk_init(void) {
 	c->file.copy.fd = -1;
 	c->file.mmap.start = MAP_FAILED;
 	c->next = NULL;
+
+#ifdef MCPCHUNK
+	c->touched = 0;
+#endif 
 	
 	c->async.written = -1;
 
@@ -105,6 +109,10 @@ static void chunk_reset(chunk *c) {
 
 	c->offset = 0;
 	c->next = NULL;
+
+#ifdef MCPCHUNK
+	c->touched = 0;
+#endif
 }
 
 static void chunk_free(chunk *c) {

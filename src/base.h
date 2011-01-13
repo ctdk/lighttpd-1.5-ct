@@ -607,6 +607,7 @@ typedef struct {
 #ifdef USE_OPENSSL
 	SSL_CTX *ssl_ctx;
 #endif
+	unsigned short is_proxy_ssl;
 } server_socket;
 
 typedef struct {
